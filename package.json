@@ -1,0 +1,15 @@
+{
+  "name": "la-corsa-invisibile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "La Corsa Invisibile — GdR multiplayer legato al romanzo 'Il ragazzo che correva nel tempo'. Progetto indipendente, non condivide database né deploy con Session Zero.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute la-corsa-invisibile-db --file=./schema.sql",
+    "db:init:remote": "wrangler d1 execute la-corsa-invisibile-db --remote --file=./schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^3.90.0"
+  }
+}

@@ -1,0 +1,26 @@
+name = "la-corsa-invisibile"
+main = "src/index.js"
+compatibility_date = "2026-07-01"
+
+# Custom domain da collegare in dashboard Cloudflare: corsa.roomzero.online
+# (routes/custom domain si configurano dalla dashboard o con `wrangler deploy --routes`)
+
+[[durable_objects.bindings]]
+name = "GAME_SESSION"
+class_name = "GameSession"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GameSession"]
+
+[[d1_databases]]
+database_name = "la-corsa-invisibile-db"
+database_id = "03de6415-c215-4a15-bb58-61a1262a550c"
+binding = "DB"
+
+# Variabili non segrete
+[vars]
+GAME_ID = "la_corsa_invisibile"
+
+# Segreti (NON qui): impostali con `wrangler secret put ADMIN_PASSWORD` ecc.
+# Nessun valore reale va mai scritto in questo file o versionato nel repo.
