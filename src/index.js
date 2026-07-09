@@ -34,7 +34,11 @@ export default {
       await consumaCodice(env.DB, code, roomId);
       const id = env.GAME_SESSION.idFromName(roomId);
       const stub = env.GAME_SESSION.get(id);
-      return stub.fetch(new Request(`https://internal/state`));
+      const risposta = await stub.fetch(new Request(`https://internal/state`));
+      const session = await risposta.json();
+      // roomId è indispensabile al client: senza di esso non può più parlare
+      // con questa stanza (tutte le rotte /api/stanza/{roomId}/... lo richiedono).
+      return Response.json({ roomId, session });
     }
 
     // Proxy verso una sessione esistente: /api/stanza/{roomId}/...
