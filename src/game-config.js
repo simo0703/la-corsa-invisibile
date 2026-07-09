@@ -152,6 +152,28 @@ export const GAME_CONFIG = {
             },
           ],
         },
+        {
+          id: "milano-ferito",
+          situazione: "Tra il fumo, un uomo con una divisa che non è la vostra è a terra, ferito. Geme, non si muove.",
+          prompt: "Cosa fate?",
+          risposte: [
+            {
+              testo: "Lo soccorrete, nonostante tutto",
+              effetti: { spiritoDiCorpo: 1 },
+              esito: "Non è più un nemico o un alleato: è solo un uomo che ha bisogno di aiuto.",
+            },
+            {
+              testo: "Lo disarmate e proseguite, lasciandolo dove sta",
+              effetti: { cadenza: 1 },
+              esito: "Non c'è tempo per la pietà, oggi. La colonna deve avanzare.",
+            },
+            {
+              testo: "Vi fermate a interrogarlo prima di decidere",
+              effetti: { passoAvanti: 1 },
+              esito: "Le sue parole confuse rivelano qualcosa di più sulla città che state attraversando.",
+            },
+          ],
+        },
       ],
       esitoFinale: {
         varianti: [
@@ -193,9 +215,31 @@ export const GAME_CONFIG = {
             },
           ],
         },
+        {
+          id: "carso-bombardamento",
+          situazione: "Un bombardamento si avvicina. Un commilitone ferito chiama aiuto a pochi metri, ma restare scoperti è un rischio.",
+          prompt: "Come rispondete?",
+          risposte: [
+            {
+              testo: "Uscite a recuperarlo sotto il fuoco",
+              effetti: { spiritoDiCorpo: -1, passoAvanti: 2 },
+              esito: "Lo riportate dentro. Il prezzo pagato in paura superata resta inciso in ognuno di voi.",
+            },
+            {
+              testo: "Aspettate una pausa nel fuoco per muovervi",
+              effetti: { cadenza: -1, spiritoDiCorpo: 1 },
+              esito: "La pausa arriva, tardi ma arriva — e nessun altro si espone inutilmente.",
+            },
+          ],
+        },
       ],
       esitoFinale: {
         varianti: [
+          {
+            condizione: { passoAvanti: { min: 2 } },
+            testo:
+              "Il coraggio dimostrato sotto il fuoco diventa leggenda di reparto: la squadra ha superato la paura più grande, insieme.",
+          },
           {
             condizione: { spiritoDiCorpo: { min: 1 } },
             testo:
@@ -231,6 +275,23 @@ export const GAME_CONFIG = {
               testo: "Dove potete arrivare subito, anche se sono in meno",
               effetti: { cadenza: 1 },
               esito: "Salvate chi potevate salvare. Il resto resta un peso.",
+            },
+          ],
+        },
+        {
+          id: "emergenza-famiglia",
+          situazione: "Una famiglia si rifiuta di lasciare la propria casa, mentre il tempo stringe.",
+          prompt: "Come li convincete?",
+          risposte: [
+            {
+              testo: "Insistete con fermezza, portandoli via se serve",
+              effetti: { cadenza: 1, spiritoDiCorpo: -1 },
+              esito: "Sono al sicuro, ma il modo in cui ci siete arrivati pesa su tutti.",
+            },
+            {
+              testo: "Restate a parlare, guadagnando la loro fiducia",
+              effetti: { spiritoDiCorpo: 1, cadenza: -1 },
+              esito: "Escono con le proprie gambe, convinti, non trascinati.",
             },
           ],
         },
@@ -272,6 +333,23 @@ export const GAME_CONFIG = {
               testo: "Sedendovi a parlare, senza fretta, senza armi in vista",
               effetti: { spiritoDiCorpo: 1, cadenza: -1 },
               esito: "Ci vuole più tempo, ma la porta resta aperta.",
+            },
+          ],
+        },
+        {
+          id: "moderna-provocazione",
+          situazione: "Un giovane del villaggio lancia una provocazione contro la vostra pattuglia, davanti a tutti.",
+          prompt: "Come reagite?",
+          risposte: [
+            {
+              testo: "Rispondete con fermezza, mostrando autorità",
+              effetti: { cadenza: 1, spiritoDiCorpo: -1 },
+              esito: "La tensione si allenta, ma la fiducia guadagnata prima vacilla un poco.",
+            },
+            {
+              testo: "Ignorate la provocazione e restate calmi",
+              effetti: { spiritoDiCorpo: 1 },
+              esito: "Il capo villaggio osserva la vostra pazienza. Forse è proprio questo che stava aspettando di vedere.",
             },
           ],
         },
