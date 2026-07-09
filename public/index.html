@@ -363,20 +363,16 @@
     </div>
   </header>
 
-  <!-- SCHERMATA 1: inserimento codice -->
+  <!-- SCHERMATA 1: creazione stanza (nessun codice, il gioco è gratuito) -->
   <section id="schermo-codice" class="schermo">
     <div class="etichetta">Ingresso</div>
-    <h1 class="grande">Il codice è stampato nel libro.</h1>
+    <h1 class="grande">Apri una nuova stanza.</h1>
     <p class="spiega">
-      Ogni copia del romanzo contiene un codice a otto caratteri. Inseriscilo per aprire
-      una nuova stanza di gioco: potrai poi condividere il link con il resto della squadra,
-      senza bisogno di codici ulteriori.
+      Il gioco è gratuito e libero: nessun codice richiesto. Crea una stanza,
+      poi condividi il link con il resto della squadra — chi lo apre entra
+      direttamente, senza passaggi ulteriori.
     </p>
-    <div class="campo">
-      <label for="input-codice">Codice</label>
-      <input type="text" id="input-codice" placeholder="ES. A1B2C3D4" maxlength="12" autocomplete="off" />
-    </div>
-    <button class="principale" id="btn-entra">Entra</button>
+    <button class="principale" id="btn-crea-stanza">Crea una stanza</button>
     <div class="errore" id="errore-codice"></div>
   </section>
 
@@ -492,36 +488,26 @@ async function avvia() {
   }
 }
 
-// --- Schermata 1: codice ---
-document.getElementById("btn-entra").addEventListener("click", async () => {
-  const codice = document.getElementById("input-codice").value.trim().toUpperCase();
+// --- Schermata 1: crea stanza ---
+document.getElementById("btn-crea-stanza").addEventListener("click", async () => {
   const erroreBox = document.getElementById("errore-codice");
   erroreBox.classList.remove("mostra");
-  if (!codice) return;
 
-  const btn = document.getElementById("btn-entra");
+  const btn = document.getElementById("btn-crea-stanza");
   btn.disabled = true;
   btn.textContent = "Un momento…";
   try {
-    const risposta = await chiamaAPI("/api/entra", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: codice }),
-    });
+    const risposta = await chiamaAPI("/api/crea-stanza", { method: "POST" });
     STATO.roomId = risposta.roomId;
     salvaStato();
     history.replaceState(null, "", "?stanza=" + risposta.roomId);
     mostraSchermo("schermo-join");
   } catch (e) {
-    const messaggi = {
-      codice_inesistente: "Questo codice non esiste. Controlla di averlo copiato bene.",
-      codice_gia_usato: "Questo codice è già stato usato per aprire una stanza. Se la stanza esiste già, chiedi il link a chi l'ha creata.",
-    };
-    erroreBox.textContent = messaggi[e.corpo && e.corpo.motivo] || "Qualcosa è andato storto. Riprova.";
+    erroreBox.textContent = "Qualcosa è andato storto. Riprova.";
     erroreBox.classList.add("mostra");
   } finally {
     btn.disabled = false;
-    btn.textContent = "Entra";
+    btn.textContent = "Crea una stanza";
   }
 });
 
