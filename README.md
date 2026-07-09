@@ -9,36 +9,28 @@ scelta deliberata per poterlo modificare senza toccare l'altra piattaforma.
 Comparirà sotto l'ombrello **roomzero.online** come `corsa.roomzero.online`,
 ma tecnicamente è un prodotto a sé.
 
-## Setup iniziale (da fare una sola volta)
+## Deploy
+
+Da luglio 2026 il deploy è **automatico**: questo repository è collegato al Worker
+su Cloudflare (Settings → Build → Git repository). Ogni commit sul branch `main`
+avvia da solo un nuovo deploy — non serve più lanciare `wrangler deploy` a mano.
+
+Per aggiornare il gioco: modifica i file, poi "Add file → Upload files" su
+GitHub (o un push da riga di comando), e Cloudflare fa il resto.
+
+## Setup iniziale (fatto una sola volta, storico)
 
 1. `npm install`
-2. Crea il database D1:
-   ```
-   wrangler d1 create la-corsa-invisibile-db
-   ```
-   Copia l'ID restituito e incollalo in `wrangler.toml` al posto di
-   `REPLACE_WITH_D1_DATABASE_ID`.
-3. Inizializza lo schema:
-   ```
-   npm run db:init          # locale, per sviluppo
-   npm run db:init:remote   # sul database reale
-   ```
-4. Sviluppo locale:
-   ```
-   npm run dev
-   ```
-5. Deploy:
-   ```
-   npm run deploy
-   ```
-6. Su dashboard Cloudflare → Workers → questo progetto → Custom Domains:
-   aggiungi `corsa.roomzero.online` (richiede che il dominio roomzero.online
-   sia già gestito da Cloudflare).
+2. Database D1 creato: `la-corsa-invisibile-db`, ID già impostato in `wrangler.toml`.
+3. Schema inizializzato con `npm run db:init:remote`.
+4. Sviluppo locale (facoltativo, per test prima di caricare): `npm run dev`.
+5. Custom Domain da collegare quando pronto: `corsa.roomzero.online`
+   (dashboard Cloudflare → questo Worker → Domains).
 
 ## Cose da NON dimenticare prima di andare pubblico
 
-- [ ] Proteggere `/admin/genera-codici` con una password (pattern "Area riservata"
-      nella skill `costruzione-siti-web`) — al momento è aperto, va bene solo in sviluppo.
+- [x] Proteggere `/admin/genera-codici` con una password — fatto, secret
+      `ADMIN_PASSWORD` impostato su Cloudflare, header `Authorization: Bearer <password>`.
 - [ ] Costruire la "home del libro" su **bersaglierisgv.org** (non su questo progetto):
       pagina statica, stile del sito, spiegazione del gioco, lettura del codice da
       query string (`?codice=XXXX`), pulsante verso `corsa.roomzero.online` quando pronto.
