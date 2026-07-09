@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>La Corsa Invisibile</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #15120f;
+    --bg-panel: #1f1a16;
+    --bg-panel-raised: #2a231d;
+    --line: #3a3128;
+    --crimson: #a6332b;
+    --crimson-bright: #c94538;
+    --brass: #b08d57;
+    --text: #ece4d6;
+    --text-muted: #a89a87;
+    --text-faint: #6b5f51;
+    --font-display: 'Oswald', sans-serif;
+    --font-body: 'Source Serif 4', serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+  }
+  body {
+    background-image:
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0px, transparent 1px, transparent 2px),
+      radial-gradient(ellipse at top, rgba(166,51,43,0.08), transparent 60%);
+  }
+  .wrap {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 0 20px 80px;
+    min-height: 100vh;
+  }
+  header.masthead {
+    padding: 28px 0 20px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 28px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  header.masthead .titolo {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.5rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+  header.masthead .titolo .lampeggio {
+    color: var(--crimson-bright);
+  }
+  header.masthead .romanzo {
+    font-size: 0.75rem;
+    color: var(--text-faint);
+    font-style: italic;
+    letter-spacing: 0.02em;
+  }
+  .schermo { display: none; }
+  .schermo.attivo { display: block; animation: entra 0.35s ease; }
+  @keyframes entra { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+  .etichetta {
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--brass);
+    margin-bottom: 8px;
+  }
+  h1.grande {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.6rem;
+    letter-spacing: 0.01em;
+    line-height: 1.25;
+    margin: 0 0 14px;
+  }
+  p.spiega {
+    color: var(--text-muted);
+    line-height: 1.6;
+    margin: 0 0 24px;
+    font-size: 0.98rem;
+  }
+  .campo {
+    margin-bottom: 18px;
+  }
+  .campo label {
+    display: block;
+    font-family: var(--font-display);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 7px;
+  }
+  input[type=text], select {
+    width: 100%;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 1.05rem;
+    padding: 13px 14px;
+    border-radius: 3px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input[type=text]:focus, select:focus {
+    border-color: var(--crimson);
+  }
+  input[type=text]::placeholder { color: var(--text-faint); }
+
+  button.principale {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.85rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: var(--crimson);
+    color: #fff;
+    border: none;
+    padding: 14px 22px;
+    border-radius: 3px;
+    cursor: pointer;
+    width: 100%;
+    transition: background 0.15s, transform 0.1s;
+  }
+  button.principale:hover { background: var(--crimson-bright); }
+  button.principale:active { transform: scale(0.99); }
+  button.principale:disabled { background: var(--line); color: var(--text-faint); cursor: default; }
+
+  .errore {
+    color: var(--crimson-bright);
+    font-size: 0.88rem;
+    margin-top: 10px;
+    display: none;
+  }
+  .errore.mostra { display: block; }
+
+  /* --- Schermata di gioco --- */
+  .barra-stanza {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 10px 14px;
+    margin-bottom: 22px;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+  }
+  .barra-stanza .codice-stanza { color: var(--text-muted); }
+  .barra-stanza button.copia {
+    background: none;
+    border: 1px solid var(--line);
+    color: var(--brass);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    padding: 5px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .barra-stanza button.copia:hover { border-color: var(--brass); }
+
+  .risorse {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 26px;
+  }
+  .risorsa {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-top: 2px solid var(--brass);
+    border-radius: 4px;
+    padding: 12px 10px;
+    text-align: center;
+  }
+  .risorsa .nome {
+    font-family: var(--font-display);
+    font-size: 0.62rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+  .risorsa .valore {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 1.5rem;
+    color: var(--text);
+  }
+  .risorsa .valore.positivo { color: #8faa72; }
+  .risorsa .valore.negativo { color: var(--crimson-bright); }
+
+  .squadra {
+    margin-bottom: 26px;
+  }
+  .squadra .lista {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .giocatore-chip {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 6px 13px;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+  }
+  .giocatore-chip strong { color: var(--text); font-weight: 600; }
+
+  .nodi-lista {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .nodo-card {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 16px 18px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    text-align: left;
+  }
+  .nodo-card:hover { border-color: var(--crimson); background: var(--bg-panel-raised); }
+  .nodo-card .titolo-nodo {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.05rem;
+    margin-bottom: 4px;
+  }
+  .nodo-card .luogo-nodo {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--brass);
+    margin-bottom: 6px;
+  }
+  .nodo-card .tono-nodo {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  .situazione-box {
+    background: var(--bg-panel);
+    border-left: 3px solid var(--crimson);
+    border-radius: 0 4px 4px 0;
+    padding: 18px 20px;
+    margin-bottom: 20px;
+  }
+  .situazione-box .testo-situazione {
+    font-size: 1.05rem;
+    line-height: 1.65;
+    margin: 0 0 12px;
+  }
+  .situazione-box .prompt {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--brass);
+    margin: 0;
+  }
+
+  .risposte-lista {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  button.risposta {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 0.98rem;
+    text-align: left;
+    padding: 14px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    line-height: 1.4;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  button.risposta:hover:not(:disabled) { border-color: var(--crimson); background: var(--bg-panel-raised); }
+  button.risposta:disabled { opacity: 0.5; cursor: default; }
+
+  .esito-box {
+    background: var(--bg-panel-raised);
+    border: 1px solid var(--brass);
+    border-radius: 4px;
+    padding: 18px 20px;
+    margin-bottom: 20px;
+  }
+  .esito-box .etichetta { margin-bottom: 10px; }
+  .esito-box .testo-esito {
+    font-size: 1.02rem;
+    line-height: 1.6;
+    font-style: italic;
+    margin: 0;
+  }
+
+  .esito-finale-box {
+    background: var(--bg-panel-raised);
+    border: 1px solid var(--crimson);
+    border-radius: 4px;
+    padding: 22px 20px;
+    margin-bottom: 20px;
+    text-align: center;
+  }
+  .esito-finale-box .testo-esito {
+    font-size: 1.08rem;
+    line-height: 1.65;
+    margin: 14px 0 20px;
+  }
+
+  button.secondario {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.78rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    background: none;
+    border: 1px solid var(--brass);
+    color: var(--brass);
+    padding: 11px 18px;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  button.secondario:hover { background: rgba(176,141,87,0.1); }
+
+  .caricamento {
+    text-align: center;
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    padding: 40px 0;
+    letter-spacing: 0.05em;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="masthead">
+    <div>
+      <div class="titolo">La Corsa <span class="lampeggio">Invisibile</span></div>
+      <div class="romanzo">Il ragazzo che correva nel tempo / I passi tornano</div>
+    </div>
+  </header>
+
+  <!-- SCHERMATA 1: inserimento codice -->
+  <section id="schermo-codice" class="schermo">
+    <div class="etichetta">Ingresso</div>
+    <h1 class="grande">Il codice è stampato nel libro.</h1>
+    <p class="spiega">
+      Ogni copia del romanzo contiene un codice a otto caratteri. Inseriscilo per aprire
+      una nuova stanza di gioco: potrai poi condividere il link con il resto della squadra,
+      senza bisogno di codici ulteriori.
+    </p>
+    <div class="campo">
+      <label for="input-codice">Codice</label>
+      <input type="text" id="input-codice" placeholder="ES. A1B2C3D4" maxlength="12" autocomplete="off" />
+    </div>
+    <button class="principale" id="btn-entra">Entra</button>
+    <div class="errore" id="errore-codice"></div>
+  </section>
+
+  <!-- SCHERMATA 2: ingresso in stanza (nome + ruolo) -->
+  <section id="schermo-join" class="schermo">
+    <div class="etichetta">La squadra</div>
+    <h1 class="grande">Come vuoi essere chiamato al tavolo?</h1>
+    <p class="spiega">
+      Scegli un nome e un ruolo. Il ruolo definisce cosa il tuo personaggio sa fare
+      meglio, ma le risorse della squadra — Cadenza, Spirito di Corpo, Passo Avanti —
+      sono condivise da tutti: quello che scegli conta per l'intero gruppo.
+    </p>
+    <div class="campo">
+      <label for="input-nome">Nome</label>
+      <input type="text" id="input-nome" placeholder="Il tuo nome al tavolo" maxlength="30" autocomplete="off" />
+    </div>
+    <div class="campo">
+      <label for="select-ruolo">Ruolo</label>
+      <select id="select-ruolo"></select>
+    </div>
+    <button class="principale" id="btn-join">Unisciti alla squadra</button>
+    <div class="errore" id="errore-join"></div>
+  </section>
+
+  <!-- SCHERMATA 3: gioco -->
+  <section id="schermo-gioco" class="schermo">
+    <div class="barra-stanza">
+      <span class="codice-stanza" id="testo-codice-stanza">stanza —</span>
+      <button class="copia" id="btn-copia-link">Copia link stanza</button>
+    </div>
+
+    <div class="risorse" id="box-risorse"></div>
+
+    <div class="squadra">
+      <div class="etichetta">La squadra</div>
+      <div class="lista" id="lista-giocatori"></div>
+    </div>
+
+    <div id="area-nodo"></div>
+  </section>
+
+  <div class="caricamento" id="caricamento">un momento…</div>
+</div>
+
+<script>
+const API = ""; // stesso dominio
+let CONFIG = null;
+let STATO = { roomId: null, nome: null, ruolo: null };
+
+function mostraSchermo(id) {
+  document.querySelectorAll(".schermo").forEach(s => s.classList.remove("attivo"));
+  document.getElementById("caricamento").style.display = "none";
+  if (id) document.getElementById(id).classList.add("attivo");
+}
+
+function salvaStato() {
+  localStorage.setItem("lci_stato", JSON.stringify(STATO));
+}
+function caricaStato() {
+  try {
+    const salvato = JSON.parse(localStorage.getItem("lci_stato") || "null");
+    if (salvato) STATO = salvato;
+  } catch (e) {}
+}
+
+async function chiamaAPI(path, opzioni) {
+  const risposta = await fetch(path, opzioni);
+  if (!risposta.ok) {
+    const corpo = await risposta.json().catch(() => ({}));
+    const err = new Error(corpo.motivo || "Richiesta non riuscita");
+    err.corpo = corpo;
+    err.status = risposta.status;
+    throw err;
+  }
+  return risposta.json();
+}
+
+async function caricaConfig() {
+  CONFIG = await chiamaAPI("/api/config");
+  const select = document.getElementById("select-ruolo");
+  select.innerHTML = CONFIG.ruoli.map(r =>
+    `<option value="${r.id}">${r.nome} — ${r.focus}</option>`
+  ).join("");
+}
+
+function trovaNodo(nodoId) {
+  return CONFIG.nodiTemporali.find(n => n.id === nodoId);
+}
+
+// --- Avvio ---
+async function avvia() {
+  caricaStato();
+  await caricaConfig();
+
+  const params = new URLSearchParams(window.location.search);
+  const stanzaUrl = params.get("stanza");
+
+  if (stanzaUrl) {
+    STATO.roomId = stanzaUrl;
+    salvaStato();
+  }
+
+  if (STATO.roomId && STATO.nome) {
+    // già dentro una stanza con un nome: vai dritto al gioco
+    mostraSchermo("schermo-gioco");
+    await aggiornaSchermataGioco();
+    avviaPolling();
+  } else if (STATO.roomId) {
+    // stanza nota ma non ancora presentati
+    mostraSchermo("schermo-join");
+  } else {
+    mostraSchermo("schermo-codice");
+  }
+}
+
+// --- Schermata 1: codice ---
+document.getElementById("btn-entra").addEventListener("click", async () => {
+  const codice = document.getElementById("input-codice").value.trim().toUpperCase();
+  const erroreBox = document.getElementById("errore-codice");
+  erroreBox.classList.remove("mostra");
+  if (!codice) return;
+
+  const btn = document.getElementById("btn-entra");
+  btn.disabled = true;
+  btn.textContent = "Un momento…";
+  try {
+    const risposta = await chiamaAPI("/api/entra", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: codice }),
+    });
+    STATO.roomId = risposta.roomId;
+    salvaStato();
+    history.replaceState(null, "", "?stanza=" + risposta.roomId);
+    mostraSchermo("schermo-join");
+  } catch (e) {
+    const messaggi = {
+      codice_inesistente: "Questo codice non esiste. Controlla di averlo copiato bene.",
+      codice_gia_usato: "Questo codice è già stato usato per aprire una stanza. Se la stanza esiste già, chiedi il link a chi l'ha creata.",
+    };
+    erroreBox.textContent = messaggi[e.corpo && e.corpo.motivo] || "Qualcosa è andato storto. Riprova.";
+    erroreBox.classList.add("mostra");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Entra";
+  }
+});
+
+// --- Schermata 2: join ---
+document.getElementById("btn-join").addEventListener("click", async () => {
+  const nome = document.getElementById("input-nome").value.trim();
+  const ruolo = document.getElementById("select-ruolo").value;
+  const erroreBox = document.getElementById("errore-join");
+  erroreBox.classList.remove("mostra");
+  if (!nome) {
+    erroreBox.textContent = "Scrivi un nome prima di continuare.";
+    erroreBox.classList.add("mostra");
+    return;
+  }
+  const btn = document.getElementById("btn-join");
+  btn.disabled = true;
+  btn.textContent = "Un momento…";
+  try {
+    await chiamaAPI(`/api/stanza/${STATO.roomId}/join`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nome, ruolo }),
+    });
+    STATO.nome = nome;
+    STATO.ruolo = ruolo;
+    salvaStato();
+    mostraSchermo("schermo-gioco");
+    await aggiornaSchermataGioco();
+    avviaPolling();
+  } catch (e) {
+    erroreBox.textContent = "Qualcosa è andato storto. Riprova.";
+    erroreBox.classList.add("mostra");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Unisciti alla squadra";
+  }
+});
+
+// --- Schermata 3: gioco ---
+document.getElementById("btn-copia-link").addEventListener("click", () => {
+  const link = window.location.origin + "/?stanza=" + STATO.roomId;
+  navigator.clipboard.writeText(link).then(() => {
+    const btn = document.getElementById("btn-copia-link");
+    const originale = btn.textContent;
+    btn.textContent = "Copiato";
+    setTimeout(() => { btn.textContent = originale; }, 1500);
+  });
+});
+
+function renderRisorse(risorseDiSquadra) {
+  const nomi = { cadenza: "Cadenza", spiritoDiCorpo: "Spirito di Corpo", passoAvanti: "Passo Avanti" };
+  const box = document.getElementById("box-risorse");
+  box.innerHTML = Object.keys(nomi).map(chiave => {
+    const valore = risorseDiSquadra[chiave] || 0;
+    const classe = valore > 0 ? "positivo" : (valore < 0 ? "negativo" : "");
+    const segno = valore > 0 ? "+" : "";
+    return `<div class="risorsa">
+      <div class="nome">${nomi[chiave]}</div>
+      <div class="valore ${classe}">${segno}${valore}</div>
+    </div>`;
+  }).join("");
+}
+
+function renderGiocatori(giocatori) {
+  const lista = document.getElementById("lista-giocatori");
+  if (!giocatori.length) {
+    lista.innerHTML = `<span style="color:var(--text-faint);font-size:0.85rem;">Nessuno ancora, sei il primo.</span>`;
+    return;
+  }
+  lista.innerHTML = giocatori.map(g => {
+    const ruoloInfo = CONFIG.ruoli.find(r => r.id === g.ruolo);
+    return `<div class="giocatore-chip"><strong>${g.nome}</strong> — ${ruoloInfo ? ruoloInfo.nome : g.ruolo}</div>`;
+  }).join("");
+}
+
+function renderSelezioneNodo() {
+  const area = document.getElementById("area-nodo");
+  area.innerHTML = `
+    <div class="etichetta">Scegli dove giocare</div>
+    <h1 class="grande" style="font-size:1.3rem;">Cinque momenti nella storia dei Bersaglieri.</h1>
+    <div class="nodi-lista" id="lista-nodi"></div>
+  `;
+  const lista = document.getElementById("lista-nodi");
+  lista.innerHTML = CONFIG.nodiTemporali.map(n => `
+    <button class="nodo-card" data-nodo="${n.id}">
+      <div class="titolo-nodo">${n.titolo}</div>
+      <div class="luogo-nodo">${n.luogo}</div>
+      <div class="tono-nodo">${n.tono}</div>
+    </button>
+  `).join("");
+  lista.querySelectorAll(".nodo-card").forEach(card => {
+    card.addEventListener("click", async () => {
+      const nodoId = card.dataset.nodo;
+      area.innerHTML = `<div class="caricamento">si comincia…</div>`;
+      await chiamaAPI(`/api/stanza/${STATO.roomId}/avvia-nodo`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nodoId }),
+      });
+      await aggiornaSchermataGioco();
+    });
+  });
+}
+
+function renderRichiesta(richiesta, nodoAttivo) {
+  const area = document.getElementById("area-nodo");
+  const nodo = trovaNodo(nodoAttivo);
+  area.innerHTML = `
+    <div class="etichetta">${nodo ? nodo.titolo : ""}</div>
+    <div class="situazione-box">
+      <p class="testo-situazione">${richiesta.situazione}</p>
+      <p class="prompt">${richiesta.prompt}</p>
+    </div>
+    <div class="risposte-lista" id="lista-risposte"></div>
+  `;
+  const lista = document.getElementById("lista-risposte");
+  lista.innerHTML = richiesta.risposte.map((r, i) =>
+    `<button class="risposta" data-indice="${i}">${r.testo}</button>`
+  ).join("");
+  lista.querySelectorAll("button.risposta").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      lista.querySelectorAll("button.risposta").forEach(b => b.disabled = true);
+      const indice = parseInt(btn.dataset.indice, 10);
+      const risultato = await chiamaAPI(`/api/stanza/${STATO.roomId}/scegli`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ risposteIndice: indice }),
+      });
+      renderRisorse(risultato.session.risorseDiSquadra);
+      renderGiocatori(risultato.session.giocatori);
+      mostraEsito(risultato.esito, risultato.prossimaRichiesta, risultato.esitoNodo, risultato.session.nodoAttivo);
+    });
+  });
+}
+
+function mostraEsito(testoEsito, prossimaRichiesta, esitoNodo, nodoAttivo) {
+  const area = document.getElementById("area-nodo");
+  area.innerHTML = `
+    <div class="esito-box">
+      <div class="etichetta">Esito</div>
+      <p class="testo-esito">${testoEsito}</p>
+    </div>
+    <div id="prosegui"></div>
+  `;
+  const prosegui = document.getElementById("prosegui");
+  if (esitoNodo) {
+    prosegui.innerHTML = `
+      <div class="esito-finale-box">
+        <div class="etichetta">Fine del nodo</div>
+        <p class="testo-esito">${esitoNodo}</p>
+        <button class="secondario" id="btn-altro-nodo">Scegli un altro Nodo Temporale</button>
+      </div>
+    `;
+    document.getElementById("btn-altro-nodo").addEventListener("click", renderSelezioneNodo);
+  } else if (prossimaRichiesta) {
+    prosegui.innerHTML = `<button class="principale" id="btn-continua">Continua</button>`;
+    document.getElementById("btn-continua").addEventListener("click", () => {
+      renderRichiesta(prossimaRichiesta, nodoAttivo);
+    });
+  }
+}
+
+async function aggiornaSchermataGioco() {
+  document.getElementById("testo-codice-stanza").textContent = "stanza " + STATO.roomId.slice(0, 8);
+
+  const [{ session }, { session: session2, richiestaAttiva }] = await Promise.all([
+    chiamaAPI(`/api/stanza/${STATO.roomId}/state`),
+    chiamaAPI(`/api/stanza/${STATO.roomId}/richiesta-attiva`),
+  ]);
+
+  renderRisorse(session2.risorseDiSquadra);
+  renderGiocatori(session2.giocatori);
+
+  if (!session2.nodoAttivo) {
+    renderSelezioneNodo();
+  } else if (richiestaAttiva) {
+    renderRichiesta(richiestaAttiva, session2.nodoAttivo);
+  } else {
+    // nodo esaurito ma non stiamo mostrando l'esito in questo momento
+    // (es. dopo un refresh di pagina): mostriamo la scelta del prossimo nodo
+    renderSelezioneNodo();
+  }
+}
+
+let intervalloPolling = null;
+function avviaPolling() {
+  if (intervalloPolling) return;
+  intervalloPolling = setInterval(async () => {
+    try {
+      const { session } = await chiamaAPI(`/api/stanza/${STATO.roomId}/state`);
+      renderRisorse(session.risorseDiSquadra);
+      renderGiocatori(session.giocatori);
+    } catch (e) {}
+  }, 6000);
+}
+
+avvia();
+</script>
+</body>
+</html>
