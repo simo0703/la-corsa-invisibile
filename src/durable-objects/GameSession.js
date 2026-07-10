@@ -60,7 +60,7 @@ export class GameSession {
       stored = {
         gameId: GAME_CONFIG.gameId,
         creata_il: new Date().toISOString(),
-        giocatori: [], // { id, nome, ruolo, competenze } -- competenze assegnate a /join
+        giocatori: [], // { id, nome, ruolo, competenze, comandante } -- assegnati a /join
         risorseDiSquadra: {
           cadenza: 0,
           spiritoDiCorpo: 0,
@@ -130,6 +130,17 @@ export class GameSession {
       return Response.json(session);
     }
 
+    // Il comandante/narratore e' chi crea la stanza, ma non e' un ruolo a
+    // parte: e' il PRIMO giocatore che si unisce a una stanza appena
+    // creata (nessuno ancora in session.giocatori). Gioca anche lui con
+    // uno dei 4 ruoli come chiunque altro; il flag comandante gli sblocca
+    // solo controlli in piu' lato client (vedi public/index.html), non
+    // permessi diversi qui nel Worker -- nessun controllo di autorizzazione
+    // e' stato aggiunto a nessun endpoint, coerente con il resto
+    // dell'API (nessuna infrastruttura di sessione/token esiste nel
+    // Worker). Limite noto: se il link viene condiviso prima che il
+    // creatore stesso faccia /join, un altro giocatore potrebbe diventare
+    // comandante per primo -- accettabile per ora.
     if (url.pathname.endsWith("/join") && request.method === "POST") {
       const { nome, ruolo } = await request.json();
       // Competenze base per il ruolo (principale + secondarie, nessun punto
@@ -141,18 +152,28 @@ export class GameSession {
         return new Response("Ruolo sconosciuto", { status: 400 });
       }
       const session = await this.initState();
-      session.giocatori.push({ id: crypto.randomUUID(), nome, ruolo, competenze });
+      const comandante = session.giocatori.length === 0;
+      session.giocatori.push({ id: crypto.randomUUID(), nome, ruolo, competenze, comandante });
       await this.state.storage.put("session", session);
       return Response.json(session);
     }
 
+    // Le chiavi accettate sono le risorse di squadra oppure "margine" --
+    // stesso trattamento che "margine" gia' riceve nel ciclo di effetti di
+    // /scegli piu' sotto (una pseudo-risorsa, non nell'oggetto
+    // risorseDiSquadra ma modificabile con lo stesso pattern delta).
+    // Nessun controllo su chi chiama: come per ogni altro endpoint di
+    // questo Worker, il vincolo "solo il comandante" e' lato client.
     if (url.pathname.endsWith("/risorse") && request.method === "POST") {
       const { risorsa, delta } = await request.json();
       const session = await this.initState();
-      if (!(risorsa in session.risorseDiSquadra)) {
+      if (risorsa === "margine") {
+        session.margine += delta;
+      } else if (risorsa in session.risorseDiSquadra) {
+        session.risorseDiSquadra[risorsa] += delta;
+      } else {
         return new Response("Risorsa sconosciuta", { status: 400 });
       }
-      session.risorseDiSquadra[risorsa] += delta;
       await this.state.storage.put("session", session);
       return Response.json(session);
     }

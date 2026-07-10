@@ -106,7 +106,7 @@
     color: var(--text-muted);
     margin-bottom: 7px;
   }
-  input[type=text], select {
+  input[type=text], input[type=number], select, textarea {
     width: 100%;
     background: var(--bg-panel);
     border: 1px solid var(--line);
@@ -118,10 +118,11 @@
     outline: none;
     transition: border-color 0.15s;
   }
-  input[type=text]:focus, select:focus {
+  input[type=text]:focus, input[type=number]:focus, select:focus, textarea:focus {
     border-color: var(--crimson);
   }
-  input[type=text]::placeholder { color: var(--text-faint); }
+  input[type=text]::placeholder, input[type=number]::placeholder, textarea::placeholder { color: var(--text-faint); }
+  textarea { resize: vertical; min-height: 80px; font-size: 0.95rem; }
 
   button.principale {
     font-family: var(--font-display);
@@ -344,6 +345,44 @@
   }
   button.secondario:hover { background: rgba(176,141,87,0.1); }
 
+  /* --- Pannello del comandante --- */
+  .pannello-comandante {
+    background: var(--bg-panel);
+    border: 1px solid var(--crimson);
+    border-radius: 4px;
+    padding: 18px 20px;
+    margin-top: 30px;
+  }
+  .pannello-comandante .titolo-pannello {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.9rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--crimson-bright);
+    margin-bottom: 18px;
+  }
+  .pannello-comandante .sezione { margin-bottom: 20px; }
+  .pannello-comandante .sezione:last-child { margin-bottom: 0; }
+  .pannello-comandante .valore-margine {
+    font-family: var(--font-mono);
+    font-size: 1.15rem;
+    color: var(--text);
+    margin-bottom: 10px;
+  }
+  .pannello-comandante .riga-azione {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+  .pannello-comandante .riga-azione .campo { flex: 1; margin-bottom: 0; }
+  .pannello-comandante .riga-azione button.secondario { white-space: nowrap; }
+  .pannello-comandante .nota-privata {
+    font-size: 0.72rem;
+    color: var(--text-faint);
+    margin: 6px 0 0;
+  }
+
   .caricamento {
     text-align: center;
     color: var(--text-faint);
@@ -412,6 +451,8 @@
     </div>
 
     <div id="area-nodo"></div>
+
+    <div id="pannello-comandante"></div>
   </section>
 
   <div class="caricamento" id="caricamento">un momento…</div>
@@ -420,7 +461,7 @@
 <script>
 const API = ""; // stesso dominio
 let CONFIG = null;
-let STATO = { roomId: null, nome: null, ruolo: null, giocatoreId: null };
+let STATO = { roomId: null, nome: null, ruolo: null, giocatoreId: null, comandante: false };
 
 function mostraSchermo(id) {
   document.querySelectorAll(".schermo").forEach(s => s.classList.remove("attivo"));
@@ -536,7 +577,9 @@ document.getElementById("btn-join").addEventListener("click", async () => {
     // /join risponde con l'intera sessione (tutti i giocatori della stanza):
     // il Durable Object serializza le richieste, quindi l'ultimo giocatore
     // dell'array è sempre quello appena aggiunto da questa chiamata.
-    STATO.giocatoreId = session.giocatori[session.giocatori.length - 1].id;
+    const mioGiocatore = session.giocatori[session.giocatori.length - 1];
+    STATO.giocatoreId = mioGiocatore.id;
+    STATO.comandante = mioGiocatore.comandante === true;
     salvaStato();
     mostraSchermo("schermo-gioco");
     await aggiornaSchermataGioco();
@@ -674,6 +717,85 @@ function mostraEsito(testoEsito, prossimaRichiesta, esitoNodo, nodoAttivo) {
   }
 }
 
+// Pannello visibile solo al comandante (chi ha creato la stanza, primo
+// giocatore unito). Le risorse di squadra e l'elenco giocatori sono già
+// mostrati a tutti sopra (box-risorse, lista-giocatori): qui solo ciò che
+// è specifico del comando — margine (non è una risorsa di squadra, non è
+// mostrato altrove), avvio/cambio nodo, e note private del comandante.
+// Nodo/richiesta attiva sono già visibili a tutti nell'area principale
+// (renderRichiesta / renderSelezioneNodo): non duplicati qui.
+function renderPannelloComandante(session) {
+  const box = document.getElementById("pannello-comandante");
+  if (!STATO.comandante) {
+    box.innerHTML = "";
+    return;
+  }
+  box.innerHTML = `
+    <div class="pannello-comandante">
+      <div class="titolo-pannello">Pannello del comandante</div>
+
+      <div class="sezione">
+        <div class="etichetta">Margine</div>
+        <div class="valore-margine">${session.margine} / ${CONFIG.margineSoglia}</div>
+        <div class="riga-azione">
+          <div class="campo">
+            <label for="input-delta-margine">Variazione manuale</label>
+            <input type="number" id="input-delta-margine" placeholder="es. -1 o 2" />
+          </div>
+          <button class="secondario" id="btn-applica-margine">Applica</button>
+        </div>
+      </div>
+
+      <div class="sezione">
+        <div class="etichetta">Avvia o cambia Nodo Temporale</div>
+        <div class="riga-azione">
+          <div class="campo">
+            <label for="select-nodo-comandante">Nodo</label>
+            <select id="select-nodo-comandante">
+              ${CONFIG.nodiTemporali.map(n => `<option value="${n.id}">${n.titolo}</option>`).join("")}
+            </select>
+          </div>
+          <button class="secondario" id="btn-avvia-nodo-comandante">Avvia</button>
+        </div>
+      </div>
+
+      <div class="sezione">
+        <div class="etichetta">Note del comandante</div>
+        <textarea id="note-comandante" placeholder="Appunti tuoi, solo su questo dispositivo…"></textarea>
+        <p class="nota-privata">Restano solo su questo browser: non vengono mai inviate al server né agli altri giocatori.</p>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("btn-applica-margine").addEventListener("click", async () => {
+    const input = document.getElementById("input-delta-margine");
+    const delta = parseInt(input.value, 10);
+    if (!Number.isFinite(delta) || delta === 0) return;
+    await chiamaAPI(`/api/stanza/${STATO.roomId}/risorse`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ risorsa: "margine", delta }),
+    });
+    await aggiornaSchermataGioco();
+  });
+
+  document.getElementById("btn-avvia-nodo-comandante").addEventListener("click", async () => {
+    const nodoId = document.getElementById("select-nodo-comandante").value;
+    await chiamaAPI(`/api/stanza/${STATO.roomId}/avvia-nodo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodoId }),
+    });
+    await aggiornaSchermataGioco();
+  });
+
+  const note = document.getElementById("note-comandante");
+  note.value = localStorage.getItem("lci_note_comandante") || "";
+  note.addEventListener("input", () => {
+    localStorage.setItem("lci_note_comandante", note.value);
+  });
+}
+
 async function aggiornaSchermataGioco() {
   document.getElementById("testo-codice-stanza").textContent = "stanza " + STATO.roomId.slice(0, 8);
 
@@ -684,6 +806,7 @@ async function aggiornaSchermataGioco() {
 
   renderRisorse(session2.risorseDiSquadra);
   renderGiocatori(session2.giocatori);
+  renderPannelloComandante(session2);
 
   if (!session2.nodoAttivo) {
     renderSelezioneNodo();

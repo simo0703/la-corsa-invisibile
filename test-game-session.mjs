@@ -100,6 +100,13 @@ console.log("\n--- /join ---");
     "le competenze vengono assegnate in base al ruolo (Esploratore: Cadenza principale a 3)",
     json.giocatori[0].competenze.cadenza === 3 && json.giocatori[0].competenze.precisione === 1
   );
+  verifica("il primo giocatore della stanza diventa comandante", json.giocatori[0].comandante === true);
+
+  const secondo = await chiamata(gs, "/join", "POST", { nome: "Seconda", ruolo: "custode" });
+  verifica(
+    "il secondo giocatore NON è comandante",
+    secondo.json.giocatori[1].comandante === false
+  );
 
   const ruoloIgnoto = await chiamata(gs, "/join", "POST", { nome: "Altro", ruolo: "non-esiste" });
   verifica("un ruolo sconosciuto risponde 400", ruoloIgnoto.status === 400);
@@ -112,6 +119,13 @@ console.log("\n--- /risorse ---");
   verifica("modifica una risorsa nota", ok.json.risorseDiSquadra.cadenza === 3);
   const male = await chiamata(gs, "/risorse", "POST", { risorsa: "non-esiste", delta: 1 });
   verifica("una risorsa sconosciuta risponde 400", male.status === 400);
+
+  // Il margine non è dentro risorseDiSquadra ma è accettato come chiave
+  // speciale, con lo stesso pattern delta (per il pannello del comandante).
+  const su = await chiamata(gs, "/risorse", "POST", { risorsa: "margine", delta: 2 });
+  verifica("il margine sale con un delta positivo", su.json.margine === 2);
+  const giu = await chiamata(gs, "/risorse", "POST", { risorsa: "margine", delta: -3 });
+  verifica("il margine scende con un delta negativo, senza limiti imposti qui", giu.json.margine === -1);
 }
 
 console.log("\n--- avvia-nodo + richiesta-attiva ---");

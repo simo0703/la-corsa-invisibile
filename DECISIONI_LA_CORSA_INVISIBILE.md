@@ -1,13 +1,27 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 10 luglio 2026 (fine sessione, dopo il Passo 11 — lavoro sospeso qui su richiesta)
+Aggiornato al: 10 luglio 2026 (fine sessione, dopo il Passo 12 — lavoro sospeso qui su richiesta)
 
 Questo file serve a non perdersi tra una sessione di lavoro e l'altra: raccoglie cosa
 è stato deciso, cosa è ancora un'ipotesi da confermare, e cosa manca. Va aggiornato
 ogni 3-4 passaggi di lavoro, non a ogni singola modifica.
 
-**Punto di ripresa**: il bug noto di `public/index.html` (non mandava mai
-`giocatoreId` a `/scegli`) è corretto (Passo 11) — `STATO.giocatoreId`
+**Punto di ripresa**: esiste ora un'identità comandante e un pannello
+dedicato nella schermata di gioco (Passo 12). Il comandante non è un ruolo
+a parte: è il primo giocatore che fa `/join` in una stanza appena creata
+(`session.giocatori.length === 0`), gioca anche lui con uno dei 4 ruoli,
+ma vede in più un pannello (margine con soglia, avvio/cambio nodo, modifica
+manuale del margine, note private mai inviate al server). Nessun controllo
+di autorizzazione lato server: il flag `comandante` sblocca solo l'interfaccia
+lato client, coerente con il resto dell'API (nessuna infrastruttura di
+sessione/token nel Worker). Limite noto e accettato: se il link viene
+condiviso prima che il creatore stesso faccia `/join`, un altro giocatore
+potrebbe diventare comandante per primo.
+Margine modificabile manualmente estendendo `/risorse` (non un endpoint
+dedicato): "margine" è ora una chiave speciale accettata da quell'endpoint,
+con lo stesso pattern delta già usato per le risorse di squadra.
+Il bug noto di `public/index.html` (non mandava mai `giocatoreId` a
+`/scegli`) è corretto dal Passo 11 — `STATO.giocatoreId`
 viene salvato dalla risposta di `/join` e incluso nel body di `/scegli`.
 **Verificato dal vivo**, non solo a lettura di codice: `wrangler dev` +
 browser reale, join di un Esploratore, avvio di `1836-torino`, scelta "A
@@ -287,6 +301,54 @@ oggi contiene un `index.html` minimo).
     coerente con quanto già verificato nei test automatici — non indica un
     problema del fix.
 
+13. **Identità comandante + pannello (fatto nel Passo 12)**: il
+    comandante/narratore è chi crea la stanza, ma non è un ruolo separato
+    nella lista ruoli — è un giocatore normale con un flag in più.
+    **Identità**: il primo giocatore che fa `/join` in una stanza appena
+    creata (`session.giocatori.length === 0` al momento del join) diventa
+    comandante. Limite noto: se il link viene condiviso prima che il
+    creatore stesso faccia `/join`, un altro giocatore potrebbe diventare
+    comandante per primo — accettabile per ora, da rivedere se diventa un
+    problema reale.
+    **Nessun nuovo endpoint per "richiesta attiva specifica"**: il
+    comandante sceglie quale NODO avviare (`/avvia-nodo`, già esistente),
+    il resto procede in automatico via `/scegli` come già implementato.
+    **Esito del tiro sempre quello di `risolviAzione()`**: mai
+    sovrascrivibile manualmente, il comandante lo vede, non lo cambia —
+    `/scegli` non è stato toccato.
+    **Margine modificabile manualmente**: estesa la logica esistente di
+    `/risorse` (non un endpoint dedicato) — "margine" accettato come chiave
+    speciale con lo stesso pattern delta delle risorse di squadra, riuso
+    dello stesso modello mentale già presente nel ciclo di effetti di
+    `/scegli` (che tratta "margine" allo stesso modo).
+    **Nessuna migrazione in `initState()`/`migrateState()`**: `comandante`
+    è un campo per-giocatore (dentro l'array `giocatori`), non un campo di
+    sessione — stesso trattamento già riservato a `competenze`, mai
+    retro-assegnate ai giocatori pre-esistenti. Un giocatore vecchio senza
+    `comandante` ha semplicemente `undefined` (falsy, trattato come "non
+    comandante").
+    **Nessun controllo di autorizzazione lato server**: coerente col resto
+    dell'API, che non ha alcuna infrastruttura di sessione/token — il
+    vincolo "solo il comandante" è imposto solo lato client (il pannello
+    non compare se `STATO.comandante` non è `true`), non impedisce
+    tecnicamente a chiunque di chiamare gli stessi endpoint.
+    **Pannello lato client**: margine (lettura, con soglia) e
+    avvio/cambio nodo (select + bottone) e modifica manuale del margine
+    (scrittura); nodo/richiesta attiva NON duplicati (già visibili a tutti
+    nell'area principale); risorse di squadra ed elenco giocatori NON
+    duplicati (già visibili a tutti sopra). Note libere del comandante
+    **solo in `localStorage`**, mai inviate al server — verificato che
+    scriverle non generi alcuna richiesta di rete.
+    **Verificato dal vivo**, non solo mentalmente: `wrangler dev` +
+    browser, due tab con `localStorage` separatamente svuotato per
+    simulare due dispositivi diversi (le tab dello stesso browser
+    condividono lo stesso `localStorage`, quindi non bastava aprirne una
+    seconda). Primo giocatore → comandante, pannello visibile, margine
+    modificato da 0 a 3 tramite il pannello, nodo avviato dal pannello
+    (si riflette nell'area principale). Secondo giocatore (storage pulito,
+    `/join` reale) → `comandante: false`, pannello assente, resto della
+    schermata invariato.
+
 ---
 
 ## Ipotesi in attesa di conferma (NON dare per deciso)
@@ -329,6 +391,9 @@ oggi contiene un `index.html` minimo).
       `GameSession.js`
 - [x] `public/index.html` non mandava `giocatoreId` a `/scegli` — corretto
       nel Passo 11, verificato dal vivo con `wrangler dev` + browser
+- [x] Identità comandante (primo giocatore della stanza) + pannello nella
+      schermata di gioco (margine, avvio/cambio nodo, note private) —
+      fatto nel Passo 12
 - [ ] Conferma o correzione della definizione di Margine
 - [x] Un nodo scritto come esempio con ramificazione reale — fatto nel Passo 2
       (`decalogo-vaira-severo` in `1836-torino`)
@@ -344,6 +409,58 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**10/07/2026 — Passo 12: identità comandante + pannello comandante**
+Nuovo file: nessuno.
+File modificati: `src/durable-objects/GameSession.js`, `test-game-session.mjs`,
+`public/index.html`.
+- Il comandante/narratore è chi crea la stanza, gioca anche lui con uno dei
+  4 ruoli, ma non è un ruolo separato nella lista ruoli: è un giocatore
+  normale con un flag `comandante` in più. Identità: il primo giocatore che
+  fa `/join` in una stanza appena creata diventa comandante. Nessun nuovo
+  endpoint per una "richiesta attiva specifica": il comandante sceglie il
+  NODO da avviare (`/avvia-nodo`, già esistente), il resto procede via
+  `/scegli` come già implementato — **non toccato**. Esito del tiro sempre
+  quello di `risolviAzione()`, mai sovrascrivibile manualmente.
+- `GameSession.js` — `/join`: `comandante: session.giocatori.length === 0`
+  su ogni nuovo giocatore. `/risorse`: estesa per accettare `risorsa:
+  "margine"` come chiave speciale (stesso pattern delta delle risorse di
+  squadra) invece di un endpoint `/margine` dedicato — scelta motivata
+  dal fatto che `/scegli` già tratta "margine" come pseudo-risorsa nello
+  stesso modo, nel ciclo di applicazione degli effetti. Nessuna modifica a
+  `initState()`/`migrateState()`: `comandante` è un campo per-giocatore,
+  non di sessione, stesso trattamento di `competenze`. Nessun controllo di
+  autorizzazione lato server aggiunto a nessun endpoint: il vincolo "solo
+  il comandante" resta interamente lato client, coerente col resto
+  dell'API (nessuna infrastruttura di sessione/token nel Worker).
+- `test-game-session.mjs`: 5 nuove verifiche nei blocchi `/join` e
+  `/risorse` già esistenti (primo giocatore comandante, secondo no,
+  margine sale/scende con `/risorse`) — nessun file di test dedicato
+  separato, estensione naturale di copertura già presente.
+- `public/index.html`: `STATO.comandante`, salvato dalla risposta di
+  `/join` e persistito con `salvaStato()`/`caricaStato()` come gli altri
+  campi. Nuovo pannello (`renderPannelloComandante`), visibile solo se
+  `STATO.comandante === true`: margine con soglia (lettura), select +
+  bottone per avviare/cambiare nodo (scrittura via `/avvia-nodo`),
+  variazione manuale del margine (scrittura via `/risorse`), note libere
+  **solo in `localStorage`**, mai inviate al server. Nodo/richiesta attiva
+  e risorse di squadra/elenco giocatori NON duplicati nel pannello: già
+  visibili a tutti nell'area principale e nei box esistenti. Stile con le
+  variabili CSS già definite in `:root`, nessuna immagine nuova integrata
+  (resta un passo visivo separato, come deciso).
+- **Verificato dal vivo**, non solo mentalmente: `wrangler dev` + browser,
+  due tab con `localStorage` svuotato separatamente per simulare due
+  dispositivi (le tab dello stesso browser condividono lo stesso
+  `localStorage`, una singola nuova tab non basta a simulare un secondo
+  giocatore). Primo giocatore → comandante, pannello visibile con tutte le
+  sezioni, margine cambiato da 0 a 3 tramite il pannello, nodo avviato dal
+  pannello e riflesso nell'area principale, note scritte senza generare
+  alcuna richiesta di rete (verificato sull'elenco delle richieste).
+  Secondo giocatore (storage pulito, `/join` reale, non la stessa
+  identità) → `comandante: false`, pannello assente, resto della
+  schermata di gioco invariato e corretto.
+- Non toccato: il flusso di `/scegli`, la logica di risoluzione esistente,
+  gli altri 4 nodi, login/progressione tra stanze.
 
 **10/07/2026 — Passo 11: corretto il bug del `giocatoreId` mancante in `public/index.html`**
 File modificati: `public/index.html`.
