@@ -9,6 +9,7 @@
 <style>
   :root {
     --bg: #15120f;
+    --bg-rgb: 21, 18, 15; /* stesso valore di --bg, in tripletta per usarlo con alpha (rgba) */
     --bg-panel: #1f1a16;
     --bg-panel-raised: #2a231d;
     --line: #3a3128;
@@ -152,6 +153,67 @@
   .errore.mostra { display: block; }
 
   /* --- Schermata di gioco --- */
+  /* ESPERIMENTO VISIVO (primo passaggio, da valutare): sfondo tavolo +
+     posti dei giocatori. #schermo-gioco porta lo sfondo atmosferico su
+     tutta la schermata (cover, quindi si ritaglia in base al contenitore);
+     .tavolo-vista è un riquadro a parte con aspect-ratio fissato alle
+     proporzioni reali dell'immagine (2816:1536), così i posti posizionati
+     in percentuale corrispondono davvero ai pixel dell'immagine e non si
+     spostano quando il contenuto sotto cambia altezza. */
+  #schermo-gioco {
+    position: relative;
+    background-image: url('/img/tavolo-sfondo.png');
+    background-size: cover;
+    background-position: center;
+    border-radius: 6px;
+    padding: 14px;
+    margin: 0 -14px;
+  }
+  .tavolo-vista {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 2816 / 1536;
+    margin-bottom: 18px;
+    border-radius: 4px;
+    overflow: hidden;
+    background-image: url('/img/tavolo-sfondo.png');
+    background-size: cover;
+    background-position: center;
+    border: 1px solid var(--line);
+  }
+  .posto {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    text-align: center;
+  }
+  .posto .badge {
+    display: block;
+    width: 40px;
+    height: 40px;
+    object-fit: cover;
+    border-radius: 50%;
+    border: 2px solid var(--brass);
+    margin: 0 auto 4px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+  }
+  .posto .nome-posto {
+    font-family: var(--font-display);
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text);
+    background: rgba(var(--bg-rgb), 0.75);
+    padding: 2px 8px;
+    border-radius: 10px;
+    white-space: nowrap;
+    display: inline-block;
+  }
+  .contenuto-scuro {
+    background: rgba(var(--bg-rgb), 0.75);
+    border-radius: 6px;
+    padding: 16px;
+  }
+
   .barra-stanza {
     display: flex;
     align-items: center;
@@ -438,21 +500,25 @@
 
   <!-- SCHERMATA 3: gioco -->
   <section id="schermo-gioco" class="schermo">
-    <div class="barra-stanza">
-      <span class="codice-stanza" id="testo-codice-stanza">stanza —</span>
-      <button class="copia" id="btn-copia-link">Copia link stanza</button>
+    <div class="tavolo-vista" id="tavolo-vista"></div>
+
+    <div class="contenuto-scuro">
+      <div class="barra-stanza">
+        <span class="codice-stanza" id="testo-codice-stanza">stanza —</span>
+        <button class="copia" id="btn-copia-link">Copia link stanza</button>
+      </div>
+
+      <div class="risorse" id="box-risorse"></div>
+
+      <div class="squadra">
+        <div class="etichetta">La squadra</div>
+        <div class="lista" id="lista-giocatori"></div>
+      </div>
+
+      <div id="area-nodo"></div>
+
+      <div id="pannello-comandante"></div>
     </div>
-
-    <div class="risorse" id="box-risorse"></div>
-
-    <div class="squadra">
-      <div class="etichetta">La squadra</div>
-      <div class="lista" id="lista-giocatori"></div>
-    </div>
-
-    <div id="area-nodo"></div>
-
-    <div id="pannello-comandante"></div>
   </section>
 
   <div class="caricamento" id="caricamento">un momento…</div>
@@ -585,7 +651,9 @@ document.getElementById("btn-join").addEventListener("click", async () => {
     await aggiornaSchermataGioco();
     avviaPolling();
   } catch (e) {
-    erroreBox.textContent = "Qualcosa è andato storto. Riprova.";
+    erroreBox.textContent = e.status === 409
+      ? "La stanza è piena: ha già 8 giocatori, il massimo per questa partita."
+      : "Qualcosa è andato storto. Riprova.";
     erroreBox.classList.add("mostra");
   } finally {
     btn.disabled = false;
@@ -627,6 +695,37 @@ function renderGiocatori(giocatori) {
   lista.innerHTML = giocatori.map(g => {
     const ruoloInfo = CONFIG.ruoli.find(r => r.id === g.ruolo);
     return `<div class="giocatore-chip"><strong>${g.nome}</strong> — ${ruoloInfo ? ruoloInfo.nome : g.ruolo}</div>`;
+  }).join("");
+}
+
+// ESPERIMENTO VISIVO (primo passaggio, da valutare): indice nell'array
+// giocatori -> indice posto (0=posto1, ...). Le percentuali sono una stima
+// dalla descrizione visiva dell'immagine, da aggiustare guardando il
+// risultato vero in browser. Un posto senza giocatore per quell'indice
+// resta vuoto (nessun badge, nessun nome).
+const POSTI_TAVOLO = [
+  { left: 14, top: 15 },  // 1: top-left
+  { left: 86, top: 15 },  // 2: top-right
+  { left: 4,  top: 38 },  // 3: left-upper
+  { left: 4,  top: 68 },  // 4: left-lower
+  { left: 96, top: 38 },  // 5: right-upper
+  { left: 96, top: 68 },  // 6: right-lower
+  { left: 14, top: 89 },  // 7: bottom-left
+  { left: 86, top: 89 },  // 8: bottom-right
+];
+
+function renderTavolo(giocatori) {
+  const area = document.getElementById("tavolo-vista");
+  if (!area) return;
+  area.innerHTML = POSTI_TAVOLO.map((posto, i) => {
+    const g = giocatori[i];
+    if (!g) return "";
+    return `
+      <div class="posto" style="left:${posto.left}%; top:${posto.top}%;">
+        <img class="badge" src="/img/badge-${g.ruolo}.png" alt="${g.ruolo}" />
+        <div class="nome-posto">${g.nome}</div>
+      </div>
+    `;
   }).join("");
 }
 
@@ -685,6 +784,7 @@ function renderRichiesta(richiesta, nodoAttivo) {
       });
       renderRisorse(risultato.session.risorseDiSquadra);
       renderGiocatori(risultato.session.giocatori);
+      renderTavolo(risultato.session.giocatori);
       mostraEsito(risultato.esito, risultato.prossimaRichiesta, risultato.esitoNodo, risultato.session.nodoAttivo);
     });
   });
@@ -806,6 +906,7 @@ async function aggiornaSchermataGioco() {
 
   renderRisorse(session2.risorseDiSquadra);
   renderGiocatori(session2.giocatori);
+  renderTavolo(session2.giocatori);
   renderPannelloComandante(session2);
 
   if (!session2.nodoAttivo) {
@@ -827,6 +928,7 @@ function avviaPolling() {
       const { session } = await chiamaAPI(`/api/stanza/${STATO.roomId}/state`);
       renderRisorse(session.risorseDiSquadra);
       renderGiocatori(session.giocatori);
+      renderTavolo(session.giocatori);
     } catch (e) {}
   }, 6000);
 }

@@ -143,6 +143,13 @@ export class GameSession {
     // comandante per primo -- accettabile per ora.
     if (url.pathname.endsWith("/join") && request.method === "POST") {
       const { nome, ruolo } = await request.json();
+      const session = await this.initState();
+      // Limite fisso ai posti disponibili (vedi GAME_CONFIG.maxGiocatori):
+      // controllato PRIMA di validare il ruolo, cosi' una stanza piena
+      // risponde sempre allo stesso modo indipendentemente dal ruolo scelto.
+      if (session.giocatori.length >= GAME_CONFIG.maxGiocatori) {
+        return Response.json({ errore: "Stanza piena" }, { status: 409 });
+      }
       // Competenze base per il ruolo (principale + secondarie, nessun punto
       // extra: la loro distribuzione libera resta un passo a parte).
       let competenze;
@@ -151,7 +158,6 @@ export class GameSession {
       } catch {
         return new Response("Ruolo sconosciuto", { status: 400 });
       }
-      const session = await this.initState();
       const comandante = session.giocatori.length === 0;
       session.giocatori.push({ id: crypto.randomUUID(), nome, ruolo, competenze, comandante });
       await this.state.storage.put("session", session);

@@ -112,6 +112,38 @@ console.log("\n--- /join ---");
   verifica("un ruolo sconosciuto risponde 400", ruoloIgnoto.status === 400);
 }
 
+console.log("\n--- /join: limite di 8 posti ---");
+{
+  const { gs } = nuovaSessione();
+  const ruoliCiclo = ["esploratore", "fanfara", "custode", "incursore"];
+  let tuttiOk = true;
+  for (let i = 0; i < 8; i++) {
+    const r = await chiamata(gs, "/join", "POST", { nome: `Giocatore${i + 1}`, ruolo: ruoliCiclo[i % 4] });
+    if (r.status !== 200) tuttiOk = false;
+  }
+  verifica("i primi 8 giocatori si uniscono con successo", tuttiOk);
+
+  const statoAOtto = await chiamata(gs, "/state");
+  verifica("la stanza ha esattamente 8 giocatori", statoAOtto.json.giocatori.length === 8);
+
+  const nono = await chiamata(gs, "/join", "POST", { nome: "Nono", ruolo: "esploratore" });
+  verifica("il nono giocatore riceve 409 (stanza piena)", nono.status === 409);
+  verifica(
+    "il corpo della risposta segnala l'errore",
+    nono.json && nono.json.errore === "Stanza piena"
+  );
+
+  const statoFinale = await chiamata(gs, "/state");
+  verifica(
+    "il nono giocatore NON viene aggiunto: la stanza resta a 8",
+    statoFinale.json.giocatori.length === 8
+  );
+  verifica(
+    "nessun giocatore di nome \"Nono\" è presente",
+    !statoFinale.json.giocatori.some((g) => g.nome === "Nono")
+  );
+}
+
 console.log("\n--- /risorse ---");
 {
   const { gs } = nuovaSessione();
