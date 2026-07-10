@@ -96,3 +96,5 @@ mano).
 | eco-margine-medio | medio | Qualcosa comincia a scricchiolare sotto la superficie del piano. |
 | eco-margine-alto | alto | Il margine si assottiglia: un altro passo falso, e sarà complicazione. |
 | eco-margine-critico | critico | Il piano ha ceduto: il peso accumulato si fa sentire tutto insieme, ora. |
+| eco-margine-critico-2 | critico | La Marmora alza una mano: basta. Qualcosa nel piano si è rotto, e tocca alla squadra rimetterlo in piedi. |
+| eco-margine-critico-3 | critico | Il Decalogo non lascia scampo: il margine è esaurito, e il conto arriva tutto insieme. |

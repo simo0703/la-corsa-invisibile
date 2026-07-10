@@ -40,7 +40,7 @@ const frammenti = parseFrammenti(testoMarkdown);
 verifica("il file produce i tre slot apertura/sviluppo/eco", Object.keys(frammenti).sort().join(",") === "apertura,eco,sviluppo");
 verifica("slot apertura: 6 baseline per esito + 4 per ruolo = 10 frammenti", frammenti.apertura.length === 10);
 verifica("slot sviluppo: 6 baseline per esito + 5 per competenza = 11 frammenti", frammenti.sviluppo.length === 11);
-verifica("slot eco: 3 baseline per esito + 4 per fascia di margine = 7 frammenti", frammenti.eco.length === 7);
+verifica("slot eco: 3 baseline per esito + 6 per fascia di margine (3 per \"critico\") = 9 frammenti", frammenti.eco.length === 9);
 
 const apertura1 = frammenti.apertura.find((f) => f.id === "apertura-pieno-1");
 verifica(
@@ -175,6 +175,31 @@ for (const [fasciaMargine, idAtteso] of [
   verifica(
     `fasciaMargine "${fasciaMargine}" non esclude il baseline dell'esito dall'eco`,
     candidati.some((f) => f.id === "eco-pieno-1")
+  );
+}
+
+console.log("\n--- varietà dei frammenti eco per fasciaMargine critico ---");
+{
+  // Tre frammenti condizionati su fasciaMargine "critico" (più il baseline
+  // per esito): su molti tentativi la composizione deve variare, non
+  // ripetere sempre lo stesso testo — quello che una complicazione reale
+  // deve mostrare al tavolo.
+  const candidatiCritico = pool.ottieniFrammenti("eco", contesto({ fasciaMargine: "critico", esito: "pieno" }));
+  verifica(
+    "sono candidati tutti e tre i frammenti scritti per \"critico\"",
+    ["eco-margine-critico", "eco-margine-critico-2", "eco-margine-critico-3"].every((id) =>
+      candidatiCritico.some((f) => f.id === id)
+    )
+  );
+
+  const testiVisti = new Set();
+  for (let i = 0; i < 60; i++) {
+    const { testo } = componiNarrazione(pool, contesto({ esito: "pieno", fasciaMargine: "critico" }));
+    testiVisti.add(testo);
+  }
+  verifica(
+    "su 60 tentativi con margine critico, il testo composto varia (più di un risultato distinto)",
+    testiVisti.size > 1
   );
 }
 

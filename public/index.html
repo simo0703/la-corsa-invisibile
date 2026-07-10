@@ -214,6 +214,49 @@
     padding: 16px;
   }
 
+  /* Sempre visibile (non un pannello a comparsa): le 5 competenze del
+     giocatore corrente. Bordo brass per distinguerla dal pannello del
+     comandante (bordo crimson), stesso stile di card scuro del resto. */
+  .scheda-personale {
+    background: var(--bg-panel);
+    border: 1px solid var(--brass);
+    border-radius: 4px;
+    padding: 14px 16px;
+    margin-bottom: 26px;
+  }
+  .scheda-personale .titolo-scheda {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.9rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--brass);
+    margin-bottom: 14px;
+  }
+  .scheda-personale .lista-competenze {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 8px;
+  }
+  .scheda-personale .competenza-riga {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    background: var(--bg-panel-raised);
+    border-radius: 3px;
+    padding: 8px 10px;
+  }
+  .scheda-personale .competenza-nome {
+    font-size: 0.76rem;
+    color: var(--text-muted);
+  }
+  .scheda-personale .competenza-valore {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: var(--text);
+  }
+
   .barra-stanza {
     display: flex;
     align-items: center;
@@ -371,6 +414,12 @@
     margin-bottom: 20px;
   }
   .esito-box .etichetta { margin-bottom: 10px; }
+  .esito-box .dettaglio-tiro {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--brass);
+    margin: 0 0 12px;
+  }
   .esito-box .testo-esito {
     font-size: 1.02rem;
     line-height: 1.6;
@@ -515,6 +564,8 @@
         <div class="lista" id="lista-giocatori"></div>
       </div>
 
+      <div id="scheda-personale"></div>
+
       <div id="area-nodo"></div>
 
       <div id="pannello-comandante"></div>
@@ -527,7 +578,7 @@
 <script>
 const API = ""; // stesso dominio
 let CONFIG = null;
-let STATO = { roomId: null, nome: null, ruolo: null, giocatoreId: null, comandante: false };
+let STATO = { roomId: null, nome: null, ruolo: null, giocatoreId: null, comandante: false, competenze: null };
 
 function mostraSchermo(id) {
   document.querySelectorAll(".schermo").forEach(s => s.classList.remove("attivo"));
@@ -646,6 +697,7 @@ document.getElementById("btn-join").addEventListener("click", async () => {
     const mioGiocatore = session.giocatori[session.giocatori.length - 1];
     STATO.giocatoreId = mioGiocatore.id;
     STATO.comandante = mioGiocatore.comandante === true;
+    STATO.competenze = mioGiocatore.competenze;
     salvaStato();
     mostraSchermo("schermo-gioco");
     await aggiornaSchermataGioco();
@@ -729,6 +781,41 @@ function renderTavolo(giocatori) {
   }).join("");
 }
 
+// Sempre visibile: le 5 competenze del giocatore corrente. Legge i dati
+// dalla sessione live (giocatori) invece che solo da STATO.competenze,
+// così resta corretta anche per chi si è unito prima di questo campo
+// esistere in STATO; STATO.competenze resta comunque aggiornato a /join
+// come fallback.
+const ORDINE_COMPETENZE = ["cadenza", "precisione", "spiritoDiCorpo", "passoAvanti", "ancoraggio"];
+
+function renderSchedaPersonale(giocatori) {
+  const box = document.getElementById("scheda-personale");
+  if (!box) return;
+  const io = giocatori.find(g => g.id === STATO.giocatoreId);
+  const competenze = (io && io.competenze) || STATO.competenze;
+  if (!competenze) {
+    box.innerHTML = "";
+    return;
+  }
+  box.innerHTML = `
+    <div class="scheda-personale">
+      <div class="titolo-scheda">La mia scheda</div>
+      <div class="lista-competenze">
+        ${ORDINE_COMPETENZE.map(id => {
+          const info = CONFIG.competenze[id];
+          const valore = competenze[id] ?? 0;
+          return `
+            <div class="competenza-riga">
+              <span class="competenza-nome">${info ? info.nome : id}</span>
+              <span class="competenza-valore">${valore}</span>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    </div>
+  `;
+}
+
 function renderSelezioneNodo() {
   const area = document.getElementById("area-nodo");
   area.innerHTML = `
@@ -777,6 +864,11 @@ function renderRichiesta(richiesta, nodoAttivo) {
     btn.addEventListener("click", async () => {
       lista.querySelectorAll("button.risposta").forEach(b => b.disabled = true);
       const indice = parseInt(btn.dataset.indice, 10);
+      // La risposta scelta (con l'eventuale competenzaRichiesta) è già nota
+      // lato client, presa dalla richiesta attiva: non serve che il server
+      // la rimandi indietro solo per sapere il nome leggibile della
+      // competenza usata nel tiro.
+      const rispostaScelta = richiesta.risposte[indice];
       const risultato = await chiamaAPI(`/api/stanza/${STATO.roomId}/scegli`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -785,16 +877,35 @@ function renderRichiesta(richiesta, nodoAttivo) {
       renderRisorse(risultato.session.risorseDiSquadra);
       renderGiocatori(risultato.session.giocatori);
       renderTavolo(risultato.session.giocatori);
-      mostraEsito(risultato.esito, risultato.prossimaRichiesta, risultato.esitoNodo, risultato.session.nodoAttivo);
+      renderSchedaPersonale(risultato.session.giocatori);
+      const competenzaInfo = rispostaScelta.competenzaRichiesta
+        ? CONFIG.competenze[rispostaScelta.competenzaRichiesta]
+        : null;
+      const nomeCompetenza = competenzaInfo ? competenzaInfo.nome : rispostaScelta.competenzaRichiesta;
+      mostraEsito(
+        risultato.esito,
+        risultato.prossimaRichiesta,
+        risultato.esitoNodo,
+        risultato.session.nodoAttivo,
+        risultato.tiro,
+        nomeCompetenza
+      );
     });
   });
 }
 
-function mostraEsito(testoEsito, prossimaRichiesta, esitoNodo, nodoAttivo) {
+function mostraEsito(testoEsito, prossimaRichiesta, esitoNodo, nodoAttivo, tiro, nomeCompetenza) {
   const area = document.getElementById("area-nodo");
+  // Il dettaglio del tiro (competenza + dado = totale -> esito) esiste solo
+  // per le risposte con competenzaRichiesta: le altre non hanno tiro,
+  // restano come prima (solo il testo dell'esito).
+  const dettaglioTiro = tiro
+    ? `<p class="dettaglio-tiro">${nomeCompetenza || "Competenza"} ${tiro.competenza} + dado ${tiro.dado} = ${tiro.totale} → ${tiro.esito}</p>`
+    : "";
   area.innerHTML = `
     <div class="esito-box">
       <div class="etichetta">Esito</div>
+      ${dettaglioTiro}
       <p class="testo-esito">${testoEsito}</p>
     </div>
     <div id="prosegui"></div>
@@ -907,6 +1018,7 @@ async function aggiornaSchermataGioco() {
   renderRisorse(session2.risorseDiSquadra);
   renderGiocatori(session2.giocatori);
   renderTavolo(session2.giocatori);
+  renderSchedaPersonale(session2.giocatori);
   renderPannelloComandante(session2);
 
   if (!session2.nodoAttivo) {
@@ -929,6 +1041,7 @@ function avviaPolling() {
       renderRisorse(session.risorseDiSquadra);
       renderGiocatori(session.giocatori);
       renderTavolo(session.giocatori);
+      renderSchedaPersonale(session.giocatori);
     } catch (e) {}
   }, 6000);
 }
