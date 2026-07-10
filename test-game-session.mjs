@@ -127,18 +127,22 @@ console.log("\n--- avvia-nodo + richiesta-attiva ---");
 console.log("\n--- /scegli senza nodo avviato ---");
 {
   const { gs } = nuovaSessione();
-  const { status } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0 });
+  const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
+  const giocatoreId = join.json.giocatori[0].id;
+  const { status } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
   verifica("scegliere senza aver avviato un nodo risponde 400", status === 400);
 }
 
 console.log("\n--- Ramificazione: percorso aggressivo verso decalogo-vaira-severo ---");
 {
   const { gs } = nuovaSessione();
+  const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
+  const giocatoreId = join.json.giocatori[0].id;
   await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino" });
 
   // Risposta 0 su "decalogo-ginnastica": scelta aggressiva.
   // effetti attesi: cadenza +2, spiritoDiCorpo -1, margine +2; prossima: "decalogo-vaira-severo"
-  const primaScelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0 });
+  const primaScelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
   verifica("applica l'effetto su cadenza", primaScelta.json.session.risorseDiSquadra.cadenza === 2);
   verifica("applica l'effetto su spiritoDiCorpo", primaScelta.json.session.risorseDiSquadra.spiritoDiCorpo === -1);
   verifica("applica l'effetto sul margine", primaScelta.json.session.margine === 2);
@@ -154,6 +158,10 @@ console.log("\n--- Ramificazione: percorso aggressivo verso decalogo-vaira-sever
     "lo storico registra la richiesta giusta",
     primaScelta.json.session.storicoScelte[0].richiestaId === "decalogo-ginnastica"
   );
+  verifica(
+    "lo storico registra chi ha scelto",
+    primaScelta.json.session.storicoScelte[0].giocatoreId === giocatoreId
+  );
 
   const attivaDopo = await chiamata(gs, "/richiesta-attiva");
   verifica(
@@ -163,7 +171,7 @@ console.log("\n--- Ramificazione: percorso aggressivo verso decalogo-vaira-sever
 
   // Risposta 0 su "decalogo-vaira-severo": ammette la paura.
   // effetti attesi: passoAvanti +1, margine -1; prossima: null (fine ramo)
-  const secondaScelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0 });
+  const secondaScelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
   verifica("applica l'effetto su passoAvanti", secondaScelta.json.session.risorseDiSquadra.passoAvanti === 1);
   verifica("il margine scende con l'effetto negativo (2 - 1 = 1)", secondaScelta.json.session.margine === 1);
   verifica("l'orologio avanza ancora (ora a 2)", secondaScelta.json.session.orologio === 2);
@@ -186,6 +194,8 @@ console.log("\n--- Ramificazione: percorso aggressivo verso decalogo-vaira-sever
 console.log("\n--- Soglia del margine: la complicazione scatta e il margine si dimezza ---");
 {
   const { gs, storage } = nuovaSessione();
+  const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
+  const giocatoreId = join.json.giocatori[0].id;
   await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino" });
 
   // Portiamo il margine a 3 a mano (simula l'accumulo di più nodi giocati
@@ -196,7 +206,7 @@ console.log("\n--- Soglia del margine: la complicazione scatta e il margine si d
   sessionePresente.margine = 3;
   await storage.put("session", sessionePresente);
 
-  const scelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0 }); // +2 margine → 5
+  const scelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId }); // +2 margine → 5
   verifica("il margine raggiunge la soglia (3 + 2 = 5)", scelta.json.complicazione !== null);
   verifica(
     "il testo della complicazione è quello configurato in game-config.js",
@@ -211,6 +221,8 @@ console.log("\n--- Soglia del margine: la complicazione scatta e il margine si d
 console.log("\n--- Fallback in sequenza per nodi senza campo \"prossima\" (compatibilità) ---");
 {
   const { gs } = nuovaSessione();
+  const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
+  const giocatoreId = join.json.giocatori[0].id;
   const avvio = await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1848-milano" });
   verifica("avvia il nodo di Milano", avvio.json.richiestaAttiva.id === "milano-barricata");
 
@@ -218,7 +230,7 @@ console.log("\n--- Fallback in sequenza per nodi senza campo \"prossima\" (compa
   // risposta NON ha il campo "prossima" nel game-config.js -> deve
   // scattare il fallback in sequenza verso la richiesta successiva
   // dell'array, "milano-ferito".
-  const scelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 2 });
+  const scelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 2, giocatoreId });
   verifica(
     "senza \"prossima\", il fallback in sequenza porta alla richiesta successiva dell'array",
     scelta.json.prossimaRichiesta && scelta.json.prossimaRichiesta.id === "milano-ferito"
@@ -228,8 +240,10 @@ console.log("\n--- Fallback in sequenza per nodi senza campo \"prossima\" (compa
 console.log("\n--- /scegli con indice di risposta inesistente ---");
 {
   const { gs } = nuovaSessione();
+  const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
+  const giocatoreId = join.json.giocatori[0].id;
   await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino" });
-  const { status } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 99 });
+  const { status } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 99, giocatoreId });
   verifica("un indice di risposta che non esiste risponde 400", status === 400);
 }
 

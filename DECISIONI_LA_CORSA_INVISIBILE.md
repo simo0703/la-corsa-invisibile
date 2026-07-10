@@ -1,33 +1,34 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 10 luglio 2026 (fine sessione, dopo il Passo 6 — lavoro sospeso qui su richiesta)
+Aggiornato al: 10 luglio 2026 (fine sessione, dopo il Passo 7 — lavoro sospeso qui su richiesta)
 
 Questo file serve a non perdersi tra una sessione di lavoro e l'altra: raccoglie cosa
 è stato deciso, cosa è ancora un'ipotesi da confermare, e cosa manca. Va aggiornato
 ogni 3-4 passaggi di lavoro, non a ogni singola modifica.
 
-**Punto di ripresa**: il contenuto narrativo vero del Cronista per il Nodo
-Temporale `1836-torino` ora vive in un file di testo leggibile
+**Punto di ripresa**: `POST /scegli` ora richiede un `giocatoreId` valido
+(fatto nel Passo 7, isolato di proposito, prima di toccare `risoluzione.js`):
+senza, prima non si sapeva mai chi tra i giocatori della stanza avesse fatto
+una data scelta. Obbligatorio e validato — 400 se manca o se non corrisponde
+a un giocatore già unito alla stanza con `/join` — tracciato solo in ogni
+voce di `storicoScelte` (`giocatoreId`), nessun nuovo campo a livello di
+sessione. Il contenuto narrativo vero del Cronista per il Nodo Temporale
+`1836-torino` vive in un file di testo leggibile
 (`src/lib/narratore-corsa-invisibile.md`, tabelle per esito/ruolo/competenza/
-fascia di margine), non più in JS — decisione presa nel Passo 6 per rendere il
-contenuto editabile senza toccare codice. Un caricatore
-(`src/lib/narratore-corsa-invisibile-loader.js`) lo trasforma nel formato che
-il motore si aspetta; il file `narratore-corsa-invisibile.js` resta il punto
-d'ingresso per il Worker (importa il `.md` come testo, risolto da Wrangler in
-fase di build — vedi `[[rules]]` in `wrangler.toml` — non letto da disco a
-runtime, perché i Cloudflare Workers non hanno filesystem). 39 verifiche
-automatiche, tutte passate. **Copre solo `1836-torino`**, non ancora gli altri
-4 nodi (decisione deliberata, per validare l'approccio prima di scalare).
-**Il pool non è ancora collegato a `GameSession.js`**: non può esserlo finché
-i nodi non generano un `esito` pieno/parziale/fallimento, e oggi lo generano
-solo gli effetti fissi scritti in `game-config.js` — `risoluzione.js`
-(competenze + dado) esiste e funziona ma non è ancora agganciato al flusso di
-`/scegli`.
-**Prossimo passo obbligato**: collegare `risoluzione.js` al flusso dei nodi
-(una richiesta chiede un tiro di competenza invece di, o oltre, un effetto
-fisso) — è il passo che sblocca l'uso reale del pool del Cronista, non un
-passo alternativo a piacere. Non toccare login/progressione tra stanze:
-rimandato a una sessione a parte, come deciso.
+fascia di margine, Passo 6), caricato da Wrangler come modulo di testo in
+fase di build (non letto da disco a runtime, i Cloudflare Workers non hanno
+filesystem). **Il pool non è ancora collegato a `GameSession.js`**: non può
+esserlo finché i nodi non generano un `esito` pieno/parziale/fallimento, e
+oggi lo generano solo gli effetti fissi scritti in `game-config.js` —
+`risoluzione.js` (competenze + dado) esiste e funziona ma non è ancora
+agganciato al flusso di `/scegli`.
+**Prossimo passo, deciso e separato**: collegare `risoluzione.js` al flusso
+dei nodi (una richiesta chiede un tiro di competenza invece di, o oltre, un
+effetto fisso) — è il passo che sblocca l'uso reale del pool del Cronista,
+non un passo alternativo a piacere. Ora che `/scegli` sa chi sta scegliendo,
+quel collegamento potrà usare le competenze del giocatore giusto. Non
+toccare login/progressione tra stanze: rimandato a una sessione a parte,
+come deciso.
 Restano da confermare: la definizione del Margine, e poi codice del libro /
 chat / chiamata vocale (vedi sotto) — invariato dal Passo 3.
 
@@ -153,6 +154,17 @@ oggi contiene un `index.html` minimo).
    può avvenire finché `risoluzione.js` non è agganciato al flusso dei nodi
    (vedi punto 2 e "Punto di ripresa" sopra).
 
+8. **`/scegli` sa chi sta scegliendo (fatto nel Passo 7)**: `giocatoreId` nel
+   body della richiesta, coerente con `/risorse` e `/avvia-nodo` (nessuna
+   infrastruttura di sessione/token nel Worker). **Obbligatorio e validato**:
+   400 se manca, 400 se non corrisponde a un giocatore già unito alla stanza
+   con `/join` (anche se valido in un'altra stanza — l'id è per-Durable-Object,
+   non globale). Tracciato **solo** in `storicoScelte` (campo `giocatoreId`
+   per voce) — deliberatamente non anche altrove, per restare minimo. Passo
+   isolato di proposito, chiesto prima di collegare `risoluzione.js`, così
+   che quel collegamento possa già usare le competenze del giocatore giusto
+   invece di doverci tornare sopra due volte.
+
 ---
 
 ## Ipotesi in attesa di conferma (NON dare per deciso)
@@ -178,9 +190,11 @@ oggi contiene un `index.html` minimo).
       fatto nel Passo 6, con caricatore compatibile Cloudflare Workers
 - [x] Motore neutro del Cronista (`narratore-simulato.js`) — fatto nel Passo 4
 - [x] Sistema di competenze personaggio — fatto nel Passo 3, numeri da confermare
+- [x] `/scegli` sa chi sta scegliendo (`giocatoreId` obbligatorio e validato,
+      tracciato in `storicoScelte`) — fatto nel Passo 7, isolato di proposito
 - [ ] **Collegare le competenze al flusso dei nodi** (una richiesta che chiede un
-      tiro invece di/oltre un effetto fisso) — PROSSIMO PASSO OBBLIGATO: senza
-      questo il pool del Cronista non può essere chiamato (nessun `esito`
+      tiro invece di/oltre un effetto fisso) — PROSSIMO PASSO, deciso e separato:
+      senza questo il pool del Cronista non può essere chiamato (nessun `esito`
       pieno/parziale/fallimento generato dai nodi oggi)
 - [ ] Collegare il Cronista a `GameSession.js` — sbloccato solo dopo il punto sopra
 - [ ] Pool di frammenti narrativi veri per gli altri 4 nodi (Milano, Carso/Piave,
@@ -200,6 +214,39 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**10/07/2026 — Passo 7: `/scegli` traccia chi sta scegliendo**
+Nuovo file: `test-scegli-giocatore.mjs`.
+File modificati: `src/durable-objects/GameSession.js`, `test-game-session.mjs`.
+- Passo isolato di proposito, richiesto esplicitamente prima di collegare
+  `risoluzione.js`: `POST /scegli` prima non sapeva mai quale giocatore
+  della stanza stesse facendo la scelta.
+- Tre domande poste e risolte con l'utente prima di scrivere codice: come il
+  client comunica il giocatore (`giocatoreId` nel body — coerente con
+  `/risorse` e `/avvia-nodo`, nessuna infrastruttura di sessione/token esiste
+  nel Worker), cosa succede senza un giocatore valido (reso **obbligatorio e
+  validato**: 400 sia se `giocatoreId` manca sia se non corrisponde a un
+  giocatore già unito alla stanza con `/join` — scelta consapevole di rompere
+  la compatibilità con le chiamate `/scegli` senza `giocatoreId` scritte nei
+  test precedenti, aggiornate di conseguenza), e dove tracciarlo (solo in
+  `storicoScelte`, nessun nuovo campo a livello di sessione — quindi nessuna
+  modifica a `initState()`/`migrateState()`).
+- `session.storicoScelte` ha ora un campo `giocatoreId` per voce, oltre a
+  quelli già esistenti (`richiestaId`, `risposteTesto`, `esito`, `timestamp`).
+- `test-game-session.mjs` aggiornato: le chiamate a `/scegli` già scritte ora
+  uniscono prima un giocatore e passano il suo id, senza cambiare nel merito
+  cosa veniva verificato prima.
+- Nuovo `test-scegli-giocatore.mjs` (12 verifiche, tutte passate), dedicato e
+  isolato come gli altri moduli: `giocatoreId` mancante, sconosciuto alla
+  stanza, valido in un'ALTRA stanza ma non in questa (l'id è per-Durable-Object,
+  non globale — verificato esplicitamente), scelta valida che registra
+  correttamente chi l'ha fatta, e due giocatori diversi nella stessa stanza
+  che scelgono in sequenza senza confondersi.
+- Non toccato: `risoluzione.js`, nessun campo per dichiarare un tiro, login/
+  progressione tra stanze (rimandato a una sessione a parte, come deciso).
+- **Prossimo passo, deciso e separato**: collegare `risoluzione.js` al flusso
+  di `/scegli` — ora che si sa chi sceglie, può usare le competenze del
+  giocatore giusto.
 
 **10/07/2026 — Passo 6: contenuto del Cronista spostato da JS a markdown**
 Nuovi file: `src/lib/narratore-corsa-invisibile.md` (contenuto), 

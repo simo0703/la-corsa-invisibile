@@ -40,7 +40,7 @@ export class GameSession {
         nodoAttivo: null, // id di uno dei nodiTemporali in game-config.js
         richiestaIndice: 0, // fallback per compatibilita': posizione in sequenza
         richiestaAttivaId: null, // id della richiesta corrente (supporta ramificazioni)
-        storicoScelte: [], // { richiestaId, risposteTesto, esito, timestamp }
+        storicoScelte: [], // { richiestaId, risposteTesto, esito, giocatoreId, timestamp }
         storicoNodo: [], // { nodoId, iniziato_il, concluso_il, esitoFinale }
         aiUsageStanza: 0, // contatore generazioni AI usate in questa stanza
         // Migrazione automatica: ogni nuovo campo va aggiunto qui E
@@ -148,11 +148,25 @@ export class GameSession {
 
     // Un giocatore/la squadra sceglie una delle risposte pre-scritte:
     // applica gli effetti (risorse di squadra + margine), fa avanzare
-    // l'orologio, registra la scelta nello storico, determina la prossima
-    // richiesta (ramificazione se `prossima` e' indicata, altrimenti sequenza).
+    // l'orologio, registra la scelta nello storico (con chi l'ha fatta),
+    // determina la prossima richiesta (ramificazione se `prossima` e'
+    // indicata, altrimenti sequenza).
+    // `giocatoreId` e' obbligatorio e deve corrispondere a un giocatore gia'
+    // unito alla stanza con /join: senza, non sapremmo mai chi ha scelto.
     if (url.pathname.endsWith("/scegli") && request.method === "POST") {
-      const { risposteIndice } = await request.json();
+      const { risposteIndice, giocatoreId } = await request.json();
       const session = await this.initState();
+
+      if (!giocatoreId) {
+        return new Response("giocatoreId mancante: serve sapere chi sta scegliendo", { status: 400 });
+      }
+      const giocatore = session.giocatori.find((g) => g.id === giocatoreId);
+      if (!giocatore) {
+        return new Response("giocatoreId sconosciuto: nessun giocatore con questo id nella stanza", {
+          status: 400,
+        });
+      }
+
       const nodo = GAME_CONFIG.nodiTemporali.find((n) => n.id === session.nodoAttivo);
       const richiestaAttiva = this.trovaRichiestaAttiva(session);
       if (!nodo || !richiestaAttiva) {
@@ -175,6 +189,7 @@ export class GameSession {
         richiestaId: richiestaAttiva.id,
         risposteTesto: risposta.testo,
         esito: risposta.esito,
+        giocatoreId,
         timestamp: new Date().toISOString(),
       });
 
