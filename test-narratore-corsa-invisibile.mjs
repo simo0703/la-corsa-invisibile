@@ -114,7 +114,7 @@ for (const esito of ["pieno", "parziale", "fallimento"]) {
 
 console.log("\n--- copertura incrociata: esito x ruolo x competenza non lancia mai errori ---");
 const esiti = ["pieno", "parziale", "fallimento"];
-const ruoli = [null, "esploratore", "fanfarista", "custode", "incursore"];
+const ruoli = [null, "esploratore", "fanfara", "custode", "incursore"];
 const competenze = [null, "cadenza", "precisione", "spiritoDiCorpo", "passoAvanti", "ancoraggio"];
 let combinazioniOk = true;
 for (const esito of esiti) {
@@ -183,7 +183,7 @@ let placeholderSempreRisolto = true;
 for (let i = 0; i < 50; i++) {
   const { testo } = componiNarrazione(
     pool,
-    contesto({ ruoloId: "fanfarista", variabili: { ruolo: "Il Fanfarista" } })
+    contesto({ ruoloId: "fanfara", variabili: { ruolo: "La Fanfara" } })
   );
   if (testo.includes("{ruolo}")) placeholderSempreRisolto = false;
 }

@@ -43,7 +43,7 @@ nello sviluppo), quindi non hanno una colonna `esito`.
 | id | ruoloId | testo |
 |---|---|---|
 | apertura-ruolo-esploratore | esploratore | {ruolo} è già avanti di due falcate, gli occhi fissi sul percorso nella nebbia. |
-| apertura-ruolo-fanfarista | fanfarista | {ruolo} scandisce il ritmo a fiato, prima ancora che gli altri si muovano. |
+| apertura-ruolo-fanfara | fanfara | {ruolo} scandisce il ritmo a fiato, prima ancora che gli altri si muovano. |
 | apertura-ruolo-custode | custode | {ruolo} controlla la fila con un'occhiata, contando teste prima di contare metri. |
 | apertura-ruolo-incursore | incursore | {ruolo} non aspetta il segnale: è già dentro il primo fossato. |
 

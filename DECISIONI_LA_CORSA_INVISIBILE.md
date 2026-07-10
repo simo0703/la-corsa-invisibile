@@ -723,3 +723,40 @@ File modificati: `src/durable-objects/GameSession.js`, `src/game-config.js`.
   chiamata AI reale).
 - Migrazione automatica aggiornata per tutti i nuovi campi.
 - Nessuna modifica a `index.js`, `schema.sql`, `access-codes.js`.
+
+---
+
+**10/07/2026 — Correzione terminologica: ruolo "fanfarista" → "fanfara"**
+File modificati: `src/game-config.js`, `src/lib/narratore-corsa-invisibile.md`,
+`test-narratore-corsa-invisibile.mjs`, `test-scegli-cronista.mjs`.
+- Su indicazione dell'autore (competenza diretta sui Bersaglieri): il nome
+  corretto/accettato del ruolo è "Fanfara", non "Fanfarista". Cambiati i
+  tre campi del ruolo in `game-config.js`: `id: "fanfarista"` → `"fanfara"`,
+  `nome: "Fanfarista"` → `"Fanfara"`, `nomeConArticolo: "Il Fanfarista"` →
+  `"La Fanfara"`.
+- **Nota di genere**: "Fanfara" è femminile, "Fanfarista" era maschile —
+  stesso tipo di problema grammaticale già risolto una volta per questo
+  ruolo (vedi il Passo 10 più sopra, dove era emerso che i frammenti con
+  `{ruolo}` avevano bisogno di un `nomeConArticolo` corretto). L'articolo
+  cambia di conseguenza da "Il" a "La".
+- Rinominata anche la riga corrispondente in
+  `narratore-corsa-invisibile.md` (`apertura-ruolo-fanfarista` →
+  `apertura-ruolo-fanfara`, colonna `ruoloId` da `fanfarista` a `fanfara`):
+  il testo del frammento resta invariato, il placeholder `{ruolo}` si
+  risolve automaticamente nel nuovo `nomeConArticolo`.
+- Cercato nell'intero repository (`grep -rni "fanfarista" .`, cache di
+  build `.wrangler/` esclusa) prima di considerare il lavoro concluso:
+  trovati due riferimenti non previsti inizialmente, in
+  `test-narratore-corsa-invisibile.mjs` (l'elenco dei ruoli nel test di
+  copertura incrociata, e il test dedicato al placeholder `{ruolo}`) e in
+  `test-scegli-cronista.mjs` (un `/join` reale con `ruolo: "fanfarista"`,
+  che dopo la rinomina avrebbe preso 400 come ruolo sconosciuto). Segnalati
+  e corretti su conferma, non decisi unilateralmente.
+  Le uniche occorrenze rimaste sono nelle voci passate di questo stesso
+  file (Passo 3, Passo 10): storico, non toccato di proposito.
+- Tutti i test automatici rilanciati dopo le correzioni: nessuna
+  regressione.
+- **Non toccato**: contenuto narrativo degli altri ruoli, gli altri 4
+  nodi, `public/index.html` (il nome del ruolo arriva dal `focus`/`nome`
+  serviti da `/api/config`, non richiede modifiche lato client per questa
+  rinomina).

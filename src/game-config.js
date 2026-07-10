@@ -64,7 +64,7 @@ export const GAME_CONFIG = {
 
   // `nomeConArticolo`: forma con articolo, pensata per essere inserita a
   // inizio frase nei frammenti del Cronista (es. "{ruolo} scandisce il
-  // ritmo..." -> "Il Fanfarista scandisce il ritmo..."). Per "Custode /
+  // ritmo..." -> "La Fanfara scandisce il ritmo..."). Per "Custode /
   // Soccorritore" si usa solo "Il Custode": il doppio nome/slash è
   // un'etichetta di classe, non qualcosa che si legge bene a metà frase.
   ruoli: [
@@ -77,9 +77,9 @@ export const GAME_CONFIG = {
       competenzaPrincipale: "cadenza",
     },
     {
-      id: "fanfarista",
-      nome: "Fanfarista",
-      nomeConArticolo: "Il Fanfarista",
+      id: "fanfara",
+      nome: "Fanfara",
+      nomeConArticolo: "La Fanfara",
       focus: "Rigenera la Cadenza della squadra, scaccia la paura col Suono della Corsa.",
       competenzaPrincipale: "passoAvanti",
     },

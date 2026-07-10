@@ -148,7 +148,7 @@ console.log("\n--- GameSession: con il pool reale iniettato, /scegli usa il test
 
 console.log("\n--- GameSession: tier e ruolo diversi producono comunque un testo coerente ---");
 {
-  const { gs, storage, giocatoreId } = await sessionePronta("fanfarista");
+  const { gs, storage, giocatoreId } = await sessionePronta("fanfara");
   await impostaCompetenza(storage, giocatoreId, "cadenza", -10); // forza "fallimento"
   const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
   verifica("il tiro è \"fallimento\"", json.tiro.esito === "fallimento");
