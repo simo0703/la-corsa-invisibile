@@ -1,20 +1,24 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 10 luglio 2026 (fine sessione, dopo il Passo 4 — lavoro sospeso qui su richiesta)
+Aggiornato al: 10 luglio 2026 (fine sessione, dopo il Passo 5 — lavoro sospeso qui su richiesta)
 
 Questo file serve a non perdersi tra una sessione di lavoro e l'altra: raccoglie cosa
 è stato deciso, cosa è ancora un'ipotesi da confermare, e cosa manca. Va aggiornato
 ogni 3-4 passaggi di lavoro, non a ogni singola modifica.
 
-**Punto di ripresa**: motore del Cronista (`src/lib/narratore-simulato.js`) scritto,
-testato (21 verifiche automatiche, tutte passate) e caricato su GitHub, insieme a un
-`CLAUDE.md` di partenza in root per lavorare da qui in poi con Claude Code invece che
-con upload manuali via browser. **Il pool di frammenti narrativi veri per Corsa
-Invisibile non esiste ancora** — il Cronista oggi sa solo comporre testo da frammenti
-finti usati per i test, non da narrativa reale. **Prossimo passo deciso**: scrivere il
-pool vero (nome file da decidere, es. `narratore-corsa-invisibile.js`) e collegarlo a
-`GameSession.js`. Consigliato farlo direttamente in Claude Code aperto sulla cartella
-reale del progetto, non più in una chat separata.
+**Punto di ripresa**: pool di contenuto vero del Cronista scritto per il Nodo
+Temporale `1836-torino` (`src/lib/narratore-corsa-invisibile.js`), testato (28
+verifiche automatiche, tutte passate) — varia per esito, ruolo, competenza e
+fascia di margine. **Copre solo `1836-torino`**, non ancora gli altri 4 nodi
+(decisione deliberata, per validare l'approccio prima di scalare). **Il pool
+non è ancora collegato a `GameSession.js`**: non può esserlo finché i nodi non
+generano un `esito` pieno/parziale/fallimento, e oggi lo generano solo gli
+effetti fissi scritti in `game-config.js` — `risoluzione.js` (competenze + dado)
+esiste e funziona ma non è ancora agganciato al flusso di `/scegli`.
+**Prossimo passo obbligato**: collegare `risoluzione.js` al flusso dei nodi
+(una richiesta chiede un tiro di competenza invece di, o oltre, un effetto
+fisso) — è il passo che sblocca l'uso reale del pool del Cronista, non un
+passo alternativo a piacere.
 Restano da confermare: la definizione del Margine, e poi codice del libro /
 chat / chiamata vocale (vedi sotto) — invariato dal Passo 3.
 
@@ -104,6 +108,17 @@ oggi contiene un `index.html` minimo).
    **Ancora da fare**: il pool vero di frammenti narrativi per Corsa
    Invisibile (contenuto, non motore) e il collegamento a `GameSession.js`.
 
+6. **Pool di contenuto del Cronista per `1836-torino` (fatto nel Passo 5)**:
+   `src/lib/narratore-corsa-invisibile.js`, scoped a un solo nodo per scelta
+   deliberata (validare l'approccio prima di scalare agli altri 4). Varia per
+   esito (baseline sempre presente per apertura/sviluppo/eco), ruolo
+   (apertura), competenza (sviluppo) e fascia di margine (eco) — i tre assi
+   decisi esplicitamente, più quello già previsto dal motore. 28 test
+   automatici, tutti passati (`node test-narratore-corsa-invisibile.mjs`).
+   **Ancora da fare**: gli altri 4 nodi, e soprattutto il collegamento — non
+   può avvenire finché `risoluzione.js` non è agganciato al flusso dei nodi
+   (vedi punto 2 e "Punto di ripresa" sopra).
+
 ---
 
 ## Ipotesi in attesa di conferma (NON dare per deciso)
@@ -123,13 +138,17 @@ oggi contiene un `index.html` minimo).
 
 ## Cosa manca (prossimi passi possibili, da scegliere insieme)
 
-- [ ] **Pool di frammenti narrativi veri** per il Cronista (contenuto, non
-      motore) — prossimo passo deciso, consigliato farlo in Claude Code
+- [x] Pool di frammenti narrativi veri per il Cronista — fatto nel Passo 5,
+      ma **solo per il nodo `1836-torino`**; gli altri 4 nodi restano da fare
 - [x] Motore neutro del Cronista (`narratore-simulato.js`) — fatto nel Passo 4
 - [x] Sistema di competenze personaggio — fatto nel Passo 3, numeri da confermare
-- [ ] Collegare le competenze al flusso dei nodi (una richiesta che chiede un
-      tiro invece di/oltre un effetto fisso)
-- [ ] Collegare il Cronista a `GameSession.js` una volta pronto il pool vero
+- [ ] **Collegare le competenze al flusso dei nodi** (una richiesta che chiede un
+      tiro invece di/oltre un effetto fisso) — PROSSIMO PASSO OBBLIGATO: senza
+      questo il pool del Cronista non può essere chiamato (nessun `esito`
+      pieno/parziale/fallimento generato dai nodi oggi)
+- [ ] Collegare il Cronista a `GameSession.js` — sbloccato solo dopo il punto sopra
+- [ ] Pool di frammenti narrativi veri per gli altri 4 nodi (Milano, Carso/Piave,
+      Emergenza civile, missione moderna)
 - [ ] Conferma o correzione della definizione di Margine
 - [x] Un nodo scritto come esempio con ramificazione reale — fatto nel Passo 2
       (`decalogo-vaira-severo` in `1836-torino`)
@@ -137,10 +156,44 @@ oggi contiene un `index.html` minimo).
 - [ ] Decisione su codice del libro, chat, chiamata vocale
 - [ ] Interfaccia di gioco (`public/`) — rimandata, si parte dal motore
 - [ ] Home del libro su bersaglierisgv.org (checklist già nel README del progetto)
+- [ ] Costruire davvero `/admin/genera-codici` e collegare `lib/access-codes.js`
+      a `index.js` — il README diceva "fatto" ma la rotta non esiste nel
+      codice; corretto in `README.md` il 10/07/2026, segnato qui per non
+      perderlo di vista
 
 ---
 
 ## Changelog tecnico
+
+**10/07/2026 — Passo 5: pool di contenuto del Cronista per `1836-torino`**
+Nuovi file: `src/lib/narratore-corsa-invisibile.js`, `test-narratore-corsa-invisibile.mjs`.
+File modificati: `CLAUDE.md` (correzione stato reale di `access-codes.js` e
+architettura), `README.md` (voce `/admin/genera-codici` corretta da "fatto" a
+"da fare", non è mai stata collegata), `DECISIONI_LA_CORSA_INVISIBILE.md`.
+- Scritto il primo pool di contenuto vero per il Cronista, scoped al solo nodo
+  `1836-torino` (decisione: validare l'approccio prima di scalare agli altri
+  4 nodi). Varia per esito (baseline sempre garantita per apertura/sviluppo/
+  eco), per ruolo (frammenti di apertura), per competenza (frammenti di
+  sviluppo) e per fascia di margine (frammenti dell'eco) — i tre assi decisi
+  esplicitamente più quello già calcolato dal motore.
+- Ogni frammento condizionato dichiara una `condizione` (sottoinsieme di
+  `esito`/`ruoloId`/`competenzaId`/`fasciaMargine`); un frammento senza
+  ruolo/competenza noti resta comunque coperto dai frammenti baseline per
+  esito, quindi il pool non lancia mai errori "candidati mancanti" per un
+  contesto valido.
+- Nuovo test `test-narratore-corsa-invisibile.mjs`: 28 verifiche, tutte
+  passate, incluse le 90 combinazioni di esito × ruolo × competenza senza
+  errori, la presenza dei frammenti specifici per ciascun asse, la sostituzione
+  affidabile del placeholder `{ruolo}` su 50 tentativi, e il fallimento
+  esplicito (non silenzioso) su slot o esito non validi.
+- Corretta anche una discrepanza trovata in `README.md`: la checklist diceva
+  "fatto" per la protezione di `/admin/genera-codici`, ma quella rotta non
+  esiste in `src/index.js` e `lib/access-codes.js` non è importato da nessuna
+  parte — segnato come "da fare" nel README e aggiunto a "Cosa manca" qui sopra.
+- **Ancora da fare, e nell'ordine giusto**: prima collegare `risoluzione.js`
+  al flusso dei nodi (senza, i nodi non generano mai un `esito` pieno/
+  parziale/fallimento), solo dopo collegare questo pool a `GameSession.js`;
+  infine estendere il pool agli altri 4 nodi.
 
 **10/07/2026 — Passo 4: motore neutro del Cronista + setup Claude Code**
 Nuovi file: `src/lib/narratore-simulato.js`, `test-narratore-simulato.mjs`, `CLAUDE.md`.

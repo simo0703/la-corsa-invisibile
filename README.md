@@ -29,8 +29,10 @@ GitHub (o un push da riga di comando), e Cloudflare fa il resto.
 
 ## Cose da NON dimenticare prima di andare pubblico
 
-- [x] Proteggere `/admin/genera-codici` con una password — fatto, secret
-      `ADMIN_PASSWORD` impostato su Cloudflare, header `Authorization: Bearer <password>`.
+- [ ] Costruire `/admin/genera-codici` e proteggerlo con una password — il
+      secret `ADMIN_PASSWORD` è impostato su Cloudflare, ma la rotta non
+      esiste ancora in `src/index.js` e `lib/access-codes.js` non è
+      collegato a nulla: da fare, non da dare per scontato.
 - [ ] Costruire la "home del libro" su **bersaglierisgv.org** (non su questo progetto):
       pagina statica, stile del sito, spiegazione del gioco, lettura del codice da
       query string (`?codice=XXXX`), pulsante verso `corsa.roomzero.online` quando pronto.
