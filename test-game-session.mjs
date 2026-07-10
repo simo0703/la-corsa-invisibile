@@ -86,7 +86,13 @@ console.log("\n--- /join ---");
   verifica("POST /join risponde 200", status === 200);
   verifica("il giocatore viene aggiunto", json.giocatori.length === 1);
   verifica("il giocatore ha un id assegnato", typeof json.giocatori[0].id === "string" && json.giocatori[0].id.length > 0);
-  verifica("competenze parte vuoto (prossimo passo)", Object.keys(json.giocatori[0].competenze).length === 0);
+  verifica(
+    "le competenze vengono assegnate in base al ruolo (Esploratore: Cadenza principale a 3)",
+    json.giocatori[0].competenze.cadenza === 3 && json.giocatori[0].competenze.precisione === 1
+  );
+
+  const ruoloIgnoto = await chiamata(gs, "/join", "POST", { nome: "Altro", ruolo: "non-esiste" });
+  verifica("un ruolo sconosciuto risponde 400", ruoloIgnoto.status === 400);
 }
 
 console.log("\n--- /risorse ---");

@@ -1,4 +1,5 @@
 import { GAME_CONFIG } from "../game-config.js";
+import { creaCompetenzeIniziali, risolviAzione } from "../lib/risoluzione.js";
 
 // Un Durable Object per stanza/sessione: isolamento totale tra sessioni diverse.
 // Le risorse sono a livello di SQUADRA (party-level), non per singolo personaggio:
@@ -15,6 +16,20 @@ import { GAME_CONFIG } from "../game-config.js";
 // - ramificazione dei nodi: ogni risposta puo' indicare `prossima` (id della
 //   richiesta successiva). Se manca, si procede in sequenza come prima
 //   (compatibile con i nodi gia' scritti in game-config.js).
+//
+// Risposte con tiro (risoluzione.js collegato qui): una risposta puo'
+// dichiarare `competenzaRichiesta: "<id competenza>"` invece di (o oltre) un
+// effetto fisso. Quando presente:
+// - il punteggio si legge da giocatore.competenze[competenzaRichiesta]
+//   (assegnate a /join, vedi sotto) e si risolve con risolviAzione();
+// - gli effetti applicati vengono da `risposta.effettiPerEsito[esitoDelTiro]`
+//   invece che da `risposta.effetti` (che resta il campo usato dalle
+//   risposte SENZA tiro: le due forme convivono nello stesso nodo);
+// - il testo mostrato viene da `risposta.esito[esitoDelTiro]` (un oggetto
+//   per le risposte con tiro) invece che da `risposta.esito` come stringa
+//   fissa (usato dalle risposte senza tiro).
+// Una risposta senza `competenzaRichiesta` si comporta esattamente come
+// prima di questo passaggio: effetto fisso, testo fisso, nessun tiro.
 
 export class GameSession {
   constructor(state, env) {
@@ -29,7 +44,7 @@ export class GameSession {
       stored = {
         gameId: GAME_CONFIG.gameId,
         creata_il: new Date().toISOString(),
-        giocatori: [], // { id, nome, ruolo, competenze: {} } -- competenze: prossimo passo
+        giocatori: [], // { id, nome, ruolo, competenze } -- competenze assegnate a /join
         risorseDiSquadra: {
           cadenza: 0,
           spiritoDiCorpo: 0,
@@ -40,7 +55,7 @@ export class GameSession {
         nodoAttivo: null, // id di uno dei nodiTemporali in game-config.js
         richiestaIndice: 0, // fallback per compatibilita': posizione in sequenza
         richiestaAttivaId: null, // id della richiesta corrente (supporta ramificazioni)
-        storicoScelte: [], // { richiestaId, risposteTesto, esito, giocatoreId, timestamp }
+        storicoScelte: [], // { richiestaId, risposteTesto, esito, giocatoreId, tiro, timestamp }
         storicoNodo: [], // { nodoId, iniziato_il, concluso_il, esitoFinale }
         aiUsageStanza: 0, // contatore generazioni AI usate in questa stanza
         // Migrazione automatica: ogni nuovo campo va aggiunto qui E
@@ -101,8 +116,16 @@ export class GameSession {
 
     if (url.pathname.endsWith("/join") && request.method === "POST") {
       const { nome, ruolo } = await request.json();
+      // Competenze base per il ruolo (principale + secondarie, nessun punto
+      // extra: la loro distribuzione libera resta un passo a parte).
+      let competenze;
+      try {
+        competenze = creaCompetenzeIniziali(ruolo, {});
+      } catch {
+        return new Response("Ruolo sconosciuto", { status: 400 });
+      }
       const session = await this.initState();
-      session.giocatori.push({ id: crypto.randomUUID(), nome, ruolo, competenze: {} });
+      session.giocatori.push({ id: crypto.randomUUID(), nome, ruolo, competenze });
       await this.state.storage.put("session", session);
       return Response.json(session);
     }
@@ -175,8 +198,23 @@ export class GameSession {
       const risposta = richiestaAttiva.risposte[risposteIndice];
       if (!risposta) return new Response("Risposta sconosciuta", { status: 400 });
 
+      // Risposta con tiro: il punteggio di competenza del giocatore che sta
+      // scegliendo decide l'esito (pieno/parziale/fallimento), che a sua
+      // volta seleziona quali effetti applicare e quale testo mostrare.
+      // Risposta senza `competenzaRichiesta`: effetto fisso e testo fisso,
+      // esattamente come prima di questo passaggio.
+      let tiro = null;
+      let effettiDaApplicare = risposta.effetti || {};
+      let testoEsito = risposta.esito;
+      if (risposta.competenzaRichiesta) {
+        const punteggio = giocatore.competenze[risposta.competenzaRichiesta] ?? 0;
+        tiro = risolviAzione(punteggio);
+        effettiDaApplicare = (risposta.effettiPerEsito && risposta.effettiPerEsito[tiro.esito]) || {};
+        testoEsito = (risposta.esito && risposta.esito[tiro.esito]) || null;
+      }
+
       // Effetti: le chiavi possono essere risorse di squadra oppure "margine".
-      for (const [chiave, delta] of Object.entries(risposta.effetti || {})) {
+      for (const [chiave, delta] of Object.entries(effettiDaApplicare)) {
         if (chiave === "margine") {
           session.margine += delta;
         } else {
@@ -188,8 +226,9 @@ export class GameSession {
       session.storicoScelte.push({
         richiestaId: richiestaAttiva.id,
         risposteTesto: risposta.testo,
-        esito: risposta.esito,
+        esito: testoEsito,
         giocatoreId,
+        tiro,
         timestamp: new Date().toISOString(),
       });
 
@@ -233,7 +272,7 @@ export class GameSession {
       }
 
       await this.state.storage.put("session", session);
-      return Response.json({ session, esito: risposta.esito, prossimaRichiesta, esitoNodo, complicazione });
+      return Response.json({ session, esito: testoEsito, prossimaRichiesta, esitoNodo, complicazione, tiro });
     }
 
     return new Response("Not found", { status: 404 });

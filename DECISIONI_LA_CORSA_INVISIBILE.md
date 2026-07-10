@@ -1,34 +1,32 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 10 luglio 2026 (fine sessione, dopo il Passo 7 — lavoro sospeso qui su richiesta)
+Aggiornato al: 10 luglio 2026 (fine sessione, dopo il Passo 8 — lavoro sospeso qui su richiesta)
 
 Questo file serve a non perdersi tra una sessione di lavoro e l'altra: raccoglie cosa
 è stato deciso, cosa è ancora un'ipotesi da confermare, e cosa manca. Va aggiornato
 ogni 3-4 passaggi di lavoro, non a ogni singola modifica.
 
-**Punto di ripresa**: `POST /scegli` ora richiede un `giocatoreId` valido
-(fatto nel Passo 7, isolato di proposito, prima di toccare `risoluzione.js`):
-senza, prima non si sapeva mai chi tra i giocatori della stanza avesse fatto
-una data scelta. Obbligatorio e validato — 400 se manca o se non corrisponde
-a un giocatore già unito alla stanza con `/join` — tracciato solo in ogni
-voce di `storicoScelte` (`giocatoreId`), nessun nuovo campo a livello di
-sessione. Il contenuto narrativo vero del Cronista per il Nodo Temporale
-`1836-torino` vive in un file di testo leggibile
-(`src/lib/narratore-corsa-invisibile.md`, tabelle per esito/ruolo/competenza/
-fascia di margine, Passo 6), caricato da Wrangler come modulo di testo in
-fase di build (non letto da disco a runtime, i Cloudflare Workers non hanno
-filesystem). **Il pool non è ancora collegato a `GameSession.js`**: non può
-esserlo finché i nodi non generano un `esito` pieno/parziale/fallimento, e
-oggi lo generano solo gli effetti fissi scritti in `game-config.js` —
-`risoluzione.js` (competenze + dado) esiste e funziona ma non è ancora
-agganciato al flusso di `/scegli`.
-**Prossimo passo, deciso e separato**: collegare `risoluzione.js` al flusso
-dei nodi (una richiesta chiede un tiro di competenza invece di, o oltre, un
-effetto fisso) — è il passo che sblocca l'uso reale del pool del Cronista,
-non un passo alternativo a piacere. Ora che `/scegli` sa chi sta scegliendo,
-quel collegamento potrà usare le competenze del giocatore giusto. Non
-toccare login/progressione tra stanze: rimandato a una sessione a parte,
-come deciso.
+**Punto di ripresa**: `risoluzione.js` è ora collegato al flusso di
+`/scegli` (Passo 8). Una risposta può dichiarare `competenzaRichiesta:
+"<id>"` invece di (o accanto a) un effetto fisso: quando presente, il
+punteggio del giocatore che sceglie (`giocatoreId`, tracciato dal Passo 7)
+decide un tiro pieno/parziale/fallimento, che seleziona quali
+`effettiPerEsito` applicare e quale `esito` (ora un oggetto per tier)
+mostrare. Le risposte senza `competenzaRichiesta` restano a effetto fisso
+come sempre — **le due forme convivono nello stesso nodo, nessuna risposta
+reale nei 5 nodi è stata convertita** (decisione deliberata: questo passo
+riguardava il motore, non il contenuto). `/join` ora assegna competenze
+reali al giocatore (`creaCompetenzeIniziali`, nessun punto extra) invece di
+`competenze: {}` come prima.
+**Il Cronista resta scollegato**: il pool per `1836-torino` (Passo 5-6) può
+finalmente ricevere un `esito` pieno/parziale/fallimento vero da una
+risposta con tiro, ma nessuna risposta reale nei nodi lo genera ancora —
+serve scrivere risposte con tiro nei nodi esistenti (o nuovi) perché il
+collegamento al Cronista abbia qualcosa da consumare.
+**Bug noto, non ancora corretto**: `public/index.html` non manda ancora
+`giocatoreId` a `/scegli` (né lo salva dopo `/join`) — ogni scelta fatta
+dall'interfaccia reale prende 400 così com'è oggi. Va sistemato quando si
+riprende il lavoro sull'interfaccia (vedi "Cosa manca").
 Restano da confermare: la definizione del Margine, e poi codice del libro /
 chat / chiamata vocale (vedi sotto) — invariato dal Passo 3.
 
@@ -165,6 +163,33 @@ oggi contiene un `index.html` minimo).
    che quel collegamento possa già usare le competenze del giocatore giusto
    invece di doverci tornare sopra due volte.
 
+9. **`risoluzione.js` collegato a `/scegli` (fatto nel Passo 8)**: tre
+   domande poste e risolte prima di scrivere codice. Come si dichiara un
+   tiro: nuovo campo `competenzaRichiesta: "<id>"` sulla risposta. Se
+   convivono risposte fisse e con tiro: **sì, nello stesso nodo**, nessuna
+   risposta esistente convertita (questo passo era motore, non contenuto).
+   Cosa succede al campo `esito`: **diventa un oggetto per tier**
+   (`{ pieno, parziale, fallimento }`) per le risposte con tiro, così il
+   client (`public/index.html`) continua a vedere sempre un testo senza
+   bisogno di modifiche — resta stringa fissa per le risposte senza tiro.
+   Effetti anch'essi differenziati per tier (`effettiPerEsito`), non un
+   blocco fisso: altrimenti il tiro non avrebbe cambiato nulla di
+   meccanico, in contraddizione con la decisione già presa al punto 2
+   ("le competenze pesano molto di più nel determinare gli esiti").
+   **Scoperta e risolta in corsa**: `/join` assegnava sempre
+   `competenze: {}` — `creaCompetenzeIniziali()` non veniva mai chiamato.
+   Corretto: `/join` ora popola competenze base reali per il ruolo (nessun
+   punto extra, quella distribuzione libera resta un passo a parte); un
+   ruolo sconosciuto ora risponde 400 invece di essere accettato in
+   silenzio con competenze vuote.
+   **Robustezza**: punteggio di competenza mancante nel record di un
+   giocatore (es. vecchie sessioni) trattato come 0, non fa crashare;
+   `effettiPerEsito`/`esito` mancanti per il tier estratto da un tiro
+   fanno fallback rispettivamente a "nessun effetto" e `null`, non
+   un'eccezione.
+   **Non toccato**: il Cronista (nessuna risposta reale genera ancora un
+   `esito` che il pool possa consumare), login/progressione tra stanze.
+
 ---
 
 ## Ipotesi in attesa di conferma (NON dare per deciso)
@@ -192,13 +217,20 @@ oggi contiene un `index.html` minimo).
 - [x] Sistema di competenze personaggio — fatto nel Passo 3, numeri da confermare
 - [x] `/scegli` sa chi sta scegliendo (`giocatoreId` obbligatorio e validato,
       tracciato in `storicoScelte`) — fatto nel Passo 7, isolato di proposito
-- [ ] **Collegare le competenze al flusso dei nodi** (una richiesta che chiede un
-      tiro invece di/oltre un effetto fisso) — PROSSIMO PASSO, deciso e separato:
-      senza questo il pool del Cronista non può essere chiamato (nessun `esito`
-      pieno/parziale/fallimento generato dai nodi oggi)
+- [x] Collegare le competenze al flusso dei nodi (`competenzaRichiesta` +
+      `effettiPerEsito` + `esito` per tier) — fatto nel Passo 8, motore
+      pronto ma **nessuna risposta reale nei 5 nodi lo usa ancora**
+- [ ] Scrivere almeno una risposta reale con tiro in un nodo esistente (es.
+      `1836-torino`) — serve perché il collegamento del Cronista (punto
+      sotto) abbia un `esito` vero da consumare, non solo quello dei test
 - [ ] Collegare il Cronista a `GameSession.js` — sbloccato solo dopo il punto sopra
 - [ ] Pool di frammenti narrativi veri per gli altri 4 nodi (Milano, Carso/Piave,
       Emergenza civile, missione moderna)
+- [ ] **`public/index.html` non manda `giocatoreId` a `/scegli`** (né lo
+      salva dopo `/join`) — dopo il Passo 7, ogni scelta fatta dall'interfaccia
+      reale prende 400 così com'è oggi. Da correggere quando si riprende il
+      lavoro sull'interfaccia: salvare l'id restituito da `/join` in `STATO`
+      e includerlo nel body di `/scegli`
 - [ ] Conferma o correzione della definizione di Margine
 - [x] Un nodo scritto come esempio con ramificazione reale — fatto nel Passo 2
       (`decalogo-vaira-severo` in `1836-torino`)
@@ -214,6 +246,60 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**10/07/2026 — Passo 8: `risoluzione.js` collegato al flusso di `/scegli`**
+Nuovo file: `test-scegli-risoluzione.mjs`.
+File modificati: `src/durable-objects/GameSession.js`, `test-game-session.mjs`.
+- Tre domande poste e risolte con l'utente prima di scrivere codice (vedi
+  punto 9 in "Decisioni confermate" per il dettaglio): il campo che
+  dichiara il tiro (`competenzaRichiesta`), la coesistenza con le risposte
+  a effetto fisso (sì, nello stesso nodo, nessuna risposta esistente
+  convertita), e cosa succede al campo `esito` (diventa un oggetto per
+  tier `{ pieno, parziale, fallimento }` invece di una stringa fissa, solo
+  per le risposte con tiro — il client continua a vedere sempre un testo,
+  zero modifiche a `public/index.html` necessarie per questo).
+- Effetti anch'essi differenziati per tier (`effettiPerEsito`), non un
+  blocco `effetti` fisso: scelta legata alla decisione già presa ("le
+  competenze pesano molto di più nel determinare gli esiti") — un tiro che
+  non cambia i numeri sarebbe stato solo cosmetico.
+- **Dipendenza scoperta e risolta durante l'analisi, prima di scrivere il
+  codice del tiro**: `/join` assegnava sempre `competenze: {}`,
+  `creaCompetenzeIniziali()` di `risoluzione.js` non veniva mai chiamato da
+  nessuna parte. Un tiro senza punteggio reale non avrebbe avuto senso.
+  Corretto: `/join` ora chiama `creaCompetenzeIniziali(ruolo, {})` (nessun
+  punto extra — quella distribuzione libera resta un passo a parte); un
+  ruolo sconosciuto ora risponde 400 invece di essere accettato in
+  silenzio con `competenze: {}` (comportamento precedente, mai notato
+  perché mai testato esplicitamente).
+- `POST /scegli`: quando la risposta scelta ha `competenzaRichiesta`, legge
+  il punteggio da `giocatore.competenze[...]` (mancante → trattato come 0,
+  non crasha), chiama `risolviAzione()`, e usa l'esito del tiro per
+  scegliere `effettiPerEsito[tier]` (mancante → fallback a `{}`) ed
+  `esito[tier]` (mancante → `null`). La risposta di `/scegli` include ora
+  anche `tiro` (competenza, dado, totale, esito — `null` quando la
+  risposta non richiede un tiro), e `storicoScelte` lo registra per voce.
+- `test-game-session.mjs`: aggiornata l'unica asserzione che dipendeva dal
+  vecchio comportamento (competenze vuote a `/join`), aggiunto un test per
+  il 400 su ruolo sconosciuto.
+- Nuovo `test-scegli-risoluzione.mjs` (15 verifiche, tutte passate),
+  dedicato e isolato: un nodo di prova aggiunto a runtime a
+  `GAME_CONFIG.nodiTemporali` (nessuna modifica al contenuto narrativo
+  reale) con una risposta a tiro e una a effetto fisso nello stesso nodo;
+  punteggi estremi per forzare deterministicamente fallimento/pieno (il
+  dado non è forzabile dall'API pubblica, giustamente); 40 tentativi con
+  un punteggio a cavallo tra parziale e pieno per verificare la coerenza
+  interna (effetti ed esito testuale sempre coerenti con il tier estratto,
+  qualunque esso sia) invece di provare a indovinare il tiro esatto; due
+  test di robustezza (contenuto malformato, competenza mancante nel
+  record di un giocatore).
+- **Scoperta durante l'analisi, non ancora corretta**: `public/index.html`
+  non manda `giocatoreId` a `/scegli` (né lo salva dopo `/join`) — ogni
+  scelta dall'interfaccia reale prende 400 dopo il Passo 7. Segnata
+  esplicitamente in "Cosa manca", non risolta qui (fuori scope, questo
+  passo era solo il motore).
+- Non toccato: il Cronista — nessuna risposta reale nei nodi genera ancora
+  un `esito` che il pool possa consumare (serve scrivere risposte con tiro
+  vere, non solo quelle di test), login/progressione tra stanze.
 
 **10/07/2026 — Passo 7: `/scegli` traccia chi sta scegliendo**
 Nuovo file: `test-scegli-giocatore.mjs`.
