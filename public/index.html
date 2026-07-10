@@ -420,7 +420,7 @@
 <script>
 const API = ""; // stesso dominio
 let CONFIG = null;
-let STATO = { roomId: null, nome: null, ruolo: null };
+let STATO = { roomId: null, nome: null, ruolo: null, giocatoreId: null };
 
 function mostraSchermo(id) {
   document.querySelectorAll(".schermo").forEach(s => s.classList.remove("attivo"));
@@ -526,13 +526,17 @@ document.getElementById("btn-join").addEventListener("click", async () => {
   btn.disabled = true;
   btn.textContent = "Un momento…";
   try {
-    await chiamaAPI(`/api/stanza/${STATO.roomId}/join`, {
+    const session = await chiamaAPI(`/api/stanza/${STATO.roomId}/join`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nome, ruolo }),
     });
     STATO.nome = nome;
     STATO.ruolo = ruolo;
+    // /join risponde con l'intera sessione (tutti i giocatori della stanza):
+    // il Durable Object serializza le richieste, quindi l'ultimo giocatore
+    // dell'array è sempre quello appena aggiunto da questa chiamata.
+    STATO.giocatoreId = session.giocatori[session.giocatori.length - 1].id;
     salvaStato();
     mostraSchermo("schermo-gioco");
     await aggiornaSchermataGioco();
@@ -634,7 +638,7 @@ function renderRichiesta(richiesta, nodoAttivo) {
       const risultato = await chiamaAPI(`/api/stanza/${STATO.roomId}/scegli`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ risposteIndice: indice }),
+        body: JSON.stringify({ risposteIndice: indice, giocatoreId: STATO.giocatoreId }),
       });
       renderRisorse(risultato.session.risorseDiSquadra);
       renderGiocatori(risultato.session.giocatori);

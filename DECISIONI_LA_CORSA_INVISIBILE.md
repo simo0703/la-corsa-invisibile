@@ -1,34 +1,31 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 10 luglio 2026 (fine sessione, dopo il Passo 10 — lavoro sospeso qui su richiesta)
+Aggiornato al: 10 luglio 2026 (fine sessione, dopo il Passo 11 — lavoro sospeso qui su richiesta)
 
 Questo file serve a non perdersi tra una sessione di lavoro e l'altra: raccoglie cosa
 è stato deciso, cosa è ancora un'ipotesi da confermare, e cosa manca. Va aggiornato
 ogni 3-4 passaggi di lavoro, non a ogni singola modifica.
 
-**Punto di ripresa**: il Cronista è collegato al flusso di `/scegli` (Passo
-10) — per il nodo `1836-torino`, l'unico con una risposta reale con tiro
-finora (Passo 9). Si attiva **solo** per risposte con `competenzaRichiesta`
-(le uniche con un vero esito a tre tier da cui variare); quando il pool del
-nodo attivo è disponibile, **sostituisce** il testo statico. Il pool si
-cerca in un registro `nodoId → pool` (`src/lib/narratore-registro-pool.js`)
-consultato da `GameSession.js` in modo del tutto generico — nessuna
-stringa di nodo o di ruolo scritta lì dentro; aggiungere il pool di un
-nuovo nodo significa aggiungere una voce al registro, non un nuovo
-controllo nel motore. Se il nodo attivo non ha un pool (gli altri 4 nodi,
-oggi) o il pool non è caricabile nell'ambiente corrente (Node puro senza
-Wrangler, come nei test), si ricade sul testo statico per tier — fallimento
-silenzioso, ma **solo per quel caso preciso**: un errore vero dentro il
-motore o il pool (frammenti mancanti, bug di sintassi) non viene mai
-inghiottito, si propaga come eccezione non gestita, verificato leggendo il
-codice riga per riga insieme all'utente prima di procedere.
+**Punto di ripresa**: il bug noto di `public/index.html` (non mandava mai
+`giocatoreId` a `/scegli`) è corretto (Passo 11) — `STATO.giocatoreId`
+viene salvato dalla risposta di `/join` e incluso nel body di `/scegli`.
+**Verificato dal vivo**, non solo a lettura di codice: `wrangler dev` +
+browser reale, join di un Esploratore, avvio di `1836-torino`, scelta "A
+tutta velocità" — nessuna richiesta fallita (il 400 sparito), ed è uscito
+prima il tier "parziale" poi (in una stanza nuova) "fallimento", in
+entrambi i casi con il testo composto dal Cronista, non più quello statico
+("pieno" non è mai uscito: con la Cadenza base dell'Esploratore, 3, è
+matematicamente irraggiungibile — 3 + dado massimo 4 = 7, sotto la soglia
+di 8 — non un problema del fix, coerente con quanto già verificato nei
+test automatici).
+Il Cronista è collegato al flusso di `/scegli` dal Passo 10 — per il nodo
+`1836-torino`, l'unico con una risposta reale con tiro finora (Passo 9).
+Si attiva **solo** per risposte con `competenzaRichiesta`; quando il pool
+del nodo attivo è disponibile, **sostituisce** il testo statico, tramite un
+registro `nodoId → pool` (`src/lib/narratore-registro-pool.js`) — nessuna
+stringa di nodo o di ruolo scritta in `GameSession.js`.
 `storicoFrammenti` (anti-ripetizione del Cronista) resta sempre `[]`:
-nessun nuovo campo di sessione per ora, vedi nota in fondo a questa
-sezione.
-**Bug noto, non ancora corretto**: `public/index.html` non manda ancora
-`giocatoreId` a `/scegli` (né lo salva dopo `/join`) — ogni scelta fatta
-dall'interfaccia reale prende 400 così com'è oggi. Va sistemato quando si
-riprende il lavoro sull'interfaccia (vedi "Cosa manca").
+nessun nuovo campo di sessione per ora, vedi nota più sotto.
 Restano da confermare: la definizione del Margine, e poi codice del libro /
 chat / chiamata vocale (vedi sotto) — invariato dal Passo 3.
 
@@ -265,6 +262,31 @@ oggi contiene un `index.html` minimo).
     più un entry-point di prova come nel Passo 6) che il bundle di
     produzione include correttamente sia il `.md` sia il registro.
 
+12. **Fix del bug noto in `public/index.html` (fatto nel Passo 11)**: il
+    client scartava la risposta di `/join` (`await chiamaAPI(...)` senza
+    assegnazione) e quindi non salvava mai il `giocatoreId` restituito dal
+    server — di conseguenza `/scegli` non lo mandava mai, 400 su ogni
+    scelta reale. Corretto: la risposta di `/join` (l'intera sessione, con
+    tutti i giocatori della stanza) viene ora catturata, e
+    `session.giocatori[session.giocatori.length - 1].id` — l'ultimo
+    dell'array, sempre quello appena aggiunto da questa chiamata, dato che
+    un Durable Object serializza le richieste — viene salvato in
+    `STATO.giocatoreId` (persistito in `localStorage` come il resto di
+    `STATO`) e incluso nel body di `/scegli`.
+    **Verificato dal vivo**, non solo mentalmente: avviato `wrangler dev`,
+    aperto nel browser, join di un Esploratore, avviato `1836-torino`,
+    scelto "A tutta velocità" — nessuna richiesta fallita (spuntato via
+    `preview_network`), `STATO.giocatoreId` presente in `localStorage`
+    dopo il join. Uscito il tier "parziale" al primo tentativo, poi (in una
+    stanza nuova) "fallimento" — in entrambi i casi il testo mostrato era
+    quello composto dal Cronista (verificato leggendolo, e confermando che
+    NON corrispondesse a nessuno dei testi statici per tier), con gli
+    effetti meccanici coerenti col tier uscito. "Pieno" non è comparso in
+    questi tentativi: con Cadenza base 3 (Esploratore, nessun punto extra)
+    è irraggiungibile per costruzione (3 + dado massimo 4 = 7 < soglia 8),
+    coerente con quanto già verificato nei test automatici — non indica un
+    problema del fix.
+
 ---
 
 ## Ipotesi in attesa di conferma (NON dare per deciso)
@@ -305,11 +327,8 @@ oggi contiene un `index.html` minimo).
       Emergenza civile, missione moderna) — quando pronti, basta aggiungerli
       al registro (`src/lib/narratore-registro-pool.js`), zero modifiche a
       `GameSession.js`
-- [ ] **`public/index.html` non manda `giocatoreId` a `/scegli`** (né lo
-      salva dopo `/join`) — dopo il Passo 7, ogni scelta fatta dall'interfaccia
-      reale prende 400 così com'è oggi. Da correggere quando si riprende il
-      lavoro sull'interfaccia: salvare l'id restituito da `/join` in `STATO`
-      e includerlo nel body di `/scegli`
+- [x] `public/index.html` non mandava `giocatoreId` a `/scegli` — corretto
+      nel Passo 11, verificato dal vivo con `wrangler dev` + browser
 - [ ] Conferma o correzione della definizione di Margine
 - [x] Un nodo scritto come esempio con ramificazione reale — fatto nel Passo 2
       (`decalogo-vaira-severo` in `1836-torino`)
@@ -325,6 +344,49 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**10/07/2026 — Passo 11: corretto il bug del `giocatoreId` mancante in `public/index.html`**
+File modificati: `public/index.html`.
+- Il client scartava la risposta di `POST /join` (`await chiamaAPI(...)`
+  senza catturarne il risultato), quindi non salvava mai il `giocatoreId`
+  che il server genera e restituisce — di conseguenza `POST /scegli` non
+  lo includeva mai nel body, e ogni scelta fatta dall'interfaccia reale
+  prendeva 400 fin dal Passo 7 (quando `giocatoreId` è diventato
+  obbligatorio).
+- Corretto in tre punti: (1) `STATO` iniziale ora ha anche il campo
+  `giocatoreId: null`; (2) il gestore del click su "Unisciti alla
+  squadra" cattura la risposta di `/join` (l'intera sessione) e salva
+  `session.giocatori[session.giocatori.length - 1].id` in
+  `STATO.giocatoreId` — l'ultimo dell'array è sempre il giocatore appena
+  aggiunto, perché un Durable Object serializza le richieste (nessuna
+  corsa possibile con altri join concorrenti); (3) il gestore del click
+  su una risposta include `giocatoreId: STATO.giocatoreId` nel body di
+  `/scegli`. `STATO` è già persistito in `localStorage`
+  (`salvaStato()`/`caricaStato()`), quindi il `giocatoreId` sopravvive
+  anche a un refresh della pagina, senza altro lavoro.
+- **Verificato dal vivo**, su richiesta esplicita, non solo mentalmente:
+  creato `.claude/launch.json` (non versionato, come `.claude/`
+  in generale) per avviare `wrangler dev` con lo strumento di preview
+  del browser. Flusso reale: creata una stanza, join di un Esploratore,
+  avviato il nodo `1836-torino`, scelta "A tutta velocità, senza
+  calcolare i rischi". Nessuna richiesta fallita (verificato con l'elenco
+  delle richieste di rete): il 400 è sparito. `STATO.giocatoreId` presente
+  in `localStorage` subito dopo il join. Il tier uscito al primo
+  tentativo è stato "parziale" (Cadenza +2, Spirito di Corpo -1 nella UI),
+  con il testo del Cronista mostrato (non quello statico per quel tier).
+  Ripetuto in una stanza nuova: uscito "fallimento" (Cadenza +1, Spirito
+  di Corpo -2), di nuovo con testo del Cronista, diverso da quello
+  statico. "Pieno" non è mai comparso in questi tentativi: con la Cadenza
+  base dell'Esploratore (3, nessun punto extra) è matematicamente
+  irraggiungibile (3 + dado massimo 4 = 7, sotto la soglia di 8) — non un
+  problema del fix, coerente con quanto i test automatici (Passo 9)
+  avevano già stabilito per questo ruolo/competenza.
+- Nessun test automatico dedicato per `public/index.html` (il progetto non
+  ha un framework di test per il client) — verifica end-to-end manuale via
+  browser, come da metodo del progetto quando non esiste un test dedicato.
+- Non toccato: backend (nessuna modifica a `GameSession.js` o
+  `game-config.js` in questo passo), gli altri 4 nodi, login/progressione
+  tra stanze.
 
 **10/07/2026 — Passo 10: il Cronista collegato al flusso di `/scegli`**
 Nuovi file: `src/lib/narratore-registro-pool.js`, `test-scegli-cronista.mjs`.
