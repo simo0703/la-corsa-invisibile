@@ -1,28 +1,26 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 10 luglio 2026 (fine sessione, dopo il Passo 8 — lavoro sospeso qui su richiesta)
+Aggiornato al: 10 luglio 2026 (fine sessione, dopo il Passo 9 — lavoro sospeso qui su richiesta)
 
 Questo file serve a non perdersi tra una sessione di lavoro e l'altra: raccoglie cosa
 è stato deciso, cosa è ancora un'ipotesi da confermare, e cosa manca. Va aggiornato
 ogni 3-4 passaggi di lavoro, non a ogni singola modifica.
 
-**Punto di ripresa**: `risoluzione.js` è ora collegato al flusso di
-`/scegli` (Passo 8). Una risposta può dichiarare `competenzaRichiesta:
-"<id>"` invece di (o accanto a) un effetto fisso: quando presente, il
-punteggio del giocatore che sceglie (`giocatoreId`, tracciato dal Passo 7)
-decide un tiro pieno/parziale/fallimento, che seleziona quali
-`effettiPerEsito` applicare e quale `esito` (ora un oggetto per tier)
-mostrare. Le risposte senza `competenzaRichiesta` restano a effetto fisso
-come sempre — **le due forme convivono nello stesso nodo, nessuna risposta
-reale nei 5 nodi è stata convertita** (decisione deliberata: questo passo
-riguardava il motore, non il contenuto). `/join` ora assegna competenze
-reali al giocatore (`creaCompetenzeIniziali`, nessun punto extra) invece di
-`competenze: {}` come prima.
-**Il Cronista resta scollegato**: il pool per `1836-torino` (Passo 5-6) può
-finalmente ricevere un `esito` pieno/parziale/fallimento vero da una
-risposta con tiro, ma nessuna risposta reale nei nodi lo genera ancora —
-serve scrivere risposte con tiro nei nodi esistenti (o nuovi) perché il
-collegamento al Cronista abbia qualcosa da consumare.
+**Punto di ripresa**: la prima risposta reale con tiro è scritta (Passo 9),
+nel nodo `1836-torino`, richiesta `decalogo-ginnastica`, risposta "A tutta
+velocità, senza calcolare i rischi" — prima effetto fisso, ora
+`competenzaRichiesta: "cadenza"` con `effettiPerEsito`/`esito` per tier
+(pieno/parziale/fallimento). Il tier "parziale" mantiene gli stessi numeri
+e lo stesso testo che questa risposta aveva come effetto fisso, per
+continuità con quanto già giocato/documentato nel Passo 2. Le altre due
+risposte della stessa richiesta restano a effetto fisso — verificato che le
+due forme convivano davvero nello stesso nodo reale, non solo in astratto.
+La ramificazione verso `decalogo-vaira-severo` resta legata alla SCELTA
+(la fretta), non al tiro: vale per ogni tier, incluso il fallimento.
+**Il Cronista resta scollegato**: ora esiste un `esito` pieno/parziale/
+fallimento vero generato da contenuto reale (non solo da nodi di test), ma
+il pool per `1836-torino` (Passo 5-6) non è ancora agganciato a
+`GameSession.js` — resta il prossimo passo naturale per questo nodo.
 **Bug noto, non ancora corretto**: `public/index.html` non manda ancora
 `giocatoreId` a `/scegli` (né lo salva dopo `/join`) — ogni scelta fatta
 dall'interfaccia reale prende 400 così com'è oggi. Va sistemato quando si
@@ -190,6 +188,27 @@ oggi contiene un `index.html` minimo).
    **Non toccato**: il Cronista (nessuna risposta reale genera ancora un
    `esito` che il pool possa consumare), login/progressione tra stanze.
 
+10. **Prima risposta reale con tiro (fatta nel Passo 9)**: nodo
+    `1836-torino`, richiesta `decalogo-ginnastica`, risposta "A tutta
+    velocità, senza calcolare i rischi" convertita da effetto fisso a
+    `competenzaRichiesta: "cadenza"`. Tier "parziale" ancorato agli stessi
+    numeri/testo che questa risposta aveva prima di questo passaggio
+    (continuità con la cronologia già giocata); "pieno" e "fallimento"
+    scritti per essere rispettivamente migliore e peggiore in modo
+    coerente con la scena (corsa a tutta velocità nella nebbia). Le altre
+    due risposte della stessa richiesta restano a effetto fisso — le due
+    forme convivono nello stesso nodo reale. La ramificazione verso
+    `decalogo-vaira-severo` resta legata alla scelta, non al tiro: vale
+    per ogni esito del tiro.
+    Testato end-to-end su questo nodo reale specifico (non solo sul nodo
+    di prova sintetico di `test-scegli-risoluzione.mjs`): tier forzati
+    (pieno/fallimento) via punteggio estremo, il tiro con la competenza
+    REALE assegnata dal ruolo (Esploratore, Cadenza 3 — mai "pieno" con
+    quel punteggio, solo "parziale"/"fallimento", verificato su 30
+    tentativi), coesistenza con le altre risposte della stessa richiesta,
+    e il percorso completo dalla risposta con tiro alla chiusura del nodo
+    passando per il ramo severo.
+
 ---
 
 ## Ipotesi in attesa di conferma (NON dare per deciso)
@@ -220,10 +239,13 @@ oggi contiene un `index.html` minimo).
 - [x] Collegare le competenze al flusso dei nodi (`competenzaRichiesta` +
       `effettiPerEsito` + `esito` per tier) — fatto nel Passo 8, motore
       pronto ma **nessuna risposta reale nei 5 nodi lo usa ancora**
-- [ ] Scrivere almeno una risposta reale con tiro in un nodo esistente (es.
-      `1836-torino`) — serve perché il collegamento del Cronista (punto
-      sotto) abbia un `esito` vero da consumare, non solo quello dei test
-- [ ] Collegare il Cronista a `GameSession.js` — sbloccato solo dopo il punto sopra
+- [x] Scrivere almeno una risposta reale con tiro in un nodo esistente —
+      fatto nel Passo 9 (`1836-torino` → `decalogo-ginnastica`, "A tutta
+      velocità, senza calcolare i rischi"); **solo una, le altre risposte
+      di quella richiesta e degli altri 4 nodi restano a effetto fisso**
+- [ ] Collegare il Cronista a `GameSession.js` per il nodo `1836-torino` —
+      ora sbloccato: esiste un `esito` pieno/parziale/fallimento vero da
+      almeno una risposta reale
 - [ ] Pool di frammenti narrativi veri per gli altri 4 nodi (Milano, Carso/Piave,
       Emergenza civile, missione moderna)
 - [ ] **`public/index.html` non manda `giocatoreId` a `/scegli`** (né lo
@@ -246,6 +268,54 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**10/07/2026 — Passo 9: prima risposta reale con tiro (`1836-torino`)**
+Nuovo file: `test-scegli-1836-torino.mjs`.
+File modificati: `src/game-config.js`, `test-game-session.mjs`.
+- Convertita la prima risposta di `decalogo-ginnastica` nel nodo
+  `1836-torino` ("A tutta velocità, senza calcolare i rischi") da effetto
+  fisso (`effetti`, `esito` stringa) a risposta con tiro
+  (`competenzaRichiesta: "cadenza"`, `effettiPerEsito`, `esito` per tier).
+  Tier "parziale" ancorato deliberatamente agli stessi numeri e allo stesso
+  testo che questa risposta aveva prima (cadenza +2, spiritoDiCorpo -1,
+  margine +2 — gli stessi valori documentati nel Passo 2 come "prima prova
+  pratica dell'ipotesi sul Margine"): continuità con quanto già giocato,
+  non un ripensamento del bilanciamento. Tier "pieno" migliore (cadenza +3,
+  margine +1, nessun costo su spiritoDiCorpo — corsa controllata anche a
+  tutta velocità), tier "fallimento" peggiore (cadenza +1, spiritoDiCorpo
+  -2, margine +3 — un passo falso), coerenti con la scena (corsa a
+  ostacoli nella nebbia) e con l'aggancio narrativo già scritto nella
+  richiesta successiva ("la fretta senza controllo vi ha quasi fatto
+  cadere"). La ramificazione verso `decalogo-vaira-severo` non è stata
+  toccata: resta legata alla scelta (la fretta), non al tiro — vale per
+  ogni esito, incluso il fallimento.
+- Le altre due risposte di `decalogo-ginnastica` ("con metodo",
+  "aiutando chi fatica di più") NON sono state toccate: restano a effetto
+  fisso, verificato esplicitamente che coesistano nella stessa richiesta
+  con quella a tiro.
+- `test-game-session.mjs` aggiornato: i due blocchi che chiamavano questa
+  risposta con un effetto fisso presunto ("Ramificazione" e "Soglia del
+  margine") ora forzano il punteggio di Cadenza a un valore estremo
+  (tramite una nuova funzione helper `impostaCompetenza`, che scrive
+  direttamente nello storage — il dado non è forzabile dall'API pubblica,
+  giustamente) per rendere il tier deterministico, e le asserzioni sui
+  numeri sono state aggiornate di conseguenza. Comportamento verificato
+  restare lo stesso nel merito (branching, avanzamento dell'orologio,
+  soglia del margine), solo i valori attesi sono cambiati per riflettere
+  il tier forzato invece dell'ex-effetto fisso.
+- Nuovo `test-scegli-1836-torino.mjs` (22 verifiche, tutte passate),
+  dedicato al comportamento end-to-end su questo nodo REALE (non sul nodo
+  di prova sintetico di `test-scegli-risoluzione.mjs`, che resta la
+  copertura generica del collegamento tiro↔motore): tier pieno e
+  fallimento forzati con i numeri/testi veri di game-config.js, il tiro
+  con la competenza REALE assegnata dal ruolo Esploratore (Cadenza 3, mai
+  "pieno" con quel punteggio — verificato su 30 tentativi che compaiano
+  sia "parziale" sia "fallimento"), coesistenza con le altre due risposte
+  della stessa richiesta, e il percorso di gioco completo dalla risposta
+  con tiro alla chiusura del nodo passando per il ramo severo.
+- **Non toccato**: gli altri 4 nodi (nessuna loro risposta ha un tiro), il
+  collegamento del Cronista a `GameSession.js` (ora sbloccato per
+  `1836-torino`, ma non ancora fatto), login/progressione tra stanze.
 
 **10/07/2026 — Passo 8: `risoluzione.js` collegato al flusso di `/scegli`**
 Nuovo file: `test-scegli-risoluzione.mjs`.

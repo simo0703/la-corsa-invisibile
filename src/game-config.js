@@ -114,10 +114,27 @@ export const GAME_CONFIG = {
           prompt: "Come affrontate la corsa?",
           risposte: [
             {
+              // Prima risposta con tiro reale del gioco (Passo 9): la
+              // Cadenza del personaggio decide come va la corsa a tutta
+              // velocità. "parziale" mantiene gli stessi numeri ed esito
+              // che questa risposta aveva come effetto fisso prima di
+              // questo passaggio, per continuità con quanto già giocato.
               testo: "A tutta velocità, senza calcolare i rischi",
-              effetti: { cadenza: 2, spiritoDiCorpo: -1, margine: 2 },
-              esito: "Arrivate per primi, sfiniti ma con il ritmo già nel sangue.",
-              // Ramificazione: la fretta attira l'attenzione severa di La Marmora.
+              competenzaRichiesta: "cadenza",
+              effettiPerEsito: {
+                pieno: { cadenza: 3, margine: 1 },
+                parziale: { cadenza: 2, spiritoDiCorpo: -1, margine: 2 },
+                fallimento: { cadenza: 1, spiritoDiCorpo: -2, margine: 3 },
+              },
+              esito: {
+                pieno: "Il ritmo è perfetto, il corpo risponde a ogni comando: arrivate per primi senza sprecare un solo passo.",
+                parziale: "Arrivate per primi, sfiniti ma con il ritmo già nel sangue.",
+                fallimento:
+                  "La fretta vi tradisce: un piede sbaglia l'appoggio, il corpo si spezza per un istante prima di ritrovare l'equilibrio. Arrivate comunque per primi, ma il prezzo pagato si vede.",
+              },
+              // Ramificazione: la fretta attira l'attenzione severa di La Marmora,
+              // qualunque sia l'esito del tiro — è la scelta stessa a costare cara,
+              // non il tiro.
               prossima: "decalogo-vaira-severo",
             },
             {

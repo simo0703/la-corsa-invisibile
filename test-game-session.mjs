@@ -45,6 +45,16 @@ function nuovaSessione() {
   return { gs, storage };
 }
 
+// Forza il punteggio di una competenza direttamente nello storage: serve a
+// rendere deterministico l'esito di un tiro nei test (il dado non è
+// forzabile dall'API pubblica, giustamente).
+async function impostaCompetenza(storage, giocatoreId, competenzaId, valore) {
+  const session = await storage.get("session");
+  const giocatore = session.giocatori.find((g) => g.id === giocatoreId);
+  giocatore.competenze[competenzaId] = valore;
+  await storage.put("session", session);
+}
+
 // Scorciatoia per chiamare gs.fetch() come farebbe il Worker, con un path
 // e un body opzionali, restituendo direttamente il JSON già parsato.
 async function chiamata(gs, path, method = "GET", body = null) {
@@ -141,21 +151,27 @@ console.log("\n--- /scegli senza nodo avviato ---");
 
 console.log("\n--- Ramificazione: percorso aggressivo verso decalogo-vaira-severo ---");
 {
-  const { gs } = nuovaSessione();
+  const { gs, storage } = nuovaSessione();
   const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
   const giocatoreId = join.json.giocatori[0].id;
+  // Dal Passo 9 questa risposta ha un tiro (competenzaRichiesta: "cadenza");
+  // punteggio forzato molto alto per rendere il tier deterministico ("pieno").
+  await impostaCompetenza(storage, giocatoreId, "cadenza", 20);
   await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino" });
 
-  // Risposta 0 su "decalogo-ginnastica": scelta aggressiva.
-  // effetti attesi: cadenza +2, spiritoDiCorpo -1, margine +2; prossima: "decalogo-vaira-severo"
+  // Risposta 0 su "decalogo-ginnastica": scelta aggressiva, con tiro.
+  // Tier "pieno": cadenza +3, margine +1 (niente spiritoDiCorpo);
+  // prossima: "decalogo-vaira-severo" a prescindere dal tier (dipende dalla
+  // scelta fatta, non da come va il tiro).
   const primaScelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
-  verifica("applica l'effetto su cadenza", primaScelta.json.session.risorseDiSquadra.cadenza === 2);
-  verifica("applica l'effetto su spiritoDiCorpo", primaScelta.json.session.risorseDiSquadra.spiritoDiCorpo === -1);
-  verifica("applica l'effetto sul margine", primaScelta.json.session.margine === 2);
+  verifica("il tiro sul punteggio forzato è \"pieno\"", primaScelta.json.tiro && primaScelta.json.tiro.esito === "pieno");
+  verifica("applica l'effetto su cadenza (tier pieno)", primaScelta.json.session.risorseDiSquadra.cadenza === 3);
+  verifica("il tier pieno non tocca spiritoDiCorpo", primaScelta.json.session.risorseDiSquadra.spiritoDiCorpo === 0);
+  verifica("applica l'effetto sul margine (tier pieno)", primaScelta.json.session.margine === 1);
   verifica("l'orologio avanza di 1", primaScelta.json.session.orologio === 1);
-  verifica("margine 2 non raggiunge la soglia (5): nessuna complicazione", primaScelta.json.complicazione === null);
+  verifica("margine 1 non raggiunge la soglia (5): nessuna complicazione", primaScelta.json.complicazione === null);
   verifica(
-    "la ramificazione porta al ramo severo",
+    "la ramificazione porta al ramo severo (dipende dalla scelta, non dal tiro)",
     primaScelta.json.prossimaRichiesta && primaScelta.json.prossimaRichiesta.id === "decalogo-vaira-severo"
   );
   verifica("il nodo non è ancora concluso (c'è una prossima richiesta)", primaScelta.json.esitoNodo === null);
@@ -168,6 +184,11 @@ console.log("\n--- Ramificazione: percorso aggressivo verso decalogo-vaira-sever
     "lo storico registra chi ha scelto",
     primaScelta.json.session.storicoScelte[0].giocatoreId === giocatoreId
   );
+  verifica(
+    "lo storico registra anche il tiro",
+    primaScelta.json.session.storicoScelte[0].tiro &&
+      primaScelta.json.session.storicoScelte[0].tiro.esito === "pieno"
+  );
 
   const attivaDopo = await chiamata(gs, "/richiesta-attiva");
   verifica(
@@ -175,11 +196,12 @@ console.log("\n--- Ramificazione: percorso aggressivo verso decalogo-vaira-sever
     attivaDopo.json.richiestaAttiva.id === "decalogo-vaira-severo"
   );
 
-  // Risposta 0 su "decalogo-vaira-severo": ammette la paura.
-  // effetti attesi: passoAvanti +1, margine -1; prossima: null (fine ramo)
+  // Risposta 0 su "decalogo-vaira-severo": ammette la paura (effetto fisso,
+  // nessun tiro). effetti attesi: passoAvanti +1, margine -1; prossima: null (fine ramo)
   const secondaScelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
+  verifica("nessun tiro su questa risposta (effetto fisso)", secondaScelta.json.tiro === null);
   verifica("applica l'effetto su passoAvanti", secondaScelta.json.session.risorseDiSquadra.passoAvanti === 1);
-  verifica("il margine scende con l'effetto negativo (2 - 1 = 1)", secondaScelta.json.session.margine === 1);
+  verifica("il margine scende con l'effetto negativo (1 - 1 = 0)", secondaScelta.json.session.margine === 0);
   verifica("l'orologio avanza ancora (ora a 2)", secondaScelta.json.session.orologio === 2);
   verifica(
     "\"prossima\": null chiude il ramo anche se il nodo ha altre richieste altrove",
@@ -187,7 +209,7 @@ console.log("\n--- Ramificazione: percorso aggressivo verso decalogo-vaira-sever
   );
   verifica("il nodo si conclude e restituisce un esito", secondaScelta.json.esitoNodo !== null);
   verifica(
-    "nessuna condizione delle varianti è soddisfatta (spiritoDiCorpo -1, passoAvanti 1): vince il default",
+    "nessuna condizione delle varianti è soddisfatta (spiritoDiCorpo 0, passoAvanti 1): vince il default",
     secondaScelta.json.esitoNodo === "L'addestramento è finito. Non tutti sono pronti allo stesso modo, ma si corre insieme."
   );
   verifica(
@@ -202,24 +224,27 @@ console.log("\n--- Soglia del margine: la complicazione scatta e il margine si d
   const { gs, storage } = nuovaSessione();
   const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
   const giocatoreId = join.json.giocatori[0].id;
+  // Punteggio forzato molto basso: tier deterministico "fallimento" (margine +3).
+  await impostaCompetenza(storage, giocatoreId, "cadenza", -10);
   await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino" });
 
   // Portiamo il margine a 3 a mano (simula l'accumulo di più nodi giocati
   // prima di questo, senza dover ripetere tutto il percorso): con la soglia
-  // a 5 e il prossimo effetto +2, il totale (5) raggiunge esattamente la
-  // soglia e deve far scattare la complicazione.
+  // a 5 e il tier fallimento che aggiunge +3 di margine, il totale (6)
+  // supera la soglia e deve far scattare la complicazione.
   const sessionePresente = await storage.get("session");
   sessionePresente.margine = 3;
   await storage.put("session", sessionePresente);
 
-  const scelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId }); // +2 margine → 5
-  verifica("il margine raggiunge la soglia (3 + 2 = 5)", scelta.json.complicazione !== null);
+  const scelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId }); // tier fallimento: +3 margine → 6
+  verifica("il tiro sul punteggio forzato è \"fallimento\"", scelta.json.tiro && scelta.json.tiro.esito === "fallimento");
+  verifica("il margine supera la soglia (3 + 3 = 6 ≥ 5)", scelta.json.complicazione !== null);
   verifica(
     "il testo della complicazione è quello configurato in game-config.js",
     scelta.json.complicazione === "Il margine è esaurito: qualcosa si è rotto nel piano, e la squadra deve reagire."
   );
   verifica(
-    "il margine si dimezza (floor(5/2) = 2) invece di azzerarsi",
+    "il margine si dimezza sulla soglia configurata (floor(5/2) = 2), non sul valore raggiunto",
     scelta.json.session.margine === 2
   );
 }
