@@ -31,13 +31,17 @@ verifica("valore 7 su soglia 5 è critico", fasciaMargine(7, 5) === "critico");
 verifica("soglia 0 o assente non esplode, torna basso", fasciaMargine(3, 0) === "basso");
 
 console.log("\n--- scegliFrammento ---");
+// Rapporto di peso 5:1 e 300 tentativi: la probabilità che l'opzione più
+// leggera non esca mai per puro caso è astronomicamente bassa (< 1 su 10^28),
+// a differenza di un rapporto troppo estremo (es. 100:1) che con poche prove
+// fallisce spesso per caso anche a motore funzionante correttamente.
 const candidatiProva = [
-  { id: "a", testo: "A", peso: 100 },
+  { id: "a", testo: "A", peso: 5 },
   { id: "b", testo: "B", peso: 1 },
 ];
 const scelte = new Set();
-for (let i = 0; i < 50; i++) scelte.add(scegliFrammento(candidatiProva).id);
-verifica("con pesi molto diversi, prima o poi escono entrambi su 50 tentativi", scelte.size === 2);
+for (let i = 0; i < 300; i++) scelte.add(scegliFrammento(candidatiProva).id);
+verifica("con pesi diversi, escono entrambi su 300 tentativi", scelte.size === 2);
 
 const soloUno = [{ id: "unico", testo: "U" }];
 verifica(
