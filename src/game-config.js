@@ -62,10 +62,16 @@ export const GAME_CONFIG = {
     sogliaSuccessoParziale: 5,
   },
 
+  // `nomeConArticolo`: forma con articolo, pensata per essere inserita a
+  // inizio frase nei frammenti del Cronista (es. "{ruolo} scandisce il
+  // ritmo..." -> "Il Fanfarista scandisce il ritmo..."). Per "Custode /
+  // Soccorritore" si usa solo "Il Custode": il doppio nome/slash è
+  // un'etichetta di classe, non qualcosa che si legge bene a metà frase.
   ruoli: [
     {
       id: "esploratore",
       nome: "Esploratore",
+      nomeConArticolo: "L'Esploratore",
       ispirazione: "7° Reggimento — Celeritate ac virtute",
       focus: "Muoversi rapidamente, scoprire pericoli nascosti, vedere prima.",
       competenzaPrincipale: "cadenza",
@@ -73,18 +79,21 @@ export const GAME_CONFIG = {
     {
       id: "fanfarista",
       nome: "Fanfarista",
+      nomeConArticolo: "Il Fanfarista",
       focus: "Rigenera la Cadenza della squadra, scaccia la paura col Suono della Corsa.",
       competenzaPrincipale: "passoAvanti",
     },
     {
       id: "custode",
       nome: "Custode / Soccorritore",
+      nomeConArticolo: "Il Custode",
       focus: "Gestisce crisi ambientali, protegge i civili, cura corpo e spirito.",
       competenzaPrincipale: "spiritoDiCorpo",
     },
     {
       id: "incursore",
       nome: "Incursore",
+      nomeConArticolo: "L'Incursore",
       ispirazione: "3° Reggimento — Maiora viribus audere",
       focus: "Affronta minacce dirette, apre le brecce, osa imprese superiori alle proprie forze.",
       competenzaPrincipale: "precisione",

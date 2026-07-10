@@ -1,32 +1,44 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 10 luglio 2026 (fine sessione, dopo il Passo 9 — lavoro sospeso qui su richiesta)
+Aggiornato al: 10 luglio 2026 (fine sessione, dopo il Passo 10 — lavoro sospeso qui su richiesta)
 
 Questo file serve a non perdersi tra una sessione di lavoro e l'altra: raccoglie cosa
 è stato deciso, cosa è ancora un'ipotesi da confermare, e cosa manca. Va aggiornato
 ogni 3-4 passaggi di lavoro, non a ogni singola modifica.
 
-**Punto di ripresa**: la prima risposta reale con tiro è scritta (Passo 9),
-nel nodo `1836-torino`, richiesta `decalogo-ginnastica`, risposta "A tutta
-velocità, senza calcolare i rischi" — prima effetto fisso, ora
-`competenzaRichiesta: "cadenza"` con `effettiPerEsito`/`esito` per tier
-(pieno/parziale/fallimento). Il tier "parziale" mantiene gli stessi numeri
-e lo stesso testo che questa risposta aveva come effetto fisso, per
-continuità con quanto già giocato/documentato nel Passo 2. Le altre due
-risposte della stessa richiesta restano a effetto fisso — verificato che le
-due forme convivano davvero nello stesso nodo reale, non solo in astratto.
-La ramificazione verso `decalogo-vaira-severo` resta legata alla SCELTA
-(la fretta), non al tiro: vale per ogni tier, incluso il fallimento.
-**Il Cronista resta scollegato**: ora esiste un `esito` pieno/parziale/
-fallimento vero generato da contenuto reale (non solo da nodi di test), ma
-il pool per `1836-torino` (Passo 5-6) non è ancora agganciato a
-`GameSession.js` — resta il prossimo passo naturale per questo nodo.
+**Punto di ripresa**: il Cronista è collegato al flusso di `/scegli` (Passo
+10) — per il nodo `1836-torino`, l'unico con una risposta reale con tiro
+finora (Passo 9). Si attiva **solo** per risposte con `competenzaRichiesta`
+(le uniche con un vero esito a tre tier da cui variare); quando il pool del
+nodo attivo è disponibile, **sostituisce** il testo statico. Il pool si
+cerca in un registro `nodoId → pool` (`src/lib/narratore-registro-pool.js`)
+consultato da `GameSession.js` in modo del tutto generico — nessuna
+stringa di nodo o di ruolo scritta lì dentro; aggiungere il pool di un
+nuovo nodo significa aggiungere una voce al registro, non un nuovo
+controllo nel motore. Se il nodo attivo non ha un pool (gli altri 4 nodi,
+oggi) o il pool non è caricabile nell'ambiente corrente (Node puro senza
+Wrangler, come nei test), si ricade sul testo statico per tier — fallimento
+silenzioso, ma **solo per quel caso preciso**: un errore vero dentro il
+motore o il pool (frammenti mancanti, bug di sintassi) non viene mai
+inghiottito, si propaga come eccezione non gestita, verificato leggendo il
+codice riga per riga insieme all'utente prima di procedere.
+`storicoFrammenti` (anti-ripetizione del Cronista) resta sempre `[]`:
+nessun nuovo campo di sessione per ora, vedi nota in fondo a questa
+sezione.
 **Bug noto, non ancora corretto**: `public/index.html` non manda ancora
 `giocatoreId` a `/scegli` (né lo salva dopo `/join`) — ogni scelta fatta
 dall'interfaccia reale prende 400 così com'è oggi. Va sistemato quando si
 riprende il lavoro sull'interfaccia (vedi "Cosa manca").
 Restano da confermare: la definizione del Margine, e poi codice del libro /
 chat / chiamata vocale (vedi sotto) — invariato dal Passo 3.
+
+**Nota per il futuro (non lavoro da fare subito)**: `storicoFrammenti` è
+stato lasciato sempre `[]` per scelta — il motore lo supporta (evita di
+ripetere lo stesso frammento a distanza ravvicinata), ma non è tracciato in
+`session.storicoFrammenti`. Se in futuro emerge un bisogno reale (gruppi
+che rigiocano più volte lo stesso nodo/risposta e notano ripetizioni),
+si aggiunge come nuovo campo di stato con la relativa modifica a
+`initState()`/`migrateState()`, come da regola del progetto.
 
 **Nota tecnica su questo file**: per un periodo il repository ha avuto una versione
 vecchia di questo log (ferma al Passo 1) caricata per sbaglio insieme ad altri file.
@@ -209,6 +221,50 @@ oggi contiene un `index.html` minimo).
     e il percorso completo dalla risposta con tiro alla chiusura del nodo
     passando per il ramo severo.
 
+11. **Il Cronista collegato a `/scegli` (fatto nel Passo 10)**: quattro
+    domande poste e risolte prima di scrivere codice. Quando si attiva:
+    **solo per risposte con tiro** (`competenzaRichiesta`) — una risposta a
+    effetto fisso ha un solo esito, non un tier da cui il Cronista possa
+    variare; effetto collaterale voluto, nessuno degli altri 4 nodi ha
+    risposte con tiro oggi, quindi il Cronista non viene mai invocato lì.
+    Come proteggersi dai nodi senza pool: **un registro esplicito
+    `nodoId → pool`** (`src/lib/narratore-registro-pool.js`), non un
+    controllo hardcoded su un nodo specifico dentro `GameSession.js` — il
+    motore resta generico, aggiungere un pool per un nuovo nodo è
+    aggiungere una voce al registro. Sostituzione o affiancamento: il
+    testo del Cronista **sostituisce** `esito`, coerente con l'architettura
+    decisa fin dall'inizio (punto 3: il testo di narrazione può essere
+    generato, il Cronista è la versione gratuita di quell'idea).
+    `storicoFrammenti`: **resta sempre `[]`** per ora, nessun nuovo campo
+    di stato — annotato come nota per il futuro, non lavoro da fare subito.
+    **Vincolo tecnico scoperto e risolto**: i pool reali importano un
+    `.md`, risolvibile solo da Wrangler, non da Node puro (usato dai
+    test) — un `import` statico di quel modulo dentro `GameSession.js`
+    avrebbe rotto TUTTI i test esistenti al solo caricamento. Risolto con
+    `import()` dinamico dentro il registro, dentro un `try/catch` **scoped
+    al solo caricamento del modulo**: se fallisce (Node puro, o nodo senza
+    voce nel registro) si ricade sul testo statico, senza errori. Verificato
+    esplicitamente, su richiesta, che quel `try/catch` NON avvolga anche la
+    composizione del testo (`componiNarrazione`): un errore vero dentro il
+    motore o il pool si propaga sempre, non finisce mai nel fallback
+    silenzioso. Per testare la sostituzione vera sotto Node puro (dove il
+    caricatore reale non si risolve), il registro espone anche
+    `registraPool(nodoId, caricaPool)`, usata SOLO dai test per iniettare
+    un pool costruito in modo portabile (stesso `.md`, letto da `fs` come
+    negli altri test, non tramite l'import Wrangler-only).
+    Aggiunto anche `nomeConArticolo` a ogni ruolo in `game-config.js` (es.
+    "L'Esploratore", "Il Fanfarista", "Il Custode" per "Custode /
+    Soccorritore" — il doppio nome non si legge bene a metà frase), passato
+    come `variabili.ruolo` al Cronista: senza, i frammenti che iniziano con
+    `{ruolo}` producevano testo grammaticalmente sbagliato ("Fanfarista
+    scandisce" invece di "Il Fanfarista scandisce") — scoperto mostrando
+    esempi reali in chat prima di procedere, corretto prima del collegamento
+    definitivo.
+    Verificato concretamente (non solo a lettura di codice) con
+    `wrangler deploy --dry-run` sul vero entry-point (`src/index.js`, non
+    più un entry-point di prova come nel Passo 6) che il bundle di
+    produzione include correttamente sia il `.md` sia il registro.
+
 ---
 
 ## Ipotesi in attesa di conferma (NON dare per deciso)
@@ -243,11 +299,12 @@ oggi contiene un `index.html` minimo).
       fatto nel Passo 9 (`1836-torino` → `decalogo-ginnastica`, "A tutta
       velocità, senza calcolare i rischi"); **solo una, le altre risposte
       di quella richiesta e degli altri 4 nodi restano a effetto fisso**
-- [ ] Collegare il Cronista a `GameSession.js` per il nodo `1836-torino` —
-      ora sbloccato: esiste un `esito` pieno/parziale/fallimento vero da
-      almeno una risposta reale
+- [x] Collegare il Cronista a `GameSession.js` per il nodo `1836-torino` —
+      fatto nel Passo 10, tramite registro `nodoId → pool` generico
 - [ ] Pool di frammenti narrativi veri per gli altri 4 nodi (Milano, Carso/Piave,
-      Emergenza civile, missione moderna)
+      Emergenza civile, missione moderna) — quando pronti, basta aggiungerli
+      al registro (`src/lib/narratore-registro-pool.js`), zero modifiche a
+      `GameSession.js`
 - [ ] **`public/index.html` non manda `giocatoreId` a `/scegli`** (né lo
       salva dopo `/join`) — dopo il Passo 7, ogni scelta fatta dall'interfaccia
       reale prende 400 così com'è oggi. Da correggere quando si riprende il
@@ -268,6 +325,64 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**10/07/2026 — Passo 10: il Cronista collegato al flusso di `/scegli`**
+Nuovi file: `src/lib/narratore-registro-pool.js`, `test-scegli-cronista.mjs`.
+File modificati: `src/durable-objects/GameSession.js`, `src/game-config.js`.
+- Quattro domande poste e risolte con l'utente prima di scrivere codice
+  (vedi punto 11 in "Decisioni confermate" per il dettaglio): quando si
+  attiva (solo risposte con tiro), come proteggersi dai nodi senza pool
+  (registro esplicito `nodoId → pool`, non un controllo hardcoded), se
+  sostituisce o affianca il testo statico (sostituisce), se tracciare
+  `storicoFrammenti` in sessione (no, resta sempre `[]`, annotato come nota
+  per il futuro).
+- Nuovo `src/lib/narratore-registro-pool.js`: mappa `nodoId → pool`
+  (oggi una sola voce, `1836-torino`), consultata da `GameSession.js` senza
+  che il motore contenga mai una stringa di nodo. Il caricamento di un pool
+  reale usa `import()` dinamico dentro un `try/catch` **scoped al solo
+  caricamento del modulo**: se il `.md` non è risolvibile nell'ambiente
+  corrente (Node puro, senza Wrangler — il caso di tutti i test locali),
+  `trovaPoolPerNodo` restituisce `null` e `GameSession.js` ricade sul testo
+  statico, stesso trattamento riservato ai nodi senza pool.
+- **Verificato esplicitamente su richiesta dell'utente**: quel `try/catch`
+  non avvolge la composizione del testo (`componiNarrazione`, chiamata
+  fuori da `trovaPoolPerNodo`, dentro `GameSession.js` senza protezione) —
+  un errore vero dentro il motore o un pool mal scritto (frammenti mancanti
+  per uno slot, bug di sintassi) si propaga sempre come eccezione non
+  gestita, non finisce mai nel fallback silenzioso. Confermato leggendo il
+  codice riga per riga con l'utente, nessuna modifica necessaria.
+- `GameSession.js`: dentro il ramo "risposta con tiro" di `/scegli`, dopo
+  aver applicato gli effetti, cerca il pool del nodo attivo nel registro;
+  se disponibile, chiama `componiNarrazione()` con il contesto (esito del
+  tiro, competenza, ruolo del giocatore, margine e la sua variazione,
+  `storicoFrammenti: []`) e il testo composto sostituisce `testoEsito`.
+- `src/game-config.js`: aggiunto `nomeConArticolo` a ogni ruolo (es.
+  "L'Esploratore", "Il Fanfarista"; "Il Custode" per "Custode /
+  Soccorritore" — il doppio nome non si legge bene a metà frase), passato
+  come `variabili.ruolo` al Cronista. Scoperto mostrando esempi reali in
+  chat: senza, i frammenti che iniziano con `{ruolo}` producevano testo
+  scorretto ("Fanfarista scandisce" invece di "Il Fanfarista scandisce").
+- Nuovo `test-scegli-cronista.mjs` (15 verifiche, tutte passate): il
+  registro restituisce `null` per un nodo senza pool e per il caricatore
+  reale sotto Node puro (senza override); `/scegli` usa il testo statico
+  quando il pool non è disponibile; con un pool iniettato tramite
+  `registraPool()` (costruito in modo portabile, `.md` letto da `fs` come
+  negli altri test, non tramite l'import Wrangler-only) `/scegli` usa
+  davvero il testo del Cronista, senza toccare effetti meccanici o
+  ramificazione; le risposte senza tiro non vengono mai toccate, anche col
+  pool registrato.
+- **Verificato concretamente** (non solo a lettura di codice) con
+  `wrangler deploy --dry-run` sul vero entry-point del Worker
+  (`src/index.js`, non un entry-point di prova come nel Passo 6, perché
+  ora `GameSession.js` raggiunge davvero `narratore-corsa-invisibile.js`):
+  il bundle di produzione include correttamente sia il `.md` sia il
+  registro.
+- Esempi reali mostrati in chat due volte (prima direttamente dal motore,
+  poi attraverso il vero flusso di `/scegli`) prima del commit, su
+  richiesta esplicita dell'utente.
+- **Non toccato**: gli altri 4 nodi (nessun pool, nessuna risposta con
+  tiro), login/progressione tra stanze, `public/index.html` (bug noto del
+  `giocatoreId` mancante, ancora aperto).
 
 **10/07/2026 — Passo 9: prima risposta reale con tiro (`1836-torino`)**
 Nuovo file: `test-scegli-1836-torino.mjs`.

@@ -1,5 +1,7 @@
 import { GAME_CONFIG } from "../game-config.js";
 import { creaCompetenzeIniziali, risolviAzione } from "../lib/risoluzione.js";
+import { componiNarrazione } from "../lib/narratore-simulato.js";
+import { trovaPoolPerNodo } from "../lib/narratore-registro-pool.js";
 
 // Un Durable Object per stanza/sessione: isolamento totale tra sessioni diverse.
 // Le risorse sono a livello di SQUADRA (party-level), non per singolo personaggio:
@@ -30,6 +32,20 @@ import { creaCompetenzeIniziali, risolviAzione } from "../lib/risoluzione.js";
 //   fissa (usato dalle risposte senza tiro).
 // Una risposta senza `competenzaRichiesta` si comporta esattamente come
 // prima di questo passaggio: effetto fisso, testo fisso, nessun tiro.
+//
+// Il Cronista (narratore-simulato.js) entra in gioco SOLO per le risposte
+// con tiro: solo lì esiste un vero esito a tre tier da cui comporre un
+// testo variato: una risposta a effetto fisso ha un solo esito, non un
+// tier. Il pool di contenuto da usare si cerca in narratore-registro-pool.js
+// (mappa nodoId -> pool, mai una stringa di nodo scritta qui): se il nodo
+// attivo non ha un pool registrato (o il pool non si carica in questo
+// ambiente, vedi quel file), si ricade sul testo statico per tier già
+// scritto in game-config.js -- fallback silenzioso, stesso trattamento di
+// un nodo che semplicemente non ha ancora il suo pool. Quando il Cronista
+// compone un testo, SOSTITUISCE quello statico (non lo affianca).
+// contesto.storicoFrammenti resta sempre [] per ora (decisione: nessun
+// nuovo campo di stato finché non emerge un bisogno reale — vedi il log
+// delle decisioni).
 
 export class GameSession {
   constructor(state, env) {
@@ -214,6 +230,7 @@ export class GameSession {
       }
 
       // Effetti: le chiavi possono essere risorse di squadra oppure "margine".
+      const margineDeltaAzione = effettiDaApplicare.margine ?? 0;
       for (const [chiave, delta] of Object.entries(effettiDaApplicare)) {
         if (chiave === "margine") {
           session.margine += delta;
@@ -221,6 +238,26 @@ export class GameSession {
           session.risorseDiSquadra[chiave] = (session.risorseDiSquadra[chiave] || 0) + delta;
         }
       }
+
+      // Cronista: solo per risposte con tiro, solo se il nodo attivo ha un
+      // pool disponibile (vedi commento in cima al file). Sostituisce
+      // testoEsito quando applicabile.
+      if (tiro) {
+        const pool = await trovaPoolPerNodo(session.nodoAttivo);
+        if (pool) {
+          const ruoloGiocatore = GAME_CONFIG.ruoli.find((r) => r.id === giocatore.ruolo);
+          const { testo } = componiNarrazione(pool, {
+            esito: tiro.esito,
+            competenzaId: risposta.competenzaRichiesta,
+            ruoloId: giocatore.ruolo,
+            margine: { valore: session.margine, soglia: GAME_CONFIG.margineSoglia ?? null, delta: margineDeltaAzione },
+            variabili: { ruolo: ruoloGiocatore?.nomeConArticolo ?? giocatore.ruolo },
+            storicoFrammenti: [],
+          });
+          testoEsito = testo;
+        }
+      }
+
       session.orologio += 1;
 
       session.storicoScelte.push({
