@@ -1,24 +1,33 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 10 luglio 2026 (fine sessione, dopo il Passo 5 — lavoro sospeso qui su richiesta)
+Aggiornato al: 10 luglio 2026 (fine sessione, dopo il Passo 6 — lavoro sospeso qui su richiesta)
 
 Questo file serve a non perdersi tra una sessione di lavoro e l'altra: raccoglie cosa
 è stato deciso, cosa è ancora un'ipotesi da confermare, e cosa manca. Va aggiornato
 ogni 3-4 passaggi di lavoro, non a ogni singola modifica.
 
-**Punto di ripresa**: pool di contenuto vero del Cronista scritto per il Nodo
-Temporale `1836-torino` (`src/lib/narratore-corsa-invisibile.js`), testato (28
-verifiche automatiche, tutte passate) — varia per esito, ruolo, competenza e
-fascia di margine. **Copre solo `1836-torino`**, non ancora gli altri 4 nodi
-(decisione deliberata, per validare l'approccio prima di scalare). **Il pool
-non è ancora collegato a `GameSession.js`**: non può esserlo finché i nodi non
-generano un `esito` pieno/parziale/fallimento, e oggi lo generano solo gli
-effetti fissi scritti in `game-config.js` — `risoluzione.js` (competenze + dado)
-esiste e funziona ma non è ancora agganciato al flusso di `/scegli`.
+**Punto di ripresa**: il contenuto narrativo vero del Cronista per il Nodo
+Temporale `1836-torino` ora vive in un file di testo leggibile
+(`src/lib/narratore-corsa-invisibile.md`, tabelle per esito/ruolo/competenza/
+fascia di margine), non più in JS — decisione presa nel Passo 6 per rendere il
+contenuto editabile senza toccare codice. Un caricatore
+(`src/lib/narratore-corsa-invisibile-loader.js`) lo trasforma nel formato che
+il motore si aspetta; il file `narratore-corsa-invisibile.js` resta il punto
+d'ingresso per il Worker (importa il `.md` come testo, risolto da Wrangler in
+fase di build — vedi `[[rules]]` in `wrangler.toml` — non letto da disco a
+runtime, perché i Cloudflare Workers non hanno filesystem). 39 verifiche
+automatiche, tutte passate. **Copre solo `1836-torino`**, non ancora gli altri
+4 nodi (decisione deliberata, per validare l'approccio prima di scalare).
+**Il pool non è ancora collegato a `GameSession.js`**: non può esserlo finché
+i nodi non generano un `esito` pieno/parziale/fallimento, e oggi lo generano
+solo gli effetti fissi scritti in `game-config.js` — `risoluzione.js`
+(competenze + dado) esiste e funziona ma non è ancora agganciato al flusso di
+`/scegli`.
 **Prossimo passo obbligato**: collegare `risoluzione.js` al flusso dei nodi
 (una richiesta chiede un tiro di competenza invece di, o oltre, un effetto
 fisso) — è il passo che sblocca l'uso reale del pool del Cronista, non un
-passo alternativo a piacere.
+passo alternativo a piacere. Non toccare login/progressione tra stanze:
+rimandato a una sessione a parte, come deciso.
 Restano da confermare: la definizione del Margine, e poi codice del libro /
 chat / chiamata vocale (vedi sotto) — invariato dal Passo 3.
 
@@ -109,12 +118,37 @@ oggi contiene un `index.html` minimo).
    Invisibile (contenuto, non motore) e il collegamento a `GameSession.js`.
 
 6. **Pool di contenuto del Cronista per `1836-torino` (fatto nel Passo 5)**:
-   `src/lib/narratore-corsa-invisibile.js`, scoped a un solo nodo per scelta
-   deliberata (validare l'approccio prima di scalare agli altri 4). Varia per
-   esito (baseline sempre presente per apertura/sviluppo/eco), ruolo
-   (apertura), competenza (sviluppo) e fascia di margine (eco) — i tre assi
-   decisi esplicitamente, più quello già previsto dal motore. 28 test
-   automatici, tutti passati (`node test-narratore-corsa-invisibile.mjs`).
+   scoped a un solo nodo per scelta deliberata (validare l'approccio prima di
+   scalare agli altri 4). Varia per esito (baseline sempre presente per
+   apertura/sviluppo/eco), ruolo (apertura), competenza (sviluppo) e fascia
+   di margine (eco) — i tre assi decisi esplicitamente, più quello già
+   previsto dal motore.
+
+7. **Formato del contenuto: markdown, non JS (fatto nel Passo 6)**: il
+   contenuto del punto 6 sopra è stato riscritto da oggetti JS hardcoded a
+   un file di testo leggibile (`src/lib/narratore-corsa-invisibile.md`,
+   tabelle markdown), con un caricatore separato
+   (`src/lib/narratore-corsa-invisibile-loader.js`, puro JS senza I/O) che lo
+   trasforma nel formato atteso dal motore. **Vincolo tecnico rispettato**: i
+   Cloudflare Workers non hanno accesso al filesystem a runtime, quindi il
+   `.md` non può essere letto con `fs.readFile` quando il Worker gira in
+   produzione. Soluzione: `src/lib/narratore-corsa-invisibile.js` importa il
+   `.md` come testo con la sintassi `import testo from "./file.md"`, risolta
+   da Wrangler **in fase di build/deploy** (regola `[[rules]] type = "Text"`
+   aggiunta in `wrangler.toml`) — verificato concretamente con
+   `wrangler deploy --dry-run` su un entry-point di prova: il contenuto del
+   `.md` viene caricato da Wrangler come modulo separato e allegato al
+   pacchetto del Worker, non letto da disco quando il Worker risponde a una
+   richiesta. Stesso meccanismo che Cloudflare usa per i moduli WASM. Nei
+   test locali (`node test-*.mjs`, senza wrangler/miniflare) il `.md` viene
+   invece letto con `fs.readFileSync` **dal test stesso**, non dal codice di
+   produzione: è legittimo perché il test gira su Node, non sul Worker.
+   39 test automatici, tutti passati (`node test-narratore-corsa-invisibile.mjs`),
+   inclusi test sul parsing di markdown malformato (id/testo mancanti, slot
+   sconosciuto, tabella senza intestazione) che falliscono in modo esplicito.
+   Nessun frammento attuale richiede logica programmatica (funzione invece di
+   stringa): se in futuro servisse, resta un'eccezione da scrivere in JS a
+   parte, il caricatore già lo prevede nei commenti.
    **Ancora da fare**: gli altri 4 nodi, e soprattutto il collegamento — non
    può avvenire finché `risoluzione.js` non è agganciato al flusso dei nodi
    (vedi punto 2 e "Punto di ripresa" sopra).
@@ -140,6 +174,8 @@ oggi contiene un `index.html` minimo).
 
 - [x] Pool di frammenti narrativi veri per il Cronista — fatto nel Passo 5,
       ma **solo per il nodo `1836-torino`**; gli altri 4 nodi restano da fare
+- [x] Contenuto del pool spostato da JS a file di testo (`.md` con tabelle) —
+      fatto nel Passo 6, con caricatore compatibile Cloudflare Workers
 - [x] Motore neutro del Cronista (`narratore-simulato.js`) — fatto nel Passo 4
 - [x] Sistema di competenze personaggio — fatto nel Passo 3, numeri da confermare
 - [ ] **Collegare le competenze al flusso dei nodi** (una richiesta che chiede un
@@ -164,6 +200,42 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**10/07/2026 — Passo 6: contenuto del Cronista spostato da JS a markdown**
+Nuovi file: `src/lib/narratore-corsa-invisibile.md` (contenuto), 
+`src/lib/narratore-corsa-invisibile-loader.js` (parser + costruzione pool), 
+`.gitignore` (node_modules/, .wrangler/ — creati da un `npm install` di verifica).
+File modificati: `src/lib/narratore-corsa-invisibile.js` (ora un wrapper sottile
+che importa il `.md` e chiama il caricatore), `test-narratore-corsa-invisibile.mjs`
+(aggiornato per caricare il `.md` vero da disco con `fs.readFileSync`, come farebbe
+un test Node, invece di importare frammenti hardcoded), `wrangler.toml`
+(aggiunta `[[rules]] type = "Text"` per gli import di `.md`), `package-lock.json`
+(generato dall'`npm install`, prima assente).
+- Stesso identico contenuto testuale di prima (nessun frammento nuovo o riscritto),
+  riorganizzato in tabelle markdown leggibili: una per ogni combinazione
+  slot × asse di variazione (baseline per esito, per ruolo, per competenza,
+  per fascia di margine).
+- Il caricatore (`narratore-corsa-invisibile-loader.js`) è puro JS senza I/O:
+  prende il testo del `.md` già letto come stringa e non sa nulla di come è
+  stato ottenuto. Questo lo rende testabile sotto Node esattamente come il
+  resto del motore, e riusabile sia dal Worker sia dai test.
+- **Verificato concretamente** (non solo per lettura del codice) che il
+  meccanismo funzioni sotto Cloudflare: con `npx wrangler deploy --dry-run`
+  su un entry-point di prova che importa `narratore-corsa-invisibile.js`, il
+  `.md` risulta caricato da Wrangler come modulo di testo separato e allegato
+  al pacchetto del Worker (stesso meccanismo dei moduli WASM) — non letto da
+  disco a runtime. File di prova cancellati subito dopo la verifica, non
+  fanno parte del repository.
+- Il test aggiornato (39 verifiche, tutte passate) copre anche il parsing:
+  markdown malformato (riga senza `id`, riga senza `testo`, tabella prima di
+  un'intestazione `## Slot: ...`, nome di slot sconosciuto) fallisce con un
+  errore chiaro invece di produrre dati sbagliati in silenzio.
+- Nessun frammento del nodo `1836-torino` richiede logica programmatica
+  (funzione invece di stringa) — non c'è stato bisogno di tenere nulla in JS
+  a parte, oltre al caricatore stesso.
+- Non toccato: login/progressione tra stanze (rimandato a una sessione a
+  parte, come deciso), e il collegamento vero a `GameSession.js` (resta
+  bloccato da `risoluzione.js`, vedi "Punto di ripresa").
 
 **10/07/2026 — Passo 5: pool di contenuto del Cronista per `1836-torino`**
 Nuovi file: `src/lib/narratore-corsa-invisibile.js`, `test-narratore-corsa-invisibile.mjs`.

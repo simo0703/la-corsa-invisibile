@@ -5,6 +5,16 @@ compatibility_date = "2026-07-01"
 # Custom domain da collegare in dashboard Cloudflare: corsa.roomzero.online
 # (routes/custom domain si configurano dalla dashboard o con `wrangler deploy --routes`)
 
+# Contenuto narrativo del Cronista (src/lib/narratore-corsa-invisibile.md e
+# simili): i Worker non hanno accesso al filesystem a runtime, quindi questi
+# file .md vengono incorporati come stringa direttamente nel bundle in fase
+# di build/deploy (`import testo from "./file.md"` diventa una costante
+# stringa) invece di essere letti da disco quando gira il Worker.
+[[rules]]
+type = "Text"
+globs = ["**/*.md"]
+fallthrough = true
+
 # File statici (l'interfaccia di gioco): tutto ciò che è dentro public/ viene
 # servito automaticamente. Le richieste che NON corrispondono a un file lì
 # dentro (es. /api/config, /admin/genera-codici) arrivano comunque al Worker.
