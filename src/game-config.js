@@ -7,6 +7,13 @@ export const GAME_CONFIG = {
   titolo: "La Corsa Invisibile",
   romanzoDiRiferimento: "Il ragazzo che correva nel tempo / I passi tornano",
 
+  // Soglia del Margine: valore segnaposto, DA CONFERMARE insieme alla
+  // definizione stessa del Margine (vedi commento in GameSession.js).
+  // Al raggiungimento, scatta una complicazione e il margine si dimezza.
+  margineSoglia: 5,
+  margineComplicazioneTesto:
+    "Il margine è esaurito: qualcosa si è rotto nel piano, e la squadra deve reagire.",
+
   // Risorse di squadra (party-level, non per singolo personaggio)
   risorseDiSquadra: {
     cadenza: {
@@ -23,28 +30,64 @@ export const GAME_CONFIG = {
     },
   },
 
+  // Le 5 competenze personali (diverse dalle risorse di squadra, anche se
+  // tre condividono il nome: una competenza alta aiuta il personaggio a
+  // contribuire meglio alla risorsa di squadra omonima). Ogni ruolo ha UNA
+  // competenza principale che pesa di più; le altre restano secondarie e
+  // possono sovrapporsi tra ruoli diversi. "ancoraggio" non è principale per
+  // nessun ruolo: è trasversale, la stabilità personale contro la paura.
+  // NUMERI DA CONFERMARE (segnati anche nel log delle decisioni).
+  competenze: {
+    cadenza: { nome: "Cadenza", descrizione: "Velocità di reazione e movimento." },
+    precisione: { nome: "Precisione", descrizione: "Controllo tecnico, mira, esecuzione esatta." },
+    spiritoDiCorpo: { nome: "Spirito di Corpo", descrizione: "Cura, coesione, capacità di reggere il gruppo." },
+    passoAvanti: { nome: "Passo Avanti", descrizione: "Decisione conscia di superare la paura." },
+    ancoraggio: { nome: "Ancoraggio", descrizione: "Stabilità personale, resistenza al cedimento." },
+  },
+
+  // Parametri di creazione personaggio: principale parte più alta, le altre
+  // più basse, con un piccolo pool di punti extra da distribuire liberamente.
+  creazionePersonaggio: {
+    valorePrincipale: 3,
+    valoreAltre: 1,
+    puntiExtra: 3,
+    valoreMassimo: 5,
+  },
+
+  // Formula di risoluzione: punteggio competenza + un dado piccolo che
+  // corregge senza mai dominare (max 4 punti su un punteggio che arriva a 5).
+  risoluzione: {
+    dadoFacce: 4,
+    sogliaSuccessoPieno: 8,
+    sogliaSuccessoParziale: 5,
+  },
+
   ruoli: [
     {
       id: "esploratore",
       nome: "Esploratore",
       ispirazione: "7° Reggimento — Celeritate ac virtute",
       focus: "Muoversi rapidamente, scoprire pericoli nascosti, vedere prima.",
+      competenzaPrincipale: "cadenza",
     },
     {
       id: "fanfarista",
       nome: "Fanfarista",
       focus: "Rigenera la Cadenza della squadra, scaccia la paura col Suono della Corsa.",
+      competenzaPrincipale: "passoAvanti",
     },
     {
       id: "custode",
       nome: "Custode / Soccorritore",
       focus: "Gestisce crisi ambientali, protegge i civili, cura corpo e spirito.",
+      competenzaPrincipale: "spiritoDiCorpo",
     },
     {
       id: "incursore",
       nome: "Incursore",
       ispirazione: "3° Reggimento — Maiora viribus audere",
       focus: "Affronta minacce dirette, apre le brecce, osa imprese superiori alle proprie forze.",
+      competenzaPrincipale: "precisione",
     },
   ],
 
@@ -72,18 +115,22 @@ export const GAME_CONFIG = {
           risposte: [
             {
               testo: "A tutta velocità, senza calcolare i rischi",
-              effetti: { cadenza: 2, spiritoDiCorpo: -1 },
+              effetti: { cadenza: 2, spiritoDiCorpo: -1, margine: 2 },
               esito: "Arrivate per primi, sfiniti ma con il ritmo già nel sangue.",
+              // Ramificazione: la fretta attira l'attenzione severa di La Marmora.
+              prossima: "decalogo-vaira-severo",
             },
             {
               testo: "Con metodo, risparmiando le forze per dopo",
               effetti: { cadenza: 1 },
               esito: "Meno brillanti, ma nessuno resta indietro.",
+              prossima: "decalogo-vaira",
             },
             {
               testo: "Aiutando chi fatica di più nel gruppo",
               effetti: { spiritoDiCorpo: 1 },
               esito: "Il tempo è peggiore, ma la squadra arriva unita.",
+              prossima: "decalogo-vaira",
             },
           ],
         },
@@ -97,11 +144,35 @@ export const GAME_CONFIG = {
               testo: "Dichiarate apertamente la vostra paura",
               effetti: { passoAvanti: 2 },
               esito: "Il Vaira pesa di più sul cappello, ma pesa meno dentro.",
+              prossima: null, // fine ramo, il nodo si chiude qui
             },
             {
               testo: "Rispondete con una battuta, evitando la domanda",
               effetti: {},
               esito: "Il gruppo ride. Il vero peso resta lì, per ora.",
+              prossima: null,
+            },
+          ],
+        },
+        {
+          // Ramo alternativo raggiunto SOLO da chi ha scelto la fretta sopra:
+          // La Marmora è più duro con chi ha corso senza calcolare i rischi.
+          id: "decalogo-vaira-severo",
+          situazione:
+            "La Marmora vi ferma bruscamente: «La fretta senza controllo vi ha quasi fatto cadere. Qual è il peso che vi spinge a correre così?»",
+          prompt: "Cosa rispondete?",
+          risposte: [
+            {
+              testo: "Ammettete che è la paura di sembrare deboli",
+              effetti: { passoAvanti: 1, margine: -1 },
+              esito: "La Marmora annuisce appena: «Anche questo si corregge.»",
+              prossima: null,
+            },
+            {
+              testo: "Vi irrigidite e non rispondete",
+              effetti: { spiritoDiCorpo: -1 },
+              esito: "Il silenzio pesa più di qualunque risposta.",
+              prossima: null,
             },
           ],
         },
@@ -152,45 +223,7 @@ export const GAME_CONFIG = {
             },
           ],
         },
-        {
-          id: "milano-ferito",
-          situazione: "Tra il fumo, un uomo con una divisa che non è la vostra è a terra, ferito. Geme, non si muove.",
-          prompt: "Cosa fate?",
-          risposte: [
-            {
-              testo: "Lo soccorrete, nonostante tutto",
-              effetti: { spiritoDiCorpo: 1 },
-              esito: "Non è più un nemico o un alleato: è solo un uomo che ha bisogno di aiuto.",
-            },
-            {
-              testo: "Lo disarmate e proseguite, lasciandolo dove sta",
-              effetti: { cadenza: 1 },
-              esito: "Non c'è tempo per la pietà, oggi. La colonna deve avanzare.",
-            },
-            {
-              testo: "Vi fermate a interrogarlo prima di decidere",
-              effetti: { passoAvanti: 1 },
-              esito: "Le sue parole confuse rivelano qualcosa di più sulla città che state attraversando.",
-            },
-          ],
-        },
       ],
-      esitoFinale: {
-        varianti: [
-          {
-            condizione: { spiritoDiCorpo: { min: 1 } },
-            testo:
-              "La barricata cade senza altro sangue versato. Milano non è fatta solo di nemici: la squadra lo ha capito prima ancora di sparare.",
-          },
-          {
-            condizione: { passoAvanti: { min: 1 } },
-            testo:
-              "Sfondano con la forza, e il nome della squadra comincia a correre per la città prima di loro. Ma qualcuno, dietro, si ricorda ancora del fiato perso per sfondare.",
-          },
-        ],
-        default:
-          "La barricata è alle spalle. Milano resta un mosaico di volti che nessuno ha avuto il tempo di guardare bene.",
-      },
     },
     {
       id: "1915-carso-piave",
@@ -215,45 +248,7 @@ export const GAME_CONFIG = {
             },
           ],
         },
-        {
-          id: "carso-bombardamento",
-          situazione: "Un bombardamento si avvicina. Un commilitone ferito chiama aiuto a pochi metri, ma restare scoperti è un rischio.",
-          prompt: "Come rispondete?",
-          risposte: [
-            {
-              testo: "Uscite a recuperarlo sotto il fuoco",
-              effetti: { spiritoDiCorpo: -1, passoAvanti: 2 },
-              esito: "Lo riportate dentro. Il prezzo pagato in paura superata resta inciso in ognuno di voi.",
-            },
-            {
-              testo: "Aspettate una pausa nel fuoco per muovervi",
-              effetti: { cadenza: -1, spiritoDiCorpo: 1 },
-              esito: "La pausa arriva, tardi ma arriva — e nessun altro si espone inutilmente.",
-            },
-          ],
-        },
       ],
-      esitoFinale: {
-        varianti: [
-          {
-            condizione: { passoAvanti: { min: 2 } },
-            testo:
-              "Il coraggio dimostrato sotto il fuoco diventa leggenda di reparto: la squadra ha superato la paura più grande, insieme.",
-          },
-          {
-            condizione: { spiritoDiCorpo: { min: 1 } },
-            testo:
-              "Il gelo non ha vinto: la squadra ha resistito unita, e in trincea questo pesa più di ogni terreno guadagnato.",
-          },
-          {
-            condizione: { spiritoDiCorpo: { max: -1 } },
-            testo:
-              "Avanzano, sì. Ma qualcosa nel gruppo si è incrinato nel freddo — una crepa che il fronte non registra, ma la squadra sì.",
-          },
-        ],
-        default:
-          "Il fronte non si muove. Nemmeno la squadra, per ora — ma quanto durerà, nessuno lo sa.",
-      },
     },
     {
       id: "emergenza-civile",
@@ -278,40 +273,7 @@ export const GAME_CONFIG = {
             },
           ],
         },
-        {
-          id: "emergenza-famiglia",
-          situazione: "Una famiglia si rifiuta di lasciare la propria casa, mentre il tempo stringe.",
-          prompt: "Come li convincete?",
-          risposte: [
-            {
-              testo: "Insistete con fermezza, portandoli via se serve",
-              effetti: { cadenza: 1, spiritoDiCorpo: -1 },
-              esito: "Sono al sicuro, ma il modo in cui ci siete arrivati pesa su tutti.",
-            },
-            {
-              testo: "Restate a parlare, guadagnando la loro fiducia",
-              effetti: { spiritoDiCorpo: 1, cadenza: -1 },
-              esito: "Escono con le proprie gambe, convinti, non trascinati.",
-            },
-          ],
-        },
       ],
-      esitoFinale: {
-        varianti: [
-          {
-            condizione: { passoAvanti: { min: 1 } },
-            testo:
-              "La squadra ha scelto il bene più grande, anche quando costava di più. Chi non hanno raggiunto resterà un peso portato insieme, non da soli.",
-          },
-          {
-            condizione: { cadenza: { min: 1 } },
-            testo:
-              "Sono arrivati subito, dove potevano. Hanno salvato chi si poteva salvare — e imparato, sulla pelle, che non si può essere ovunque.",
-          },
-        ],
-        default:
-          "L'emergenza è finita, per questa volta. Le città ricorderanno chi non è arrivato in tempo, ovunque abbiate scelto di andare.",
-      },
     },
     {
       id: "missione-moderna",
@@ -336,40 +298,7 @@ export const GAME_CONFIG = {
             },
           ],
         },
-        {
-          id: "moderna-provocazione",
-          situazione: "Un giovane del villaggio lancia una provocazione contro la vostra pattuglia, davanti a tutti.",
-          prompt: "Come reagite?",
-          risposte: [
-            {
-              testo: "Rispondete con fermezza, mostrando autorità",
-              effetti: { cadenza: 1, spiritoDiCorpo: -1 },
-              esito: "La tensione si allenta, ma la fiducia guadagnata prima vacilla un poco.",
-            },
-            {
-              testo: "Ignorate la provocazione e restate calmi",
-              effetti: { spiritoDiCorpo: 1 },
-              esito: "Il capo villaggio osserva la vostra pazienza. Forse è proprio questo che stava aspettando di vedere.",
-            },
-          ],
-        },
       ],
-      esitoFinale: {
-        varianti: [
-          {
-            condizione: { spiritoDiCorpo: { min: 1 } },
-            testo:
-              "La fiducia vera si costruisce un giorno alla volta, e oggi è stato il primo passo vero. La porta, questa volta, resta aperta per davvero.",
-          },
-          {
-            condizione: { cadenza: { min: 1 } },
-            testo:
-              "Ottengono rispetto, non fiducia. La missione può continuare, ma ogni passo dovrà essere guadagnato di nuovo, uno alla volta.",
-          },
-        ],
-        default:
-          "La missione continua. La fiducia, quella vera, resta un lavoro lento — e oggi è stato solo l'inizio.",
-      },
     },
   ],
 
