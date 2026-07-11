@@ -1,8 +1,8 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 11 luglio 2026 (fine sessione, dopo il Passo 20 — bilanciamento
-Esploratore: dado di ruolo + bonus condizionale; lavoro sospeso qui su
-richiesta, nuova chat da avviare)
+Aggiornato al: 12 luglio 2026 (fine sessione, dopo il Passo 21 — profilo
+giocatore persistente, Fase 1 di 4: solo schema D1 + registrazione/accesso,
+nessun collegamento al gameplay; lavoro sospeso qui su richiesta)
 
 Questo file serve a non perdersi tra una sessione di lavoro e l'altra: raccoglie cosa
 è stato deciso, cosa è ancora un'ipotesi da confermare, e cosa manca. Va aggiornato
@@ -15,9 +15,20 @@ ruolo) che non risultano loggate qui sotto come Passi numerati — la sessione c
 ha scritte non ha aggiornato questo file. Non ricostruito retroattivamente in questa
 sessione (fuori scope); se serve, va fatto a parte guardando `git log`.
 
-**Punto di ripresa**: con il Passo 20, l'Esploratore ha un primo bilanciamento
-di classe: dado di risoluzione 1d6 (invece del default 1d4) quando tira con la
-propria competenza principale (Cadenza), e un meccanismo generico di bonus
+**Punto di ripresa**: con il Passo 21, esiste un primo pezzo di profilo
+giocatore persistente cross-stanza: tabella D1 `giocatori_persistenti`
+(stesso database già esistente, `la-corsa-invisibile-db`) + endpoint
+`POST /profilo/registra` e `POST /profilo/accedi`, completamente isolati dal
+resto del gioco — **nessun collegamento a `/join`, a `GameSession.js`, o a
+qualunque stanza esistente**. Schema NON ancora applicato al D1 reale
+(`npm run db:init`/`db:init:remote` da eseguire). Fase 1 di 4: le fasi
+successive (collegare il profilo a `/join`, UI in `public/`, uso reale di
+XP/bonus nel gameplay) non sono ancora state discusse né pianificate in
+dettaglio. Vedi Passo 21 nel changelog per le tre scelte di design chiarite
+con l'autore (dove va il D1, hashing del PIN, struttura di `bonusScelti`).
+Con il Passo 20, l'Esploratore ha un primo bilanciamento di classe: dado di
+risoluzione 1d6 (invece del default 1d4) quando tira con la propria
+competenza principale (Cadenza), e un meccanismo generico di bonus
 condizionale (+1 a una competenza, dichiarato a mano su una risposta) pensato
 per inseguimento/fuga/terreno non rivelato — vedi Passo 20 nel changelog per i
 dettagli e le scelte di design. Nessuna risposta esistente nei 5 nodi è stata
@@ -598,6 +609,92 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**12/07/2026 — Passo 21: profilo giocatore persistente, Fase 1 di 4 (schema + registrazione/accesso)**
+Nuovi file: `src/lib/profili-giocatore.js`, `test-profili-giocatore.mjs`.
+File modificati: `schema.sql`, `src/index.js`, `DECISIONI_LA_CORSA_INVISIBILE.md`.
+- Fase 1 di una funzionalità a 4 fasi: profilo giocatore che sopravvive tra
+  stanze diverse (oggi ogni stanza è un Durable Object isolato, senza
+  identità persistente). **Questa fase è solo schema dati +
+  registrazione/accesso: nessun collegamento al gameplay esistente** —
+  `GameSession.js`, `/join`, e tutto ciò che riguarda una singola stanza
+  non sono stati toccati, come richiesto esplicitamente.
+- **Verificato prima di scrivere schema**: esiste un solo D1 nel progetto
+  (`la-corsa-invisibile-db`, binding `env.DB`), già usato per
+  `access_codes`/`subscribers` — dati non legati a una singola stanza. Lo
+  stato di una stanza vive nello storage del Durable Object `GameSession`
+  (SQLite-backed, isolato), non in D1: non esisteva quindi "un D1 già
+  esistente per lo stato delle stanze" da cui separarsi, come invece
+  ipotizzato nella richiesta iniziale.
+- Tre scelte di design non ovvie dal codice esistente, poste esplicitamente
+  all'autore prima di implementare (**non decise unilateralmente**):
+  1. **Dove va il nuovo D1**: nello stesso `la-corsa-invisibile-db` (nuova
+     tabella), non in un database separato — confermato, coerente con la
+     scoperta sopra, zero provisioning Cloudflare extra.
+  2. **Come salvare il PIN**: hash con salt via PBKDF2-SHA256 (Web Crypto,
+     `crypto.subtle`, nessuna dipendenza esterna, 100.000 iterazioni) —
+     confermato, anche sapendo che un PIN a 6 cifre (1.000.000 di
+     combinazioni) resta comunque forzabile offline se il DB trapela:
+     l'hashing evita solo che il PIN sia leggibile a colpo d'occhio da chi
+     legge il database (backup, bug, accesso non autorizzato), non è una
+     protezione forte in assoluto.
+  3. **Struttura di `bonusScelti`**: colonna `TEXT` con un array JSON
+     serializzato, non una tabella relazionale separata — confermato, il
+     sistema di bonus non è ancora progettato (dipende da un game design
+     che arriva in una fase successiva a questa), una colonna flessibile
+     evita di normalizzare uno schema che potrebbe cambiare del tutto.
+- `schema.sql`: nuova tabella `giocatori_persistenti` (`id`, `nome UNIQUE`,
+  `pin_hash`, `pin_salt`, `xp_totale` default 0, `bonus_scelti` default
+  `'[]'`, `created_at`), stesso stile di `access_codes` (indice esplicito
+  sulla colonna univoca, anche se ridondante con l'UNIQUE — per coerenza
+  con la convenzione già in uso). **Non ancora applicata al D1 remoto o
+  locale** (`npm run db:init`/`db:init:remote` non eseguiti in questa
+  sessione — da fare prima che gli endpoint funzionino davvero contro un DB
+  reale, non solo nei test).
+- `src/lib/profili-giocatore.js`: modulo isolato, stesso pattern di
+  `access-codes.js` (funzioni che ricevono `db` come primo argomento, query
+  sempre parametrizzate). `validaNome`/`validaPin` esportate a parte
+  (riusate sia da `registraGiocatore`/`accediGiocatore` sia dai test
+  dedicati al formato). `registraGiocatore` restituisce errori SPECIFICI
+  (`nome_troppo_corto`, `nome_troppo_lungo`, `pin_formato_non_valido`,
+  `nome_gia_in_uso`) perché lì non c'è rischio di facilitare un accesso
+  indebito; `accediGiocatore` restituisce SEMPRE lo stesso
+  `credenziali_non_valide` qualunque sia la causa (nome inesistente, pin
+  sbagliato, o perfino un formato non valido) — verificato esplicitamente
+  nei test che i tre casi producano lo stesso codice, non distinguibile
+  dall'esterno. Il profilo restituito (`rigaAProfilo`) esclude sempre
+  `pin_hash`/`pin_salt`, mai esposti al client.
+  - Nome minimo 3 caratteri (scelto nel range 2-3 proposto, non era un
+    punto da discutere esplicitamente), massimo 30 (limite difensivo
+    aggiunto di mia iniziativa, non richiesto — evita input abnormi
+    sull'endpoint pubblico, segnalato qui per trasparenza).
+- `src/index.js`: due nuovi endpoint, `POST /profilo/registra` (201 su
+  successo, 409 se nome già in uso, 400 sugli altri errori di validazione)
+  e `POST /profilo/accedi` (200 su successo, 401 su credenziali non
+  valide). Messaggi in italiano mappati dal codice macchina in una piccola
+  tabella locale a `index.js` (il modulo di dominio resta testabile senza
+  sapere nulla di HTTP, stesso principio già seguito da `risoluzione.js`).
+  Aggiunti PRIMA del proxy verso `/api/stanza/{roomId}/...`, senza toccare
+  quel routing.
+- `test-profili-giocatore.mjs` (32 verifiche, tutte passate): fake D1
+  minimale in memoria (stesso spirito del fake storage usato per
+  `GameSession`, ma per `db.prepare().bind().first()/.run()`), che
+  riconosce le due sole forme di query emesse dal modulo. Copre: le 4
+  richieste esplicite (registrazione riuscita, nome duplicato fallisce,
+  login riuscito, login con pin/nome sbagliato fallisce) più validazione
+  formato pin isolata, verifica che il profilo non esponga mai
+  pin_hash/pin_salt, e verifica che due giocatori con lo stesso PIN si
+  autentichino comunque in modo indipendente (salt per record).
+- Rilanciata l'intera suite del repository (19 file) dopo la modifica:
+  nessuna regressione. `index.js` verificato anche con un import diretto
+  sotto Node puro (nessun test esistente lo importa direttamente).
+- Non toccato, come richiesto: `GameSession.js`, `/join`, `game-config.js`,
+  `public/index.html` — nessun collegamento al gameplay in questa fase.
+- **Resta da fare (fasi successive, non ancora discusse)**: applicare
+  `schema.sql` al D1 reale; collegare il profilo a `/join` (associare un
+  giocatore di stanza a un profilo persistente); UI di
+  registrazione/accesso in `public/`; usare `xpTotale`/`bonusScelti` nel
+  gameplay una volta che il sistema di bonus sarà progettato.
 
 **11/07/2026 — Passo 20: bilanciamento Esploratore (dado di ruolo + bonus condizionale)**
 File modificati: `src/game-config.js`, `src/durable-objects/GameSession.js`,
