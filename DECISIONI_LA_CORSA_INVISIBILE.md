@@ -1,45 +1,65 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 11 luglio 2026 (fine sessione, dopo il Passo 15 — lavoro sospeso qui su richiesta, nuova chat da avviare)
+Aggiornato al: 11 luglio 2026 (fine sessione, dopo il Passo 18 — tutti e 5
+i nodi temporali hanno ora almeno una risposta a tiro reale con pool
+Cronista e librerie di testo libero collegate; lavoro sospeso qui su
+richiesta, nuova chat da avviare)
 
 Questo file serve a non perdersi tra una sessione di lavoro e l'altra: raccoglie cosa
 è stato deciso, cosa è ancora un'ipotesi da confermare, e cosa manca. Va aggiornato
 ogni 3-4 passaggi di lavoro, non a ogni singola modifica.
 
-**Punto di ripresa**: il testo libero (interprete di linguaggio naturale) è
-collegato al gioco (Passo 13), ma **solo per il nodo pilota `1836-torino`**
-— si affianca ai bottoni delle risposte, non li sostituisce. Il matching
-gira lato server (nuovo modulo `src/lib/interprete-libero/`, copiato da
-`simulatore-interprete` e convertito in ESM). Le librerie di frasi
-d'esempio sono file `.md` per richiesta, registrate in
-`src/lib/interprete-registro-librerie.js` (stesso schema del registro
-`nodoId → pool` del Cronista). Quando l'interprete è ambiguo, la richiesta
-resta `session.interpretazionePendente` finché il comandante non la
-risolve (`POST /risolvi-interpretazione`) — funziona tra dispositivi
-diversi, verificato dal vivo con due tab separate. **Bug reale trovato e
-corretto durante questa verifica**: il polling di `public/index.html`
-(`avviaPolling`) non ha mai aggiornato nulla in tempo reale per nessun
-giocatore, da prima di questa sessione — destrutturava `{ session }` da
-`GET /state`, che invece restituisce la sessione senza involucro. Corretto.
-Da qui, le risposte "a tiro" si sono estese oltre `1836-torino`: nel Passo
-14 "Carica diretta" (`1848-milano` → `milano-barricata`) è passata da
-effetto fisso a `competenzaRichiesta: "cadenza"`, con pool Cronista e
-librerie interprete dedicate per **tutte e 6** le risposte del nodo (anche
-le 5 rimaste fisse, che il testo libero copre comunque). Nel Passo 15
-"Uscite a recuperarlo sotto il fuoco" (`1915-carso-piave` →
-`carso-bombardamento`) è passata a `competenzaRichiesta: "passoAvanti"` —
-**senza** pool Cronista né libreria interprete per questo nodo (non
-richiesti in questo passo): il testo d'esito resta quello fisso per tier
-scritto in `game-config.js`, comportamento atteso.
+**Punto di ripresa**: con il Passo 18, **tutti e 5 i nodi temporali** del
+gioco (`1836-torino`, `1848-milano`, `1915-carso-piave`,
+`emergenza-civile`, `missione-moderna`) hanno ora almeno una risposta
+convertita a tiro reale (`competenzaRichiesta`), un pool di contenuto per
+il Cronista registrato in `src/lib/narratore-registro-pool.js`, e librerie
+di testo libero per **tutte** le loro richieste registrate in
+`src/lib/interprete-registro-librerie.js` — stesso schema replicato
+identico nodo per nodo, senza mai toccare il motore generico
+(`GameSession.js`, `narratore-simulato.js`, `src/lib/interprete-libero/`).
+Il testo libero (interprete di linguaggio naturale) è collegato al gioco
+dal Passo 13 — si affianca ai bottoni delle risposte, non li sostituisce.
+Il matching gira lato server (modulo `src/lib/interprete-libero/`, copiato
+da `simulatore-interprete` e convertito in ESM). Quando l'interprete è
+ambiguo, la richiesta resta `session.interpretazionePendente` finché il
+comandante non la risolve (`POST /risolvi-interpretazione`) — funziona tra
+dispositivi diversi, verificato dal vivo con due tab separate.
+**Stato per nodo** (competenza a tiro / pool Cronista / librerie testo
+libero — tutte e tre ormai presenti ovunque, quello che cambia è quante
+risposte per nodo hanno il tiro):
+- `1836-torino`: 1 risposta a tiro (cadenza, Passo 9), pool (Passo 5),
+  librerie sulle 3 opzioni di `decalogo-ginnastica` più le richieste del
+  ramo severo (Passo 13).
+- `1848-milano`: 1 risposta a tiro (cadenza, Passo 14), pool (Passo 14),
+  librerie su **tutte e 6** le risposte delle due richieste del nodo
+  (Passo 14).
+- `1915-carso-piave`: 1 risposta a tiro (passoAvanti, Passo 15), pool e
+  librerie su **entrambe** le richieste del nodo aggiunti nel Passo 16
+  (mancavano ancora al termine del Passo 15).
+- `emergenza-civile`: 1 risposta a tiro (spiritoDiCorpo, Passo 17), pool e
+  librerie su **entrambe** le richieste del nodo, stesso Passo 17.
+- `missione-moderna`: 1 risposta a tiro (ancoraggio, Passo 18), pool e
+  librerie su **entrambe** le richieste del nodo, stesso Passo 18.
+**Bug reale trovato e corretto nel Passo 13**: il polling di
+`public/index.html` (`avviaPolling`) non ha mai aggiornato nulla in tempo
+reale per nessun giocatore, da prima di quella sessione —
+destrutturava `{ session }` da `GET /state`, che invece restituisce la
+sessione senza involucro. Corretto.
 Il bug noto di `public/index.html` (non mandava mai `giocatoreId` a
 `/scegli`) è corretto dal Passo 11.
 Il Cronista è collegato al flusso di `/scegli` dal Passo 10, tramite un
-registro `nodoId → pool` (`src/lib/narratore-registro-pool.js`) — oggi
-copre `1836-torino` e `1848-milano`. `storicoFrammenti`
-(anti-ripetizione del Cronista) resta sempre `[]`: nessun nuovo campo di
-sessione per ora, vedi nota più sotto.
+registro `nodoId → pool` (`src/lib/narratore-registro-pool.js`) — ora
+copre tutti e 5 i nodi. `storicoFrammenti` (anti-ripetizione del Cronista)
+resta sempre `[]`: nessun nuovo campo di sessione per ora, vedi nota più
+sotto.
 Restano da confermare: la definizione del Margine, e poi codice del libro /
-chat / chiamata vocale (vedi sotto) — invariato dal Passo 3.
+chat / chiamata vocale (vedi sotto) — invariato dal Passo 3. Restano anche
+da fare, ora che la copertura di base è completa: convertire altre
+risposte fisse a tiro reale (oggi ogni nodo ne ha solo una), tarare le
+soglie provvisorie dell'interprete su testo libero reale scritto da
+persone vere, e — se emerge un bisogno reale — tracciare
+`storicoFrammenti`.
 
 **Nota per il futuro (non lavoro da fare subito)**: `storicoFrammenti` è
 stato lasciato sempre `[]` per scelta — il motore lo supporta (evita di
@@ -434,6 +454,58 @@ oggi contiene un `index.html` minimo).
     `game-config.js` (`effettiPerEsito`/`esito`), comportamento atteso e
     coerente con come funzionava già prima dell'esistenza del Cronista.
 
+17. **Pool Cronista e librerie di testo libero completati per
+    `1915-carso-piave` (fatto nel Passo 16)**: colmato il divario lasciato
+    dal Passo 15. Pool sulla stessa identica struttura degli altri nodi
+    (`src/lib/narratore-1915-carso-piave.md`/`.js`, registrato in
+    `narratore-registro-pool.js`), contenuto fornito dall'utente. Librerie
+    di testo libero su **entrambe** le richieste del nodo (`carso-attesa`,
+    `carso-bombardamento`, 2 opzioni ciascuna — meno delle 3 degli altri
+    nodi, perché qui ogni richiesta ha solo due risposte in totale), anche
+    qui contenuto fornito dall'utente, registrate in
+    `interprete-registro-librerie.js`. Verificato dal vivo con
+    `wrangler dev`: testo libero con match automatico su entrambe le
+    richieste, narrazione composta dal Cronista sul tiro reale di "Uscite
+    a recuperarlo", esito del nodo coerente.
+
+18. **`emergenza-civile`: "Restate a parlare, guadagnando la loro fiducia"
+    a tiro reale (spiritoDiCorpo) + pool Cronista + librerie di testo
+    libero (fatto nel Passo 17)**: stesso schema ormai consolidato —
+    richiesta `emergenza-famiglia`, risposta convertita da effetto fisso a
+    `competenzaRichiesta: "spiritoDiCorpo"` con `effettiPerEsito`/`esito`
+    per tier; l'altra risposta della stessa richiesta ("Insistete con
+    fermezza, portandoli via se serve") resta a effetto fisso. Pool
+    Cronista (`src/lib/narratore-emergenza-civile.md`/`.js`) e librerie di
+    testo libero su **entrambe** le richieste del nodo (`emergenza-scelta`,
+    `emergenza-famiglia`), contenuto fornito dall'utente in entrambi i
+    casi. Verificato dal vivo con `wrangler dev`, in due passaggi separati
+    (prima solo il tiro con testo statico, poi — dopo aver aggiunto pool e
+    librerie — la stessa risposta via testo libero con narrazione composta
+    dal Cronista): dado variabile, tier coerente col totale, effetti
+    corretti per tier, nessuna regressione sull'altra risposta né sulla
+    richiesta `emergenza-scelta`.
+
+19. **`missione-moderna`: "Ignorate la provocazione e restate calmi" a
+    tiro reale (ancoraggio) + pool Cronista + librerie di testo libero
+    (fatto nel Passo 18)**: stesso schema, ultimo dei 5 nodi a essere
+    completato. Richiesta `moderna-provocazione`, risposta convertita a
+    `competenzaRichiesta: "ancoraggio"` — la prima risposta reale del
+    gioco a usare questa competenza (trasversale, di nessun ruolo
+    principale: ogni ruolo parte da 1, come le competenze secondarie).
+    L'altra risposta della stessa richiesta ("Rispondete con fermezza,
+    mostrando autorità") resta a effetto fisso. Pool Cronista
+    (`src/lib/narratore-missione-moderna.md`/`.js`) e librerie di testo
+    libero su **entrambe** le richieste del nodo (`moderna-fiducia`,
+    `moderna-provocazione`), contenuto fornito dall'utente. Verificato dal
+    vivo con `wrangler dev`, stesso schema in due passaggi del punto 18:
+    dado variabile (osservato anche un tiro minimo, competenza 1 + dado 1
+    = totale 2, tier "fallimento" — coerente con le soglie), narrazione
+    composta dal Cronista dopo l'aggiunta del pool, nessuna regressione.
+    **Con questo, tutti e 5 i nodi temporali hanno almeno una risposta a
+    tiro reale, un pool Cronista e librerie di testo libero collegate** —
+    vedi "Punto di ripresa" in cima al file per lo stato completo nodo per
+    nodo.
+
 ---
 
 ## Ipotesi in attesa di conferma (NON dare per deciso)
@@ -471,23 +543,24 @@ oggi contiene un `index.html` minimo).
 - [x] Collegare il Cronista a `GameSession.js` per il nodo `1836-torino` —
       fatto nel Passo 10, tramite registro `nodoId → pool` generico
 - [x] Pool di frammenti narrativi veri per `1848-milano` — fatto nel Passo 14
-- [ ] Pool di frammenti narrativi veri per gli altri 3 nodi (Carso/Piave,
-      Emergenza civile, missione moderna) — quando pronti, basta aggiungerli
-      al registro (`src/lib/narratore-registro-pool.js`), zero modifiche a
-      `GameSession.js`
+- [x] Pool di frammenti narrativi veri per gli altri 3 nodi (Carso/Piave,
+      Emergenza civile, missione moderna) — fatto nei Passi 16-18; il
+      registro (`src/lib/narratore-registro-pool.js`) ora copre tutti e 5
+      i nodi, zero modifiche a `GameSession.js`
 - [x] Interprete di testo libero collegato al gioco (nodo pilota
       `1836-torino`) — fatto nel Passo 13, esteso a `1848-milano` nel
       Passo 14 (librerie per tutte e 6 le risposte del nodo)
-- [ ] Interprete di testo libero per gli altri 3 nodi senza libreria ancora
-      (Carso/Piave — solo `carso-bombardamento` ha un tiro reale, ma zero
-      librerie interprete finora —, Emergenza civile, missione moderna)
+- [x] Interprete di testo libero per gli altri 3 nodi (Carso/Piave,
+      Emergenza civile, missione moderna) — fatto nei Passi 16-18, librerie
+      su tutte le richieste di tutti e 5 i nodi
 - [ ] Tarare le soglie provvisorie dell'interprete (`sogliaAlta: 0.6`,
       `margineDistacco: 0.15` in `GameSession.js`) su testo libero reale
       scritto da persone vere, non solo su frasi di test scritte a mano
-- [ ] Convertire altre risposte fisse a tiro reale nei nodi che già hanno
-      almeno una risposta convertita (`1836-torino`, `1848-milano`,
-      `1915-carso-piave`), e nei 2 nodi ancora senza nessun tiro reale
-      (Emergenza civile, missione moderna)
+- [ ] Convertire altre risposte fisse a tiro reale — ogni nodo ne ha oggi
+      solo una; tutti e 5 i nodi (`1836-torino`, `1848-milano`,
+      `1915-carso-piave`, `emergenza-civile`, `missione-moderna`) hanno
+      già pool e librerie pronti, quindi una nuova risposta a tiro in un
+      nodo esistente può riusarli senza altro lavoro di contenuto
 - [x] `public/index.html` non mandava `giocatoreId` a `/scegli` — corretto
       nel Passo 11, verificato dal vivo con `wrangler dev` + browser
 - [x] Identità comandante (primo giocatore della stanza) + pannello nella
@@ -508,6 +581,88 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**11/07/2026 — Passo 18: `missione-moderna` — tiro reale (ancoraggio) + pool Cronista + librerie interprete**
+Nuovi file: `src/lib/narratore-missione-moderna.md`, `src/lib/narratore-missione-moderna.js`,
+`src/lib/interprete-libero/missione-moderna/` (moderna-fiducia.md/.js,
+moderna-provocazione.md/.js), `test-narratore-missione-moderna.mjs`,
+`test-interprete-libero-missione-moderna.mjs`.
+File modificati: `src/game-config.js`, `src/lib/narratore-registro-pool.js`,
+`src/lib/interprete-registro-librerie.js`.
+- `moderna-provocazione` → risposta "Ignorate la provocazione e restate
+  calmi": da effetto fisso a `competenzaRichiesta: "ancoraggio"`, stesso
+  schema degli altri nodi — prima risposta reale del gioco a usare questa
+  competenza (trasversale, di nessun ruolo principale). L'altra risposta
+  della stessa richiesta ("Rispondete con fermezza, mostrando autorità")
+  non toccata, resta a effetto fisso.
+- Pool Cronista per il nodo e librerie interprete per **entrambe** le
+  richieste (`moderna-fiducia`, `moderna-provocazione`), contenuto
+  fornito dall'utente, stesso schema esatto di `emergenza-civile`. Nuovi
+  test dedicati per entrambi, tutti passati.
+- Prima del commit, verifica dal vivo con `wrangler dev` in due fasi
+  separate: (1) solo la conversione a tiro reale, tier "fallimento"
+  osservato con competenza 1 + dado 1 = totale 2, testo statico da
+  `game-config.js` confermato esplicitamente (nessun pool ancora
+  presente); (2) dopo l'aggiunta di pool e librerie, la stessa richiesta
+  risolta via testo libero produce narrazione composta dal Cronista (non
+  più il testo statico), testo libero verificato su tutte e 4 le opzioni
+  del nodo, nessuna regressione su "Rispondete con fermezza" (resta a
+  effetto fisso senza Cronista) né sulla richiesta `moderna-fiducia`.
+- **Con questo, tutti e 5 i nodi temporali hanno almeno una risposta a
+  tiro reale, un pool Cronista e librerie di testo libero collegate.**
+- Commit `a4131fe`.
+
+**11/07/2026 — Passo 17: `emergenza-civile` — tiro reale (spiritoDiCorpo) + pool Cronista + librerie interprete**
+Nuovi file: `src/lib/narratore-emergenza-civile.md`, `src/lib/narratore-emergenza-civile.js`,
+`src/lib/interprete-libero/emergenza-civile/` (emergenza-scelta.md/.js,
+emergenza-famiglia.md/.js), `test-narratore-emergenza-civile.mjs`,
+`test-interprete-libero-emergenza-civile.mjs`.
+File modificati: `src/game-config.js`, `src/lib/narratore-registro-pool.js`,
+`src/lib/interprete-registro-librerie.js`.
+- `emergenza-famiglia` → risposta "Restate a parlare, guadagnando la loro
+  fiducia": da effetto fisso a `competenzaRichiesta: "spiritoDiCorpo"`,
+  stesso schema degli altri nodi. L'altra risposta della stessa richiesta
+  ("Insistete con fermezza, portandoli via se serve") non toccata, resta
+  a effetto fisso.
+- Pool Cronista per il nodo e librerie interprete per **entrambe** le
+  richieste (`emergenza-scelta`, `emergenza-famiglia`), contenuto fornito
+  dall'utente, stesso schema esatto di `1915-carso-piave`. Nuovi test
+  dedicati per entrambi, tutti passati.
+- Prima del commit, verifica dal vivo con `wrangler dev` in due fasi
+  separate, come da metodo ormai consolidato: (1) solo la conversione a
+  tiro reale, testo statico da `game-config.js` confermato esplicitamente
+  (nessun pool ancora presente in quella fase); (2) dopo l'aggiunta di
+  pool e librerie, la stessa richiesta risolta via testo libero produce
+  narrazione composta dal Cronista, testo libero verificato su tutte e 4
+  le opzioni del nodo, nessuna regressione su "Insistete con fermezza"
+  (resta a effetto fisso senza Cronista) né sulla richiesta
+  `emergenza-scelta`.
+- Commit `89b5581`.
+
+**11/07/2026 — Passo 16: `1915-carso-piave` — pool Cronista + librerie interprete (completamento)**
+Nuovi file: `src/lib/narratore-1915-carso-piave.md`, `src/lib/narratore-1915-carso-piave.js`,
+`src/lib/interprete-libero/1915-carso-piave/` (carso-attesa.md/.js,
+carso-bombardamento.md/.js), `test-narratore-1915-carso-piave.mjs`,
+`test-interprete-libero-1915-carso-piave.mjs`.
+File modificati: `src/lib/narratore-registro-pool.js`,
+`src/lib/interprete-registro-librerie.js`.
+- Colma il divario lasciato dal Passo 15: quel passo aveva convertito
+  `carso-bombardamento` a tiro reale ma esplicitamente senza pool né
+  libreria. Qui aggiunti entrambi, stesso schema di `1848-milano` —
+  pool sul tiro reale esistente, librerie su **entrambe** le richieste
+  del nodo (`carso-attesa`, `carso-bombardamento`, 2 opzioni ciascuna,
+  contenuto fornito dall'utente). Nessuna modifica a `game-config.js` in
+  questo passo (il tiro reale esisteva già).
+- Un test di frase estranea per `carso-attesa` è stato scoperto ambiguo
+  in fase di scrittura (la frase inizialmente scelta condivideva una
+  radice con un sinonimo di "aspettare" nel pool di questo nodo,
+  producendo un match debole invece di nessuna corrispondenza) —
+  verificato con uno script ad-hoc prima di correggere la frase di test,
+  non un problema del motore.
+- Verificato dal vivo con `wrangler dev`: testo libero con match
+  automatico su entrambe le richieste, narrazione composta dal Cronista
+  sul tiro reale di "Uscite a recuperarlo", esito del nodo coerente.
+- Commit `ee2a1b4`.
 
 **11/07/2026 — Passo 15: `1915-carso-piave` — "Uscite a recuperarlo" a tiro reale**
 File modificati: `src/game-config.js`.
