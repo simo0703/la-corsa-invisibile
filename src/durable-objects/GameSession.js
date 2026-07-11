@@ -2,7 +2,7 @@ import { GAME_CONFIG } from "../game-config.js";
 import { creaCompetenzeIniziali, risolviAzione } from "../lib/risoluzione.js";
 import { componiNarrazione } from "../lib/narratore-simulato.js";
 import { trovaPoolPerNodo } from "../lib/narratore-registro-pool.js";
-import { interpreta } from "../lib/interprete-libero/interprete.js";
+import { interpreta } from "simulatore-interprete/src/interprete.js";
 import { trovaLibreriaPerRichiesta } from "../lib/interprete-registro-librerie.js";
 
 // Un Durable Object per stanza/sessione: isolamento totale tra sessioni diverse.

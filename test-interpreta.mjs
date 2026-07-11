@@ -16,7 +16,7 @@ import path from "node:path";
 
 import { GameSession } from "./src/durable-objects/GameSession.js";
 import { registraLibreria } from "./src/lib/interprete-registro-librerie.js";
-import { analizzaLibreria } from "./src/lib/interprete-libero/libreria.js";
+import { analizzaLibreria } from "simulatore-interprete/src/libreria.js";
 
 let falliti = 0;
 function verifica(descrizione, condizione) {

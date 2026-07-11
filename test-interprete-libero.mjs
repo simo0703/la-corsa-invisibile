@@ -15,10 +15,10 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
-import { normalizza, tokenizza } from "./src/lib/interprete-libero/normalizza.js";
-import { analizzaLibreria } from "./src/lib/interprete-libero/libreria.js";
-import { calcolaPunteggio, calcolaPunteggi } from "./src/lib/interprete-libero/punteggio.js";
-import { interpreta } from "./src/lib/interprete-libero/interprete.js";
+import { normalizza, tokenizza } from "simulatore-interprete/src/normalizza.js";
+import { analizzaLibreria } from "simulatore-interprete/src/libreria.js";
+import { calcolaPunteggio, calcolaPunteggi } from "simulatore-interprete/src/punteggio.js";
+import { interpreta } from "simulatore-interprete/src/interprete.js";
 
 let falliti = 0;
 function verifica(descrizione, condizione) {

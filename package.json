@@ -13,6 +13,7 @@
     "wrangler": "^3.90.0"
   },
   "dependencies": {
+    "simulatore-interprete": "github:simo0703/simulatore-interprete#f2aa39c2222831dcea01c519d079de7faf54a019",
     "snowball-stemmers": "^0.6.0"
   }
 }

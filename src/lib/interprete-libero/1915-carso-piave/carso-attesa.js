@@ -3,6 +3,6 @@
 // come testo (risolvibile solo da Wrangler, vedi [[rules]] in
 // wrangler.toml) e lo trasforma subito in dati strutturati.
 import testoGrezzo from "./carso-attesa.md";
-import { analizzaLibreria } from "../libreria.js";
+import { analizzaLibreria } from "simulatore-interprete/src/libreria.js";
 
 export const opzioni = analizzaLibreria(testoGrezzo);

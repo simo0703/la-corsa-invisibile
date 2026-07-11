@@ -11,8 +11,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
-import { analizzaLibreria } from "./src/lib/interprete-libero/libreria.js";
-import { interpreta } from "./src/lib/interprete-libero/interprete.js";
+import { analizzaLibreria } from "simulatore-interprete/src/libreria.js";
+import { interpreta } from "simulatore-interprete/src/interprete.js";
 
 let falliti = 0;
 function verifica(descrizione, condizione) {
