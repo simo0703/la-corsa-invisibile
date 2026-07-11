@@ -494,5 +494,235 @@ console.log("\n--- /scegli con indice di risposta inesistente ---");
   verifica("un indice di risposta che non esiste risponde 400", status === 400);
 }
 
+console.log("\n--- /proponi-cessione: proposta valida ---");
+{
+  const { gs } = nuovaSessione();
+  const { giocatoreId: idComandante, token: tokenComandante } = await joinComandante(gs, "Comandante");
+  const vice = await chiamata(gs, "/join", "POST", { nome: "Vice", ruolo: "custode" });
+  const idVice = vice.json.giocatori[1].id;
+
+  const { status, json } = await chiamata(gs, "/proponi-cessione", "POST", {
+    versoGiocatoreId: idVice,
+    giocatoreId: idComandante,
+    token: tokenComandante,
+  });
+  verifica("risponde 200", status === 200);
+  verifica(
+    "cessioneComandantePendente registra il destinatario",
+    json.cessioneComandantePendente && json.cessioneComandantePendente.versoGiocatoreId === idVice
+  );
+  verifica(
+    "il ruolo non cambia finche' la proposta non e' accettata",
+    json.giocatori[0].comandante === true && json.giocatori[1].comandante === false
+  );
+}
+
+console.log("\n--- /proponi-cessione: rifiutata da chi non e' comandante ---");
+{
+  const { gs } = nuovaSessione();
+  const { giocatoreId: idComandante } = await joinComandante(gs, "Comandante");
+  const vice = await chiamata(gs, "/join", "POST", { nome: "Vice", ruolo: "custode" });
+  const idVice = vice.json.giocatori[1].id;
+  const tokenVice = vice.json.token;
+
+  const { status } = await chiamata(gs, "/proponi-cessione", "POST", {
+    versoGiocatoreId: idComandante,
+    giocatoreId: idVice,
+    token: tokenVice,
+  });
+  verifica("risponde 403 (chi propone non e' comandante)", status === 403);
+}
+
+console.log("\n--- /proponi-cessione: a se stessi rifiutata ---");
+{
+  const { gs } = nuovaSessione();
+  const { giocatoreId: idComandante, token: tokenComandante } = await joinComandante(gs, "Comandante");
+
+  const { status } = await chiamata(gs, "/proponi-cessione", "POST", {
+    versoGiocatoreId: idComandante,
+    giocatoreId: idComandante,
+    token: tokenComandante,
+  });
+  verifica("risponde 400 (non ha senso cedere il ruolo a se stessi)", status === 400);
+}
+
+console.log("\n--- /proponi-cessione: doppia proposta rifiutata (gia' pendente) ---");
+{
+  const { gs } = nuovaSessione();
+  const { giocatoreId: idComandante, token: tokenComandante } = await joinComandante(gs, "Comandante");
+  const vice = await chiamata(gs, "/join", "POST", { nome: "Vice", ruolo: "custode" });
+  const idVice = vice.json.giocatori[1].id;
+  const terzo = await chiamata(gs, "/join", "POST", { nome: "Terzo", ruolo: "fanfara" });
+  const idTerzo = terzo.json.giocatori[2].id;
+
+  const prima = await chiamata(gs, "/proponi-cessione", "POST", {
+    versoGiocatoreId: idVice,
+    giocatoreId: idComandante,
+    token: tokenComandante,
+  });
+  verifica("la prima proposta riesce", prima.status === 200);
+
+  const seconda = await chiamata(gs, "/proponi-cessione", "POST", {
+    versoGiocatoreId: idTerzo,
+    giocatoreId: idComandante,
+    token: tokenComandante,
+  });
+  verifica("una seconda proposta mentre una e' gia' pendente risponde 409", seconda.status === 409);
+
+  const stato = await chiamata(gs, "/state");
+  verifica(
+    "la cessione pendente resta quella originale (non sovrascritta silenziosamente)",
+    stato.json.cessioneComandantePendente.versoGiocatoreId === idVice
+  );
+}
+
+console.log("\n--- /accetta-cessione: il destinatario corretto accetta, il ruolo passa ---");
+{
+  const { gs } = nuovaSessione();
+  const { giocatoreId: idComandante, token: tokenComandante } = await joinComandante(gs, "Comandante");
+  const vice = await chiamata(gs, "/join", "POST", { nome: "Vice", ruolo: "custode" });
+  const idVice = vice.json.giocatori[1].id;
+  const tokenVice = vice.json.token;
+
+  await chiamata(gs, "/proponi-cessione", "POST", {
+    versoGiocatoreId: idVice,
+    giocatoreId: idComandante,
+    token: tokenComandante,
+  });
+
+  const { status, json } = await chiamata(gs, "/accetta-cessione", "POST", { giocatoreId: idVice, token: tokenVice });
+  verifica("risponde 200", status === 200);
+  verifica(
+    "il nuovo comandante e' il destinatario",
+    json.giocatori.find((g) => g.id === idVice).comandante === true
+  );
+  verifica(
+    "il vecchio comandante torna un giocatore normale",
+    json.giocatori.find((g) => g.id === idComandante).comandante === false
+  );
+  verifica("cessioneComandantePendente e' stata svuotata", json.cessioneComandantePendente === null);
+}
+
+console.log("\n--- /accetta-cessione: tentata da chi non e' il destinatario, rifiutata ---");
+{
+  const { gs } = nuovaSessione();
+  const { giocatoreId: idComandante, token: tokenComandante } = await joinComandante(gs, "Comandante");
+  const vice = await chiamata(gs, "/join", "POST", { nome: "Vice", ruolo: "custode" });
+  const idVice = vice.json.giocatori[1].id;
+  const terzo = await chiamata(gs, "/join", "POST", { nome: "Terzo", ruolo: "fanfara" });
+  const idTerzo = terzo.json.giocatori[2].id;
+  const tokenTerzo = terzo.json.token;
+
+  await chiamata(gs, "/proponi-cessione", "POST", {
+    versoGiocatoreId: idVice,
+    giocatoreId: idComandante,
+    token: tokenComandante,
+  });
+
+  const { status } = await chiamata(gs, "/accetta-cessione", "POST", { giocatoreId: idTerzo, token: tokenTerzo });
+  verifica("risponde 403 (non e' il destinatario della proposta)", status === 403);
+
+  const stato = await chiamata(gs, "/state");
+  verifica(
+    "il ruolo non e' cambiato",
+    stato.json.giocatori.find((g) => g.id === idComandante).comandante === true
+  );
+  verifica("la cessione resta ancora pendente", stato.json.cessioneComandantePendente !== null);
+}
+
+console.log("\n--- /rifiuta-cessione: rifiutata dal destinatario ---");
+{
+  const { gs } = nuovaSessione();
+  const { giocatoreId: idComandante, token: tokenComandante } = await joinComandante(gs, "Comandante");
+  const vice = await chiamata(gs, "/join", "POST", { nome: "Vice", ruolo: "custode" });
+  const idVice = vice.json.giocatori[1].id;
+  const tokenVice = vice.json.token;
+
+  await chiamata(gs, "/proponi-cessione", "POST", {
+    versoGiocatoreId: idVice,
+    giocatoreId: idComandante,
+    token: tokenComandante,
+  });
+
+  const { status, json } = await chiamata(gs, "/rifiuta-cessione", "POST", { giocatoreId: idVice, token: tokenVice });
+  verifica("risponde 200", status === 200);
+  verifica("cessioneComandantePendente e' stata svuotata", json.cessioneComandantePendente === null);
+  verifica(
+    "il ruolo non e' cambiato",
+    json.giocatori.find((g) => g.id === idComandante).comandante === true
+  );
+}
+
+console.log("\n--- /rifiuta-cessione: annullata dal proponente ---");
+{
+  const { gs } = nuovaSessione();
+  const { giocatoreId: idComandante, token: tokenComandante } = await joinComandante(gs, "Comandante");
+  const vice = await chiamata(gs, "/join", "POST", { nome: "Vice", ruolo: "custode" });
+  const idVice = vice.json.giocatori[1].id;
+
+  await chiamata(gs, "/proponi-cessione", "POST", {
+    versoGiocatoreId: idVice,
+    giocatoreId: idComandante,
+    token: tokenComandante,
+  });
+
+  const { status, json } = await chiamata(gs, "/rifiuta-cessione", "POST", {
+    giocatoreId: idComandante,
+    token: tokenComandante,
+  });
+  verifica("risponde 200 (il proponente puo' annullare la propria proposta)", status === 200);
+  verifica("cessioneComandantePendente e' stata svuotata", json.cessioneComandantePendente === null);
+}
+
+console.log("\n--- /rifiuta-cessione: tentata da un terzo giocatore, rifiutata ---");
+{
+  const { gs } = nuovaSessione();
+  const { giocatoreId: idComandante, token: tokenComandante } = await joinComandante(gs, "Comandante");
+  const vice = await chiamata(gs, "/join", "POST", { nome: "Vice", ruolo: "custode" });
+  const idVice = vice.json.giocatori[1].id;
+  const terzo = await chiamata(gs, "/join", "POST", { nome: "Terzo", ruolo: "fanfara" });
+  const idTerzo = terzo.json.giocatori[2].id;
+  const tokenTerzo = terzo.json.token;
+
+  await chiamata(gs, "/proponi-cessione", "POST", {
+    versoGiocatoreId: idVice,
+    giocatoreId: idComandante,
+    token: tokenComandante,
+  });
+
+  const { status } = await chiamata(gs, "/rifiuta-cessione", "POST", { giocatoreId: idTerzo, token: tokenTerzo });
+  verifica("risponde 403 (un terzo giocatore, ne' proponente ne' destinatario, non puo' rifiutare)", status === 403);
+
+  const stato = await chiamata(gs, "/state");
+  verifica("la cessione resta ancora pendente", stato.json.cessioneComandantePendente !== null);
+}
+
+console.log("\n--- GET /state mostra cessioneComandantePendente quando presente ---");
+{
+  const { gs } = nuovaSessione();
+  const { giocatoreId: idComandante, token: tokenComandante } = await joinComandante(gs, "Comandante");
+  const vice = await chiamata(gs, "/join", "POST", { nome: "Vice", ruolo: "custode" });
+  const idVice = vice.json.giocatori[1].id;
+
+  const senzaCessione = await chiamata(gs, "/state");
+  verifica(
+    "cessioneComandantePendente e' null quando non c'e' nulla in corso",
+    senzaCessione.json.cessioneComandantePendente === null
+  );
+
+  await chiamata(gs, "/proponi-cessione", "POST", {
+    versoGiocatoreId: idVice,
+    giocatoreId: idComandante,
+    token: tokenComandante,
+  });
+
+  const conCessione = await chiamata(gs, "/state");
+  verifica(
+    "GET /state mostra cessioneComandantePendente quando c'e' una proposta in corso",
+    conCessione.json.cessioneComandantePendente &&
+      conCessione.json.cessioneComandantePendente.versoGiocatoreId === idVice
+  );
+}
+
 console.log(`\n${falliti === 0 ? "Tutti i test passati." : `${falliti} test falliti.`}`);
 process.exit(falliti === 0 ? 0 : 1);

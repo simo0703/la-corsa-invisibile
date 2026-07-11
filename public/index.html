@@ -604,6 +604,8 @@
     <div class="tavolo-vista" id="tavolo-vista"></div>
 
     <div class="contenuto-scuro">
+      <div id="prompt-cessione-comando"></div>
+
       <div class="barra-stanza">
         <span class="codice-stanza" id="testo-codice-stanza">stanza —</span>
         <button class="copia" id="btn-copia-link">Copia link stanza</button>
@@ -1154,6 +1156,86 @@ function mostraEsito(testoEsito, prossimaRichiesta, esitoNodo, nodoAttivo, tiro,
   }
 }
 
+// Il ruolo comandante può cambiare senza un'azione diretta di questo
+// dispositivo (una cessione accettata da qualcun altro, o accettata da
+// questo stesso giocatore): rilegge sempre da session.giocatori invece di
+// fidarsi solo del valore salvato a /join, così pannello-comandante
+// appare/scompare per la persona giusta senza bisogno di ricaricare.
+function aggiornaComandanteDaSessione(giocatori) {
+  const io = giocatori.find(g => g.id === STATO.giocatoreId);
+  if (io && STATO.comandante !== (io.comandante === true)) {
+    STATO.comandante = io.comandante === true;
+    salvaStato();
+  }
+}
+
+// Prompt bloccante/prominente per il DESTINATARIO di una cessione del
+// comando in corso: stesso stile visivo (box crimson del pannello del
+// comandante + .interpretazione-pendente) già usato per la risoluzione
+// delle interpretazioni ambigue del Cronista, per coerenza. Visibile a
+// QUALUNQUE giocatore (non solo al comandante attuale): è per questo che
+// vive in un contenitore proprio, fuori da pannello-comandante che invece
+// resta nascosto a chi non è comandante.
+function renderPromptCessione(session) {
+  const box = document.getElementById("prompt-cessione-comando");
+  const pendente = session.cessioneComandantePendente;
+  if (!pendente || pendente.versoGiocatoreId !== STATO.giocatoreId) {
+    box.innerHTML = "";
+    return;
+  }
+  // session.cessioneComandantePendente contiene solo versoGiocatoreId: il
+  // nome di chi propone si legge da session.giocatori (chi ha comandante
+  // === true), non serve altro dal server.
+  const proponente = session.giocatori.find(g => g.comandante === true);
+  const nomeProponente = proponente ? proponente.nome : "Il comandante";
+  box.innerHTML = `
+    <div class="pannello-comandante">
+      <div class="titolo-pannello">Proposta di comando</div>
+      <div class="sezione interpretazione-pendente">
+        <p class="testo-libero-scritto">${nomeProponente} vuole cederti il comando. Accetti?</p>
+        <div class="candidati-interpretazione">
+          <button class="risposta" id="btn-accetta-cessione">Accetta</button>
+        </div>
+        <button class="secondario" id="btn-rifiuta-cessione-destinatario">Rifiuta</button>
+      </div>
+      <p class="errore" id="errore-prompt-cessione"></p>
+    </div>
+  `;
+  const erroreBox = document.getElementById("errore-prompt-cessione");
+  function mostraErrorePrompt(testo) {
+    erroreBox.textContent = testo;
+    erroreBox.classList.add("mostra");
+  }
+  const btnAccetta = document.getElementById("btn-accetta-cessione");
+  const btnRifiuta = document.getElementById("btn-rifiuta-cessione-destinatario");
+  btnAccetta.addEventListener("click", async () => {
+    btnAccetta.disabled = true;
+    btnRifiuta.disabled = true;
+    erroreBox.classList.remove("mostra");
+    try {
+      await chiamaAPIAutenticata(`/api/stanza/${STATO.roomId}/accetta-cessione`, {}, mostraErrorePrompt);
+      await aggiornaSchermataGioco();
+    } catch (e) {
+      btnAccetta.disabled = false;
+      btnRifiuta.disabled = false;
+      if (!e.sessioneNonValida) mostraErrorePrompt("Qualcosa è andato storto. Riprova.");
+    }
+  });
+  btnRifiuta.addEventListener("click", async () => {
+    btnAccetta.disabled = true;
+    btnRifiuta.disabled = true;
+    erroreBox.classList.remove("mostra");
+    try {
+      await chiamaAPIAutenticata(`/api/stanza/${STATO.roomId}/rifiuta-cessione`, {}, mostraErrorePrompt);
+      await aggiornaSchermataGioco();
+    } catch (e) {
+      btnAccetta.disabled = false;
+      btnRifiuta.disabled = false;
+      if (!e.sessioneNonValida) mostraErrorePrompt("Qualcosa è andato storto. Riprova.");
+    }
+  });
+}
+
 // Pannello visibile solo al comandante (chi ha creato la stanza, primo
 // giocatore unito). Le risorse di squadra e l'elenco giocatori sono già
 // mostrati a tutti sopra (box-risorse, lista-giocatori): qui solo ciò che
@@ -1168,6 +1250,11 @@ function renderPannelloComandante(session) {
     return;
   }
   const pendente = session.interpretazionePendente;
+  const cessionePendente = session.cessioneComandantePendente;
+  const altriGiocatori = session.giocatori.filter(g => g.id !== STATO.giocatoreId);
+  const destinatarioCessione = cessionePendente
+    ? session.giocatori.find(g => g.id === cessionePendente.versoGiocatoreId)
+    : null;
   box.innerHTML = `
     <div class="pannello-comandante">
       <div class="titolo-pannello">Pannello del comandante</div>
@@ -1211,6 +1298,26 @@ function renderPannelloComandante(session) {
           </div>
           <button class="secondario" id="btn-avvia-nodo-comandante">Avvia</button>
         </div>
+      </div>
+
+      <div class="sezione">
+        <div class="etichetta">Cedi il comando</div>
+        ${cessionePendente ? `
+          <p class="nota-privata">Proposta inviata a ${destinatarioCessione ? destinatarioCessione.nome : "un giocatore"}, in attesa di risposta.</p>
+          <button class="secondario" id="btn-annulla-cessione">Annulla proposta</button>
+        ` : altriGiocatori.length === 0 ? `
+          <p class="nota-privata">Nessun altro giocatore in stanza a cui cedere il comando, per ora.</p>
+        ` : `
+          <div class="riga-azione">
+            <div class="campo">
+              <label for="select-cessione-comandante">A chi</label>
+              <select id="select-cessione-comandante">
+                ${altriGiocatori.map(g => `<option value="${g.id}">${g.nome}</option>`).join("")}
+              </select>
+            </div>
+            <button class="secondario" id="btn-proponi-cessione">Proponi</button>
+          </div>
+        `}
       </div>
 
       <div class="sezione">
@@ -1295,6 +1402,42 @@ function renderPannelloComandante(session) {
     }
   });
 
+  const btnProponiCessione = document.getElementById("btn-proponi-cessione");
+  if (btnProponiCessione) {
+    btnProponiCessione.addEventListener("click", async () => {
+      const versoGiocatoreId = document.getElementById("select-cessione-comandante").value;
+      erroreComandante.classList.remove("mostra");
+      try {
+        await chiamaAPIAutenticata(
+          `/api/stanza/${STATO.roomId}/proponi-cessione`,
+          { versoGiocatoreId },
+          mostraErroreComandante
+        );
+        await aggiornaSchermataGioco();
+      } catch (e) {
+        if (e.sessioneNonValida) return;
+        mostraErroreComandante(
+          e.status === 409
+            ? "C'è già una proposta di cessione in attesa di risposta."
+            : "Qualcosa è andato storto. Riprova."
+        );
+      }
+    });
+  }
+
+  const btnAnnullaCessione = document.getElementById("btn-annulla-cessione");
+  if (btnAnnullaCessione) {
+    btnAnnullaCessione.addEventListener("click", async () => {
+      erroreComandante.classList.remove("mostra");
+      try {
+        await chiamaAPIAutenticata(`/api/stanza/${STATO.roomId}/rifiuta-cessione`, {}, mostraErroreComandante);
+        await aggiornaSchermataGioco();
+      } catch (e) {
+        if (!e.sessioneNonValida) mostraErroreComandante("Qualcosa è andato storto. Riprova.");
+      }
+    });
+  }
+
   const note = document.getElementById("note-comandante");
   note.value = localStorage.getItem("lci_note_comandante") || "";
   note.addEventListener("input", () => {
@@ -1310,11 +1453,13 @@ async function aggiornaSchermataGioco() {
     chiamaAPI(`/api/stanza/${STATO.roomId}/richiesta-attiva`),
   ]);
 
+  aggiornaComandanteDaSessione(session2.giocatori);
   renderRisorse(session2.risorseDiSquadra);
   renderGiocatori(session2.giocatori);
   renderTavolo(session2.giocatori);
   renderSchedaPersonale(session2.giocatori);
   renderPannelloComandante(session2);
+  renderPromptCessione(session2);
 
   if (!session2.nodoAttivo) {
     renderSelezioneNodo();
@@ -1333,11 +1478,13 @@ function avviaPolling() {
   intervalloPolling = setInterval(async () => {
     try {
       const session = await chiamaAPI(`/api/stanza/${STATO.roomId}/state`);
+      aggiornaComandanteDaSessione(session.giocatori);
       renderRisorse(session.risorseDiSquadra);
       renderGiocatori(session.giocatori);
       renderTavolo(session.giocatori);
       renderSchedaPersonale(session.giocatori);
       renderPannelloComandante(session);
+      renderPromptCessione(session);
 
       // Se questo giocatore stava aspettando che il comandante risolvesse
       // il suo testo libero ambiguo, e non c'è più nulla in attesa,

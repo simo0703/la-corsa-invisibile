@@ -100,6 +100,11 @@ export class GameSession {
         tokenCreazione: null, // segreto impostato da POST /crea (vedi sotto): prova
         // "sei tu il creatore della stanza", consumato al primo /join che lo usa
         // con successo. Mai esposto al client (vedi sessionPubblica()).
+        cessioneComandantePendente: null, // { versoGiocatoreId } o null -- proposta
+        // del comandante attuale di cedere il ruolo a un altro giocatore gia' in
+        // stanza (vedi /proponi-cessione). A differenza dei token, NON e' un
+        // segreto: sessionPubblica() lo lascia visibile, serve al client del
+        // destinatario per sapere che deve mostrare il prompt di conferma.
         // Migrazione automatica: ogni nuovo campo va aggiunto qui E
         // nella funzione migrateState() sotto, altrimenti le sessioni
         // create prima dell'aggiornamento falliscono in silenzio.
@@ -152,6 +157,10 @@ export class GameSession {
       session.tokenCreazione = null;
       changed = true;
     }
+    if (session.cessioneComandantePendente === undefined) {
+      session.cessioneComandantePendente = null;
+      changed = true;
+    }
     if (changed) this.state.storage.put("session", session);
     return session;
   }
@@ -161,7 +170,10 @@ export class GameSession {
   // Usata da OGNI risposta che include la sessione (o il suo elenco
   // giocatori), senza eccezioni -- nessuno dei due token deve mai comparire
   // in una risposta HTTP dopo il momento in cui viene generato (/join per
-  // il primo, /crea per il secondo).
+  // il primo, /crea per il secondo). cessioneComandantePendente NON viene
+  // tolto (non e' nella lista di esclusione): a differenza dei token non e'
+  // un segreto, il client del destinatario deve poterlo leggere da GET
+  // /state per sapere che deve mostrare il prompt di conferma.
   sessionPubblica(session) {
     const { tokenCreazione, ...sessioneSenzaTokenCreazione } = session;
     return {
@@ -287,6 +299,106 @@ export class GameSession {
       session.giocatori.push({ id: crypto.randomUUID(), nome, ruolo, competenze, comandante, token });
       await this.state.storage.put("session", session);
       return Response.json({ ...this.sessionPubblica(session), token });
+    }
+
+    // Il comandante attuale propone di cedere il ruolo a un altro giocatore
+    // gia' in stanza: la cessione resta PENDENTE finche' il destinatario non
+    // la accetta o non viene rifiutata/annullata -- stesso stile di
+    // session.interpretazionePendente (stato che vive nella sessione, non
+    // nella singola risposta HTTP, per funzionare tra dispositivi diversi),
+    // ma qui la conferma serve dal destinatario specifico, non da "il
+    // comandante" genericamente. Riservato al comandante attuale (vedi
+    // autenticaComandante()).
+    if (url.pathname.endsWith("/proponi-cessione") && request.method === "POST") {
+      const { versoGiocatoreId, giocatoreId, token } = await request.json();
+      const session = await this.initState();
+      const auth = this.autenticaComandante(session, giocatoreId, token);
+      if (auth.errore) return auth.errore;
+
+      const destinatario = session.giocatori.find((g) => g.id === versoGiocatoreId);
+      if (!destinatario) {
+        return new Response("versoGiocatoreId sconosciuto: nessun giocatore con questo id nella stanza", {
+          status: 400,
+        });
+      }
+      if (versoGiocatoreId === giocatoreId) {
+        return new Response("Non puoi cedere il ruolo di comandante a te stesso", { status: 400 });
+      }
+      if (session.cessioneComandantePendente) {
+        return new Response("C'e' gia' una cessione del ruolo in attesa di risposta", { status: 409 });
+      }
+
+      session.cessioneComandantePendente = { versoGiocatoreId };
+      await this.state.storage.put("session", session);
+      return Response.json(this.sessionPubblica(session));
+    }
+
+    // Il destinatario accetta la cessione: il ruolo passa a lui, il
+    // comandante attuale torna un giocatore normale. Autenticato con
+    // identita' semplice (non serve essere comandante per accettare -- anzi,
+    // di norma NON lo si e' ancora). Verifica che il chiamante sia proprio
+    // il destinatario della proposta (non un terzo giocatore), e che il
+    // comandante che ha proposto la cessione sia ancora effettivamente
+    // comandante ora (evita stati incoerenti se qualcosa e' cambiato nel
+    // frattempo -- caso limite esplicito richiesto dal design).
+    if (url.pathname.endsWith("/accetta-cessione") && request.method === "POST") {
+      const { giocatoreId, token } = await request.json();
+      const session = await this.initState();
+      const auth = this.autenticaGiocatore(session, giocatoreId, token);
+      if (auth.errore) return auth.errore;
+
+      const pendente = session.cessioneComandantePendente;
+      if (!pendente) {
+        return new Response("Nessuna cessione del ruolo in attesa di risposta", { status: 400 });
+      }
+      if (pendente.versoGiocatoreId !== giocatoreId) {
+        return new Response("Questa cessione non e' stata proposta a te", { status: 403 });
+      }
+      const comandanteAttuale = session.giocatori.find((g) => g.comandante);
+      if (!comandanteAttuale) {
+        // Stato incoerente (nessun comandante attuale): scarta la cessione
+        // pendente invece di applicarla a una situazione che non torna.
+        session.cessioneComandantePendente = null;
+        await this.state.storage.put("session", session);
+        return new Response(
+          "Il comandante che ha proposto la cessione non e' piu' comandante: cessione annullata",
+          { status: 409 }
+        );
+      }
+
+      comandanteAttuale.comandante = false;
+      auth.giocatore.comandante = true;
+      session.cessioneComandantePendente = null;
+      await this.state.storage.put("session", session);
+      return Response.json(this.sessionPubblica(session));
+    }
+
+    // Rifiuta (dal destinatario) o annulla (dal comandante che ha proposto)
+    // una cessione pendente, senza cambiare nessun ruolo. Il comandante
+    // attuale E' sempre chi ha proposto (nessun altro puo' diventare
+    // comandante finche' una cessione resta pendente, vedi /join e
+    // /accetta-cessione sopra): "sei comandante ora" equivale quindi a "sei
+    // tu che hai proposto", senza dover salvare separatamente chi ha
+    // proposto. Chiunque altro (un terzo giocatore) viene rifiutato.
+    if (url.pathname.endsWith("/rifiuta-cessione") && request.method === "POST") {
+      const { giocatoreId, token } = await request.json();
+      const session = await this.initState();
+      const auth = this.autenticaGiocatore(session, giocatoreId, token);
+      if (auth.errore) return auth.errore;
+
+      const pendente = session.cessioneComandantePendente;
+      if (!pendente) {
+        return new Response("Nessuna cessione del ruolo in attesa di risposta", { status: 400 });
+      }
+      const seiDestinatario = giocatoreId === pendente.versoGiocatoreId;
+      const seiIlProponente = auth.giocatore.comandante === true;
+      if (!seiDestinatario && !seiIlProponente) {
+        return new Response("Non puoi rifiutare una cessione che non ti riguarda", { status: 403 });
+      }
+
+      session.cessioneComandantePendente = null;
+      await this.state.storage.put("session", session);
+      return Response.json(this.sessionPubblica(session));
     }
 
     // Le chiavi accettate sono le risorse di squadra oppure "margine" --
