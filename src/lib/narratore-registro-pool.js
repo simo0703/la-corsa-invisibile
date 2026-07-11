@@ -16,6 +16,7 @@
 const CARICATORI = {
   "1836-torino": () => import("./narratore-corsa-invisibile.js"),
   "1848-milano": () => import("./narratore-1848-milano.js"),
+  "1915-carso-piave": () => import("./narratore-1915-carso-piave.js"),
 };
 
 // Registra (o sovrascrive) il caricatore di un pool. Usato soprattutto dai
