@@ -1,8 +1,8 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 12 luglio 2026 (fine sessione, dopo il Passo 21 — profilo
-giocatore persistente, Fase 1 di 4: solo schema D1 + registrazione/accesso,
-nessun collegamento al gameplay; lavoro sospeso qui su richiesta)
+Aggiornato al: 12 luglio 2026 (fine sessione, dopo il Passo 22 — profilo
+giocatore persistente, Fase 2 di 4: /join accetta un profiloId opzionale;
+lavoro sospeso qui su richiesta)
 
 Questo file serve a non perdersi tra una sessione di lavoro e l'altra: raccoglie cosa
 è stato deciso, cosa è ancora un'ipotesi da confermare, e cosa manca. Va aggiornato
@@ -15,17 +15,21 @@ ruolo) che non risultano loggate qui sotto come Passi numerati — la sessione c
 ha scritte non ha aggiornato questo file. Non ricostruito retroattivamente in questa
 sessione (fuori scope); se serve, va fatto a parte guardando `git log`.
 
-**Punto di ripresa**: con il Passo 21, esiste un primo pezzo di profilo
-giocatore persistente cross-stanza: tabella D1 `giocatori_persistenti`
-(stesso database già esistente, `la-corsa-invisibile-db`) + endpoint
-`POST /profilo/registra` e `POST /profilo/accedi`, completamente isolati dal
-resto del gioco — **nessun collegamento a `/join`, a `GameSession.js`, o a
-qualunque stanza esistente**. Schema NON ancora applicato al D1 reale
-(`npm run db:init`/`db:init:remote` da eseguire). Fase 1 di 4: le fasi
-successive (collegare il profilo a `/join`, UI in `public/`, uso reale di
-XP/bonus nel gameplay) non sono ancora state discusse né pianificate in
-dettaglio. Vedi Passo 21 nel changelog per le tre scelte di design chiarite
-con l'autore (dove va il D1, hashing del PIN, struttura di `bonusScelti`).
+**Punto di ripresa**: con il Passo 22, `POST /join` accetta un `profiloId`
+opzionale e lo salva sul record del giocatore in `session.giocatori` —
+login/registrazione (Fase 1) restano comunque due chiamate separate PRIMA di
+`/join` (schermata a parte), nessuna verifica qui che il `profiloId`
+dichiarato corrisponda a un login realmente avvenuto (rimandata a una fase
+successiva se necessaria). `autenticaGiocatore()`/`autenticaComandante()` e
+la logica dei token in-game (Passo 19/20) **non toccate**: il profilo
+persistente si aggancia accanto, non le sostituisce. Login resta facoltativo:
+un giocatore entra come sempre se non lo passa. Schema D1 (Fase 1) applicato
+sia in locale sia in produzione (verificato con query diretta su entrambi).
+Fase 2 di 4: le fasi successive (eventuale verifica di possesso, UI in
+`public/`, uso reale di XP/bonus nel gameplay) non sono ancora state
+discusse né pianificate in dettaglio. Vedi Passo 22 nel changelog per i
+dettagli, Passo 21 per le tre scelte di design della Fase 1 (dove va il D1,
+hashing del PIN, struttura di `bonusScelti`).
 Con il Passo 20, l'Esploratore ha un primo bilanciamento di classe: dado di
 risoluzione 1d6 (invece del default 1d4) quando tira con la propria
 competenza principale (Cadenza), e un meccanismo generico di bonus
@@ -609,6 +613,59 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**12/07/2026 — Passo 22: profilo giocatore persistente, Fase 2 di 4 (collegato opzionalmente a /join)**
+File modificati: `src/durable-objects/GameSession.js`, `test-game-session.mjs`,
+`DECISIONI_LA_CORSA_INVISIBILE.md`.
+- Collega il profilo persistente (tabella `giocatori_persistenti`, endpoint
+  `/profilo/registra`/`/profilo/accedi` dal Passo 21) al flusso di ingresso
+  in una stanza: `POST /join` accetta ora un `profiloId` opzionale nel
+  body e lo salva sul record del giocatore in `session.giocatori`. Login
+  resta facoltativo — un giocatore entra come sempre se non lo passa.
+- **Esplicitamente NON toccato, come richiesto**: `autenticaGiocatore()`,
+  `autenticaComandante()`, la logica dei token in-game (Passo 19/20). Il
+  profilo persistente si aggancia accanto, non sostituisce
+  l'autenticazione di stanza. Nessuna verifica che `profiloId` corrisponda
+  a un login realmente avvenuto — è rimandata a una fase successiva, se
+  risulterà necessaria: qui è solo un dato che il client dichiara di avere
+  dopo aver già completato login/registrazione altrove (schermata
+  separata, decisione presa a monte di questa fase).
+- **Punto di lettura, non di decisione**: la richiesta specificava che dopo
+  la migrazione va bene sia `profiloId` assente sia `null` — non era
+  un'ambiguità da chiarire con l'autore. Scelto comunque un backfill
+  esplicito a `null` in `migrateState()` (mai fatto finora per un campo
+  per-giocatore, solo per campi a livello di sessione: nuovo precedente,
+  segnalato qui per trasparenza, non deciso silenziosamente).
+- `initState()`: aggiornato il commento sulla forma di un giocatore
+  (`{ id, nome, ruolo, competenze, comandante, token, profiloId }`).
+- `migrateState()`: nuovo blocco che itera `session.giocatori` e imposta
+  `profiloId = null` su ogni record che non ce l'ha ancora (stanze create
+  prima di questa modifica) — stesso meccanismo di persistenza (`changed`
+  + `storage.put`) già usato per i campi a livello di sessione, esteso per
+  la prima volta dentro l'array.
+- `sessionPubblica()` non modificata: filtra solo `token` da ogni
+  giocatore, `profiloId` passa già attraverso senza bisogno di codice
+  nuovo. Verificato esplicitamente nei test che `GET /state` non esponga
+  MAI `pin_hash`/`pin_salt`/altri campi del profilo (xp, bonus) — non
+  potrebbe comunque succedere, dato che `GameSession.js` non importa
+  `profili-giocatore.js` in questa fase e non tocca mai quelle colonne,
+  ma la richiesta chiedeva di verificarlo esplicitamente, non solo per
+  costruzione.
+- Test aggiunti in `test-game-session.mjs`: `/join` con `profiloId` lo
+  mantiene sul record; `/join` senza `profiloId` funziona identico a prima
+  (nessuna regressione) e il campo diventa `null`, non resta assente;
+  `GET /state` espone `profiloId` quando presente e non espone mai
+  `token`/`pin_hash`/`pin_salt`/`xpTotale`/`bonusScelti`; migrazione
+  verificata scrivendo a mano nello storage un record senza `profiloId`
+  (simula una stanza pre-esistente) e controllando che dopo una chiamata
+  `GET /state` il campo diventi `null` E che la modifica sia persistita su
+  storage, non solo restituita in memoria.
+- Rilanciata l'intera suite (19 file): nessuna regressione.
+- **Resta da fare (fasi successive, non ancora discusse)**: eventuale
+  verifica di possesso del `profiloId` dichiarato a `/join`; UI in
+  `public/` per far scegliere al giocatore se accedere con un profilo
+  prima di entrare in stanza; uso reale di `xpTotale`/`bonusScelti` nel
+  gameplay.
 
 **12/07/2026 — Passo 21: profilo giocatore persistente, Fase 1 di 4 (schema + registrazione/accesso)**
 Nuovi file: `src/lib/profili-giocatore.js`, `test-profili-giocatore.mjs`.

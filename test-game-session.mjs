@@ -143,6 +143,72 @@ console.log("\n--- /join ---");
   verifica("un ruolo sconosciuto risponde 400", ruoloIgnoto.status === 400);
 }
 
+console.log("\n--- /join: profiloId opzionale (Fase 2 del profilo persistente, nessun collegamento a login/autenticaGiocatore) ---");
+{
+  const { gs } = nuovaSessione();
+
+  const conProfilo = await chiamata(gs, "/join", "POST", {
+    nome: "ConProfilo",
+    ruolo: "esploratore",
+    profiloId: "profilo-abc-123",
+  });
+  verifica(
+    "con profiloId nel body, il record del giocatore lo mantiene",
+    conProfilo.json.giocatori[0].profiloId === "profilo-abc-123"
+  );
+
+  const senzaProfilo = await chiamata(gs, "/join", "POST", { nome: "SenzaProfilo", ruolo: "custode" });
+  verifica(
+    "senza profiloId nel body, il giocatore entra comunque (nessuna regressione)",
+    senzaProfilo.status === 200 && senzaProfilo.json.giocatori[1].comandante === false
+  );
+  verifica(
+    "senza profiloId nel body, il campo è null (non assente, non undefined)",
+    senzaProfilo.json.giocatori[1].profiloId === null
+  );
+
+  verifica(
+    "GET /state espone profiloId quando presente",
+    (await chiamata(gs, "/state")).json.giocatori[0].profiloId === "profilo-abc-123"
+  );
+  verifica(
+    "GET /state non espone MAI il token del giocatore (invariato da prima di questa fase)",
+    (await chiamata(gs, "/state")).json.giocatori.every((g) => g.token === undefined)
+  );
+  verifica(
+    "GET /state non espone nessun altro dato del profilo persistente oltre all'id (niente pin_hash/pin_salt/nome del profilo/xp)",
+    (await chiamata(gs, "/state")).json.giocatori.every(
+      (g) => g.pin_hash === undefined && g.pin_salt === undefined && g.xpTotale === undefined && g.bonusScelti === undefined
+    )
+  );
+}
+
+console.log("\n--- migrateState: giocatori uniti PRIMA di questa fase ricevono profiloId=null a posteriori ---");
+{
+  const { gs, storage } = nuovaSessione();
+  await chiamata(gs, "/join", "POST", { nome: "VecchioGiocatore", ruolo: "esploratore" });
+
+  // Simula un record scritto prima dell'introduzione di profiloId: lo
+  // rimuoviamo esplicitamente dallo storage, come sarebbe una vera stanza
+  // creata prima di questa modifica.
+  const sessionePresente = await storage.get("session");
+  delete sessionePresente.giocatori[0].profiloId;
+  await storage.put("session", sessionePresente);
+  verifica(
+    "il record manipolato non ha davvero il campo (preparazione del test)",
+    !("profiloId" in (await storage.get("session")).giocatori[0])
+  );
+
+  const { json } = await chiamata(gs, "/state");
+  verifica("dopo la migrazione, il giocatore vecchio ha profiloId=null (non più assente)", json.giocatori[0].profiloId === null);
+
+  const sessioneDopo = await storage.get("session");
+  verifica(
+    "la migrazione è stata persistita su storage, non solo restituita in memoria",
+    sessioneDopo.giocatori[0].profiloId === null
+  );
+}
+
 console.log("\n--- /crea + /join: assegnazione del comandante tramite tokenCreazione ---");
 {
   const { gs } = nuovaSessione();

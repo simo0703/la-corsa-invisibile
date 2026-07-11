@@ -85,7 +85,15 @@ export class GameSession {
       stored = {
         gameId: GAME_CONFIG.gameId,
         creata_il: new Date().toISOString(),
-        giocatori: [], // { id, nome, ruolo, competenze, comandante, token } -- assegnati a /join.
+        giocatori: [], // { id, nome, ruolo, competenze, comandante, token, profiloId } -- assegnati a /join.
+        // profiloId: riferimento OPZIONALE a un profilo persistente
+        // (tabella giocatori_persistenti su D1, vedi
+        // src/lib/profili-giocatore.js) creato con login/registrazione
+        // PRIMA di arrivare a /join -- login rimane facoltativo, un
+        // giocatore puo' ancora entrare senza. Nessuna verifica che il
+        // profiloId dichiarato corrisponda davvero a un login riuscito in
+        // questa fase (rimandata a una fase successiva se necessaria):
+        // qui e' solo un dato che il client dichiara di avere.
         // token e' un segreto lato server: mai incluso nelle risposte che
         // espongono l'elenco giocatori (vedi sessionPubblica()), restituito
         // al proprietario una sola volta, nella risposta di /join.
@@ -166,6 +174,16 @@ export class GameSession {
     if (session.cessioneComandantePendente === undefined) {
       session.cessioneComandantePendente = null;
       changed = true;
+    }
+    // profiloId e' un campo per-giocatore (dentro session.giocatori), non a
+    // livello di sessione come gli altri qui sopra -- backfill esplicito a
+    // null per i giocatori uniti PRIMA di questa modifica, cosi' il campo e'
+    // sempre presente (mai semplicemente assente) su ogni record.
+    for (const giocatore of session.giocatori) {
+      if (giocatore.profiloId === undefined) {
+        giocatore.profiloId = null;
+        changed = true;
+      }
     }
     if (changed) this.state.storage.put("session", session);
     return session;
@@ -276,7 +294,7 @@ export class GameSession {
     // sola giocatoreId (pubblico, visibile a chiunque nella stanza via
     // /state) non basta piu'.
     if (url.pathname.endsWith("/join") && request.method === "POST") {
-      const { nome, ruolo, tokenCreazione } = await request.json();
+      const { nome, ruolo, tokenCreazione, profiloId } = await request.json();
       const session = await this.initState();
       // Limite fisso ai posti disponibili (vedi GAME_CONFIG.maxGiocatori):
       // controllato PRIMA di validare il ruolo, cosi' una stanza piena
@@ -302,7 +320,15 @@ export class GameSession {
         session.tokenCreazione = null; // consumato: un solo uso, vedi commento sopra
       }
       const token = crypto.randomUUID();
-      session.giocatori.push({ id: crypto.randomUUID(), nome, ruolo, competenze, comandante, token });
+      session.giocatori.push({
+        id: crypto.randomUUID(),
+        nome,
+        ruolo,
+        competenze,
+        comandante,
+        token,
+        profiloId: profiloId ?? null, // opzionale: assente/undefined dal client -> null
+      });
       await this.state.storage.put("session", session);
       return Response.json({ ...this.sessionPubblica(session), token });
     }
