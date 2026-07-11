@@ -86,18 +86,20 @@ async function sessionePronta() {
   const { gs, storage } = nuovaSessione();
   const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
   const giocatoreId = join.json.giocatori[0].id;
-  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino" });
-  return { gs, storage, giocatoreId };
+  const token = join.json.token;
+  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino", giocatoreId, token });
+  return { gs, storage, giocatoreId, token };
 }
 
 console.log("--- /interpreta: esito \"automatica\" ---");
 {
-  const { gs, storage, giocatoreId } = await sessionePronta();
+  const { gs, storage, giocatoreId, token } = await sessionePronta();
   await impostaCompetenza(storage, giocatoreId, "cadenza", 20); // forza tier "pieno"
   const { status, json } = await chiamata(gs, "/interpreta", "POST", {
     testoLibero: "vado più veloce che posso",
     richiestaId: "decalogo-ginnastica",
     giocatoreId,
+    token,
   });
   verifica("risponde 200", status === 200);
   verifica(
@@ -120,11 +122,12 @@ console.log("--- /interpreta: esito \"automatica\" ---");
 
 console.log("\n--- /interpreta: esito \"manuale\" ---");
 {
-  const { gs, giocatoreId } = await sessionePronta();
+  const { gs, giocatoreId, token } = await sessionePronta();
   const { status, json } = await chiamata(gs, "/interpreta", "POST", {
     testoLibero: "corro",
     richiestaId: "decalogo-ginnastica",
     giocatoreId,
+    token,
   });
   verifica("risponde 200", status === 200);
   verifica("esito \"manuale\"", json.esito === "manuale");
@@ -145,12 +148,13 @@ console.log("\n--- /interpreta: esito \"manuale\" ---");
 
 console.log("\n--- /interpreta: esito \"nessuna_corrispondenza\" ---");
 {
-  const { gs, storage, giocatoreId } = await sessionePronta();
+  const { gs, storage, giocatoreId, token } = await sessionePronta();
   const primaDiChiamare = await storage.get("session");
   const { status, json } = await chiamata(gs, "/interpreta", "POST", {
     testoLibero: "oggi ho mangiato una mela",
     richiestaId: "decalogo-ginnastica",
     giocatoreId,
+    token,
   });
   verifica("risponde 200", status === 200);
   verifica("esito \"nessuna_corrispondenza\", nessun campo session nella risposta", json.esito === "nessuna_corrispondenza" && !("session" in json));
@@ -160,25 +164,31 @@ console.log("\n--- /interpreta: esito \"nessuna_corrispondenza\" ---");
 
 console.log("\n--- /interpreta: richiesta senza libreria registrata ---");
 {
-  const { gs, giocatoreId } = await sessionePronta();
+  const { gs, giocatoreId, token } = await sessionePronta();
   const { status, json } = await chiamata(gs, "/interpreta", "POST", {
     testoLibero: "qualunque cosa",
     richiestaId: "richiesta-senza-libreria",
     giocatoreId,
+    token,
   });
   verifica("risponde 400 con messaggio chiaro", status === 400);
 }
 
 console.log("\n--- /risolvi-interpretazione: applica il candidato scelto dal comandante ---");
 {
-  const { gs, giocatoreId } = await sessionePronta();
+  const { gs, giocatoreId, token } = await sessionePronta();
   await chiamata(gs, "/interpreta", "POST", {
     testoLibero: "corro",
     richiestaId: "decalogo-ginnastica",
     giocatoreId,
+    token,
   });
   // Il comandante sceglie "metodo-forze" (risposteIndice 1, effetto fisso, niente tiro).
-  const { status, json } = await chiamata(gs, "/risolvi-interpretazione", "POST", { risposteIndice: 1 });
+  const { status, json } = await chiamata(gs, "/risolvi-interpretazione", "POST", {
+    risposteIndice: 1,
+    giocatoreId,
+    token,
+  });
   verifica("risponde 200", status === 200);
   verifica("interpretazionePendente è stata svuotata", json.session.interpretazionePendente === null);
   verifica("l'effetto della risposta 1 è stato applicato (cadenza +1)", json.session.risorseDiSquadra.cadenza === 1);
@@ -188,13 +198,18 @@ console.log("\n--- /risolvi-interpretazione: applica il candidato scelto dal com
 
 console.log("\n--- /risolvi-interpretazione: annulla, nessun effetto applicato ---");
 {
-  const { gs, storage, giocatoreId } = await sessionePronta();
+  const { gs, storage, giocatoreId, token } = await sessionePronta();
   await chiamata(gs, "/interpreta", "POST", {
     testoLibero: "corro",
     richiestaId: "decalogo-ginnastica",
     giocatoreId,
+    token,
   });
-  const { status, json } = await chiamata(gs, "/risolvi-interpretazione", "POST", { annulla: true });
+  const { status, json } = await chiamata(gs, "/risolvi-interpretazione", "POST", {
+    annulla: true,
+    giocatoreId,
+    token,
+  });
   verifica("risponde 200", status === 200);
   verifica("interpretazionePendente è stata svuotata", json.session.interpretazionePendente === null);
   verifica("nessun effetto applicato (risorse tutte a zero)", Object.values(json.session.risorseDiSquadra).every((v) => v === 0));
@@ -208,18 +223,19 @@ console.log("\n--- /risolvi-interpretazione: annulla, nessun effetto applicato -
 
 console.log("\n--- /risolvi-interpretazione: nessuna interpretazione pendente ---");
 {
-  const { gs } = await sessionePronta();
-  const { status } = await chiamata(gs, "/risolvi-interpretazione", "POST", { risposteIndice: 0 });
+  const { gs, giocatoreId, token } = await sessionePronta();
+  const { status } = await chiamata(gs, "/risolvi-interpretazione", "POST", { risposteIndice: 0, giocatoreId, token });
   verifica("risponde 400", status === 400);
 }
 
 console.log("\n--- /risolvi-interpretazione: la richiesta è cambiata nel frattempo (scarta senza applicare) ---");
 {
-  const { gs, storage, giocatoreId } = await sessionePronta();
+  const { gs, storage, giocatoreId, token } = await sessionePronta();
   await chiamata(gs, "/interpreta", "POST", {
     testoLibero: "corro",
     richiestaId: "decalogo-ginnastica",
     giocatoreId,
+    token,
   });
   // Simula: qualcun altro ha fatto avanzare la richiesta nel frattempo
   // (es. un altro giocatore ha cliccato un bottone), da un altro dispositivo.
@@ -227,11 +243,87 @@ console.log("\n--- /risolvi-interpretazione: la richiesta è cambiata nel fratte
   session.richiestaAttivaId = "decalogo-vaira";
   await storage.put("session", session);
 
-  const { status, json } = await chiamata(gs, "/risolvi-interpretazione", "POST", { risposteIndice: 0 });
+  const { status, json } = await chiamata(gs, "/risolvi-interpretazione", "POST", {
+    risposteIndice: 0,
+    giocatoreId,
+    token,
+  });
   verifica("risponde 409, non applica alla richiesta sbagliata", status === 409);
   const dopo = await storage.get("session");
   verifica("interpretazionePendente viene comunque svuotata (scartata)", dopo.interpretazionePendente === null);
   verifica("nessuna scelta è stata registrata", dopo.storicoScelte.length === 0);
+}
+
+console.log("\n--- Autenticazione: /interpreta e /risolvi-interpretazione ---");
+{
+  const { gs } = nuovaSessione();
+  const comandante = await chiamata(gs, "/join", "POST", { nome: "Comandante", ruolo: "esploratore" });
+  const idComandante = comandante.json.giocatori[0].id;
+  const tokenComandante = comandante.json.token;
+  const gregario = await chiamata(gs, "/join", "POST", { nome: "Gregario", ruolo: "custode" });
+  const idGregario = gregario.json.giocatori[1].id;
+  const tokenGregario = gregario.json.token;
+  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino", giocatoreId: idComandante, token: tokenComandante });
+
+  const senzaToken = await chiamata(gs, "/interpreta", "POST", {
+    testoLibero: "corro",
+    richiestaId: "decalogo-ginnastica",
+    giocatoreId: idComandante,
+  });
+  verifica("/interpreta senza token risponde 400", senzaToken.status === 400);
+
+  const tokenSbagliato = await chiamata(gs, "/interpreta", "POST", {
+    testoLibero: "corro",
+    richiestaId: "decalogo-ginnastica",
+    giocatoreId: idComandante,
+    token: "token-inventato",
+  });
+  verifica("/interpreta con token sbagliato risponde 401", tokenSbagliato.status === 401);
+
+  // /interpreta NON è un'azione riservata: un giocatore non comandante, con
+  // identità valida, deve poter usarla normalmente.
+  const nonComandanteOk = await chiamata(gs, "/interpreta", "POST", {
+    testoLibero: "oggi ho mangiato una mela",
+    richiestaId: "decalogo-ginnastica",
+    giocatoreId: idGregario,
+    token: tokenGregario,
+  });
+  verifica("/interpreta funziona per un giocatore non comandante (non è un'azione riservata)", nonComandanteOk.status === 200);
+
+  // Serve un'interpretazione pendente prima di poter testare /risolvi-interpretazione.
+  await chiamata(gs, "/interpreta", "POST", {
+    testoLibero: "corro",
+    richiestaId: "decalogo-ginnastica",
+    giocatoreId: idComandante,
+    token: tokenComandante,
+  });
+
+  const risolviSenzaToken = await chiamata(gs, "/risolvi-interpretazione", "POST", {
+    risposteIndice: 1,
+    giocatoreId: idComandante,
+  });
+  verifica("/risolvi-interpretazione senza token risponde 400", risolviSenzaToken.status === 400);
+
+  const risolviTokenSbagliato = await chiamata(gs, "/risolvi-interpretazione", "POST", {
+    risposteIndice: 1,
+    giocatoreId: idComandante,
+    token: "token-inventato",
+  });
+  verifica("/risolvi-interpretazione con token sbagliato risponde 401", risolviTokenSbagliato.status === 401);
+
+  const risolviNonComandante = await chiamata(gs, "/risolvi-interpretazione", "POST", {
+    risposteIndice: 1,
+    giocatoreId: idGregario,
+    token: tokenGregario,
+  });
+  verifica("/risolvi-interpretazione chiamato da un non comandante risponde 403", risolviNonComandante.status === 403);
+
+  const risolviOk = await chiamata(gs, "/risolvi-interpretazione", "POST", {
+    risposteIndice: 1,
+    giocatoreId: idComandante,
+    token: tokenComandante,
+  });
+  verifica("/risolvi-interpretazione con comandante autenticato funziona", risolviOk.status === 200);
 }
 
 console.log(`\n${falliti === 0 ? "Tutti i test passati." : `${falliti} test falliti.`}`);

@@ -79,7 +79,10 @@ export class GameSession {
       stored = {
         gameId: GAME_CONFIG.gameId,
         creata_il: new Date().toISOString(),
-        giocatori: [], // { id, nome, ruolo, competenze, comandante } -- assegnati a /join
+        giocatori: [], // { id, nome, ruolo, competenze, comandante, token } -- assegnati a /join.
+        // token e' un segreto lato server: mai incluso nelle risposte che
+        // espongono l'elenco giocatori (vedi sessionPubblica()), restituito
+        // al proprietario una sola volta, nella risposta di /join.
         risorseDiSquadra: {
           cadenza: 0,
           spiritoDiCorpo: 0,
@@ -146,25 +149,75 @@ export class GameSession {
     return session;
   }
 
+  // Versione della sessione sicura da esporre al client: toglie il token
+  // segreto di ogni giocatore. Usata da OGNI risposta che include la
+  // sessione (o il suo elenco giocatori), senza eccezioni -- il token non
+  // deve mai comparire in una risposta HTTP dopo /join.
+  sessionPubblica(session) {
+    return {
+      ...session,
+      giocatori: session.giocatori.map(({ token, ...pubblico }) => pubblico),
+    };
+  }
+
+  // Verifica che (giocatoreId, token) corrispondano a un giocatore reale
+  // della stanza -- prova di identita' vera, non solo "questo id esiste".
+  // Restituisce { giocatore } se la verifica passa, altrimenti { errore:
+  // <Response> } gia' pronta da ritornare cosi' com'e' dal chiamante.
+  autenticaGiocatore(session, giocatoreId, token) {
+    if (!giocatoreId || !token) {
+      return {
+        errore: new Response("giocatoreId o token mancante: serve sapere chi sta chiamando", { status: 400 }),
+      };
+    }
+    const giocatore = session.giocatori.find((g) => g.id === giocatoreId);
+    if (!giocatore) {
+      return {
+        errore: new Response("giocatoreId sconosciuto: nessun giocatore con questo id nella stanza", {
+          status: 400,
+        }),
+      };
+    }
+    if (giocatore.token !== token) {
+      return { errore: new Response("token non valido per questo giocatoreId", { status: 401 }) };
+    }
+    return { giocatore };
+  }
+
+  // Come autenticaGiocatore(), con in piu' il vincolo che il giocatore
+  // verificato sia il comandante della stanza -- usata dagli endpoint
+  // riservati (/risorse, /avvia-nodo, /risolvi-interpretazione).
+  autenticaComandante(session, giocatoreId, token) {
+    const auth = this.autenticaGiocatore(session, giocatoreId, token);
+    if (auth.errore) return auth;
+    if (!auth.giocatore.comandante) {
+      return { errore: new Response("solo il comandante puo' compiere questa azione", { status: 403 }) };
+    }
+    return auth;
+  }
+
   async fetch(request) {
     const url = new URL(request.url);
 
     if (url.pathname.endsWith("/state") && request.method === "GET") {
       const session = await this.initState();
-      return Response.json(session);
+      return Response.json(this.sessionPubblica(session));
     }
 
     // Il comandante/narratore e' chi crea la stanza, ma non e' un ruolo a
     // parte: e' il PRIMO giocatore che si unisce a una stanza appena
     // creata (nessuno ancora in session.giocatori). Gioca anche lui con
-    // uno dei 4 ruoli come chiunque altro; il flag comandante gli sblocca
-    // solo controlli in piu' lato client (vedi public/index.html), non
-    // permessi diversi qui nel Worker -- nessun controllo di autorizzazione
-    // e' stato aggiunto a nessun endpoint, coerente con il resto
-    // dell'API (nessuna infrastruttura di sessione/token esiste nel
-    // Worker). Limite noto: se il link viene condiviso prima che il
+    // uno dei 4 ruoli come chiunque altro. Limite noto (INVARIATO in
+    // questo passaggio): se il link viene condiviso prima che il
     // creatore stesso faccia /join, un altro giocatore potrebbe diventare
-    // comandante per primo -- accettabile per ora.
+    // comandante per primo -- accettabile per ora, si affronta a parte.
+    //
+    // token: segreto generato qui, salvato nel giocatore lato server e
+    // restituito UNA SOLA VOLTA in questa risposta (mai da /state o da
+    // qualunque altra rotta, vedi sessionPubblica()). E' la prova di
+    // identita' richiesta dagli endpoint riservati al comandante e da
+    // /scegli e /interpreta -- da sola giocatoreId (pubblico, visibile a
+    // chiunque nella stanza via /state) non basta piu'.
     if (url.pathname.endsWith("/join") && request.method === "POST") {
       const { nome, ruolo } = await request.json();
       const session = await this.initState();
@@ -183,20 +236,23 @@ export class GameSession {
         return new Response("Ruolo sconosciuto", { status: 400 });
       }
       const comandante = session.giocatori.length === 0;
-      session.giocatori.push({ id: crypto.randomUUID(), nome, ruolo, competenze, comandante });
+      const token = crypto.randomUUID();
+      session.giocatori.push({ id: crypto.randomUUID(), nome, ruolo, competenze, comandante, token });
       await this.state.storage.put("session", session);
-      return Response.json(session);
+      return Response.json({ ...this.sessionPubblica(session), token });
     }
 
     // Le chiavi accettate sono le risorse di squadra oppure "margine" --
     // stesso trattamento che "margine" gia' riceve nel ciclo di effetti di
     // /scegli piu' sotto (una pseudo-risorsa, non nell'oggetto
     // risorseDiSquadra ma modificabile con lo stesso pattern delta).
-    // Nessun controllo su chi chiama: come per ogni altro endpoint di
-    // questo Worker, il vincolo "solo il comandante" e' lato client.
+    // Riservato al comandante: richiede giocatoreId + token validi E
+    // comandante === true (vedi autenticaComandante()).
     if (url.pathname.endsWith("/risorse") && request.method === "POST") {
-      const { risorsa, delta } = await request.json();
+      const { risorsa, delta, giocatoreId, token } = await request.json();
       const session = await this.initState();
+      const auth = this.autenticaComandante(session, giocatoreId, token);
+      if (auth.errore) return auth.errore;
       if (risorsa === "margine") {
         session.margine += delta;
       } else if (risorsa in session.risorseDiSquadra) {
@@ -205,16 +261,20 @@ export class GameSession {
         return new Response("Risorsa sconosciuta", { status: 400 });
       }
       await this.state.storage.put("session", session);
-      return Response.json(session);
+      return Response.json(this.sessionPubblica(session));
     }
 
     // Avvia un Nodo Temporale: parte dalla prima richiesta del nodo,
     // non tocca lo storico. Registra l'inizio nel diario del nodo.
+    // Riservato al comandante: richiede giocatoreId + token validi E
+    // comandante === true (vedi autenticaComandante()).
     if (url.pathname.endsWith("/avvia-nodo") && request.method === "POST") {
-      const { nodoId } = await request.json();
+      const { nodoId, giocatoreId, token } = await request.json();
       const nodo = GAME_CONFIG.nodiTemporali.find((n) => n.id === nodoId);
       if (!nodo) return new Response("Nodo sconosciuto", { status: 400 });
       const session = await this.initState();
+      const auth = this.autenticaComandante(session, giocatoreId, token);
+      if (auth.errore) return auth.errore;
       const primaRichiesta = nodo.richieste[0] ?? null;
       session.nodoAttivo = nodoId;
       session.richiestaIndice = 0;
@@ -226,14 +286,14 @@ export class GameSession {
         esitoFinale: null,
       });
       await this.state.storage.put("session", session);
-      return Response.json({ session, richiestaAttiva: primaRichiesta });
+      return Response.json({ session: this.sessionPubblica(session), richiestaAttiva: primaRichiesta });
     }
 
     // Richiesta attualmente attiva nel nodo in corso (situazione + risposte disponibili)
     if (url.pathname.endsWith("/richiesta-attiva") && request.method === "GET") {
       const session = await this.initState();
       const richiestaAttiva = this.trovaRichiestaAttiva(session);
-      return Response.json({ session, richiestaAttiva });
+      return Response.json({ session: this.sessionPubblica(session), richiestaAttiva });
     }
 
     // Un giocatore/la squadra sceglie una delle risposte pre-scritte:
@@ -241,21 +301,15 @@ export class GameSession {
     // l'orologio, registra la scelta nello storico (con chi l'ha fatta),
     // determina la prossima richiesta (ramificazione se `prossima` e'
     // indicata, altrimenti sequenza).
-    // `giocatoreId` e' obbligatorio e deve corrispondere a un giocatore gia'
-    // unito alla stanza con /join: senza, non sapremmo mai chi ha scelto.
+    // `giocatoreId` + `token` sono obbligatori: il server verifica che il
+    // token corrisponda proprio a quel giocatore (vedi autenticaGiocatore()),
+    // non solo che il giocatoreId esista nella stanza.
     if (url.pathname.endsWith("/scegli") && request.method === "POST") {
-      const { risposteIndice, giocatoreId } = await request.json();
+      const { risposteIndice, giocatoreId, token } = await request.json();
       const session = await this.initState();
 
-      if (!giocatoreId) {
-        return new Response("giocatoreId mancante: serve sapere chi sta scegliendo", { status: 400 });
-      }
-      const giocatore = session.giocatori.find((g) => g.id === giocatoreId);
-      if (!giocatore) {
-        return new Response("giocatoreId sconosciuto: nessun giocatore con questo id nella stanza", {
-          status: 400,
-        });
-      }
+      const auth = this.autenticaGiocatore(session, giocatoreId, token);
+      if (auth.errore) return auth.errore;
 
       const nodo = GAME_CONFIG.nodiTemporali.find((n) => n.id === session.nodoAttivo);
       const richiestaAttiva = this.trovaRichiestaAttiva(session);
@@ -267,12 +321,12 @@ export class GameSession {
 
       const risultato = await this.applicaRisposta(session, richiestaAttiva, risposta, giocatoreId);
       await this.state.storage.put("session", session);
-      return Response.json({ session, ...risultato });
+      return Response.json({ session: this.sessionPubblica(session), ...risultato });
     }
 
     // Testo libero: SI AFFIANCA ai bottoni, non li sostituisce (vedi
     // commento in cima al file). Riceve { testoLibero, richiestaId,
-    // giocatoreId }. Tre esiti possibili da interpreta():
+    // giocatoreId, token }. Tre esiti possibili da interpreta():
     // - "automatica": applica subito la risposta trovata, stessa forma di
     //   risposta di /scegli (cosi' il client puo' riusare lo stesso rendering);
     // - "manuale": salva in session.interpretazionePendente per il
@@ -280,19 +334,13 @@ export class GameSession {
     // - "nessuna_corrispondenza": nessuna modifica allo stato, risponde
     //   solo { esito: "nessuna_corrispondenza" } perche' il client mostri
     //   un messaggio invece di un errore grezzo.
+    // `giocatoreId` + `token` verificati come in /scegli (vedi autenticaGiocatore()).
     if (url.pathname.endsWith("/interpreta") && request.method === "POST") {
-      const { testoLibero, richiestaId, giocatoreId } = await request.json();
+      const { testoLibero, richiestaId, giocatoreId, token } = await request.json();
       const session = await this.initState();
 
-      if (!giocatoreId) {
-        return new Response("giocatoreId mancante: serve sapere chi sta scrivendo", { status: 400 });
-      }
-      const giocatore = session.giocatori.find((g) => g.id === giocatoreId);
-      if (!giocatore) {
-        return new Response("giocatoreId sconosciuto: nessun giocatore con questo id nella stanza", {
-          status: 400,
-        });
-      }
+      const auth = this.autenticaGiocatore(session, giocatoreId, token);
+      if (auth.errore) return auth.errore;
 
       const opzioni = await trovaLibreriaPerRichiesta(richiestaId);
       if (!opzioni) {
@@ -326,7 +374,7 @@ export class GameSession {
         }
         const risultato = await this.applicaRisposta(session, richiestaAttiva, risposta, giocatoreId);
         await this.state.storage.put("session", session);
-        return Response.json({ session, ...risultato });
+        return Response.json({ session: this.sessionPubblica(session), ...risultato });
       }
 
       if (decisione.tipo === "manuale") {
@@ -345,7 +393,7 @@ export class GameSession {
           }),
         };
         await this.state.storage.put("session", session);
-        return Response.json({ esito: "manuale", session });
+        return Response.json({ esito: "manuale", session: this.sessionPubblica(session) });
       }
 
       // "nessuna_corrispondenza": nessuna modifica allo stato.
@@ -355,11 +403,17 @@ export class GameSession {
     // Il comandante risolve un'interpretazione pendente: sceglie uno dei
     // candidati ({ risposteIndice }) o scarta tutto ({ annulla: true }),
     // rimettendo il giocatore davanti alla richiesta senza applicare nulla.
-    // Nessun controllo qui su "solo il comandante puo' chiamarlo" -- stesso
-    // livello (assente) di autorizzazione di ogni altro endpoint del Worker.
+    // Riservato al comandante: richiede giocatoreId + token validi E
+    // comandante === true (vedi autenticaComandante()) -- nota che il
+    // giocatoreId qui e' quello di CHI RISOLVE (il comandante), non quello
+    // di chi aveva scritto il testo libero (pendente.giocatoreId), usato
+    // solo per applicaRisposta().
     if (url.pathname.endsWith("/risolvi-interpretazione") && request.method === "POST") {
-      const { risposteIndice, annulla } = await request.json();
+      const { risposteIndice, annulla, giocatoreId, token } = await request.json();
       const session = await this.initState();
+
+      const auth = this.autenticaComandante(session, giocatoreId, token);
+      if (auth.errore) return auth.errore;
 
       if (!session.interpretazionePendente) {
         return new Response("Nessuna interpretazione in attesa di risoluzione", { status: 400 });
@@ -368,7 +422,7 @@ export class GameSession {
       if (annulla) {
         session.interpretazionePendente = null;
         await this.state.storage.put("session", session);
-        return Response.json({ session });
+        return Response.json({ session: this.sessionPubblica(session) });
       }
 
       const pendente = session.interpretazionePendente;
@@ -388,7 +442,7 @@ export class GameSession {
       const risultato = await this.applicaRisposta(session, richiestaAttiva, risposta, pendente.giocatoreId);
       session.interpretazionePendente = null;
       await this.state.storage.put("session", session);
-      return Response.json({ session, ...risultato });
+      return Response.json({ session: this.sessionPubblica(session), ...risultato });
     }
 
     return new Response("Not found", { status: 404 });

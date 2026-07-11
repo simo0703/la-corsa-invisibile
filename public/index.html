@@ -346,6 +346,7 @@
     text-align: left;
   }
   .nodo-card:hover { border-color: var(--crimson); background: var(--bg-panel-raised); }
+  .nodo-card:disabled { opacity: 0.5; cursor: default; }
   .nodo-card .titolo-nodo {
     font-family: var(--font-display);
     font-weight: 600;
@@ -629,7 +630,7 @@
 <script>
 const API = ""; // stesso dominio
 let CONFIG = null;
-let STATO = { roomId: null, nome: null, ruolo: null, giocatoreId: null, comandante: false, competenze: null };
+let STATO = { roomId: null, nome: null, ruolo: null, giocatoreId: null, token: null, comandante: false, competenze: null };
 
 function mostraSchermo(id) {
   document.querySelectorAll(".schermo").forEach(s => s.classList.remove("attivo"));
@@ -657,6 +658,47 @@ async function chiamaAPI(path, opzioni) {
     throw err;
   }
   return risposta.json();
+}
+
+// Vero se questo dispositivo ha un'identità completa (giocatoreId + token,
+// salvati a /join) per compiere azioni autenticate. Falso per sessioni
+// salvate in localStorage PRIMA dell'introduzione del token: il server le
+// rifiuterebbe comunque (400/401), meglio dirlo subito con un messaggio
+// chiaro che lasciare che l'utente clicchi a vuoto.
+function identitaValida() {
+  return !!(STATO.giocatoreId && STATO.token);
+}
+
+const MESSAGGIO_SESSIONE_NON_VALIDA =
+  "La tua sessione su questo dispositivo non è più valida. Ricarica la pagina per continuare.";
+
+// Wrapper per le chiamate che richiedono giocatoreId + token (/scegli,
+// /interpreta, /risorse, /avvia-nodo, /risolvi-interpretazione): aggiunge
+// l'identità al corpo della richiesta e intercetta i soli errori di
+// SESSIONE (401 token non valido, 403 non comandante) mostrando lo stesso
+// messaggio chiaro con `mostraErrore` -- gli altri errori (es. 400 di
+// dominio, come un nodo o una risorsa sconosciuti) passano invariati al
+// chiamante, che li gestisce come faceva già prima del token.
+async function chiamaAPIAutenticata(path, corpoBase, mostraErrore) {
+  if (!identitaValida()) {
+    mostraErrore(MESSAGGIO_SESSIONE_NON_VALIDA);
+    const err = new Error(MESSAGGIO_SESSIONE_NON_VALIDA);
+    err.sessioneNonValida = true;
+    throw err;
+  }
+  try {
+    return await chiamaAPI(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...corpoBase, giocatoreId: STATO.giocatoreId, token: STATO.token }),
+    });
+  } catch (e) {
+    if (e.status === 401 || e.status === 403) {
+      mostraErrore(MESSAGGIO_SESSIONE_NON_VALIDA);
+      e.sessioneNonValida = true;
+    }
+    throw e;
+  }
 }
 
 async function caricaConfig() {
@@ -747,6 +789,7 @@ document.getElementById("btn-join").addEventListener("click", async () => {
     // dell'array è sempre quello appena aggiunto da questa chiamata.
     const mioGiocatore = session.giocatori[session.giocatori.length - 1];
     STATO.giocatoreId = mioGiocatore.id;
+    STATO.token = session.token;
     STATO.comandante = mioGiocatore.comandante === true;
     STATO.competenze = mioGiocatore.competenze;
     salvaStato();
@@ -873,8 +916,14 @@ function renderSelezioneNodo() {
     <div class="etichetta">Scegli dove giocare</div>
     <h1 class="grande" style="font-size:1.3rem;">Cinque momenti nella storia dei Bersaglieri.</h1>
     <div class="nodi-lista" id="lista-nodi"></div>
+    <p class="errore" id="errore-selezione-nodo"></p>
   `;
   const lista = document.getElementById("lista-nodi");
+  const erroreSelezioneNodo = document.getElementById("errore-selezione-nodo");
+  function mostraErroreSelezioneNodo(testo) {
+    erroreSelezioneNodo.textContent = testo;
+    erroreSelezioneNodo.classList.add("mostra");
+  }
   lista.innerHTML = CONFIG.nodiTemporali.map(n => `
     <button class="nodo-card" data-nodo="${n.id}">
       <div class="titolo-nodo">${n.titolo}</div>
@@ -885,13 +934,20 @@ function renderSelezioneNodo() {
   lista.querySelectorAll(".nodo-card").forEach(card => {
     card.addEventListener("click", async () => {
       const nodoId = card.dataset.nodo;
-      area.innerHTML = `<div class="caricamento">si comincia…</div>`;
-      await chiamaAPI(`/api/stanza/${STATO.roomId}/avvia-nodo`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nodoId }),
-      });
-      await aggiornaSchermataGioco();
+      lista.querySelectorAll(".nodo-card").forEach(c => c.disabled = true);
+      erroreSelezioneNodo.classList.remove("mostra");
+      try {
+        await chiamaAPIAutenticata(
+          `/api/stanza/${STATO.roomId}/avvia-nodo`,
+          { nodoId },
+          mostraErroreSelezioneNodo
+        );
+        area.innerHTML = `<div class="caricamento">si comincia…</div>`;
+        await aggiornaSchermataGioco();
+      } catch (e) {
+        lista.querySelectorAll(".nodo-card").forEach(c => c.disabled = false);
+        if (!e.sessioneNonValida) mostraErroreSelezioneNodo("Qualcosa è andato storto. Riprova.");
+      }
     });
   });
 }
@@ -942,6 +998,7 @@ function renderRichiesta(richiesta, nodoAttivo) {
       <p class="prompt">${richiesta.prompt}</p>
     </div>
     <div class="risposte-lista" id="lista-risposte"></div>
+    <p class="errore" id="errore-risposta"></p>
     <div class="testo-libero-box" id="testo-libero-box">
       <div class="separatore">oppure</div>
       <div class="campo">
@@ -957,6 +1014,12 @@ function renderRichiesta(richiesta, nodoAttivo) {
   lista.innerHTML = richiesta.risposte.map((r, i) =>
     `<button class="risposta" data-indice="${i}">${r.testo}</button>`
   ).join("");
+
+  const erroreRisposta = document.getElementById("errore-risposta");
+  function mostraErroreRisposta(testo) {
+    erroreRisposta.textContent = testo;
+    erroreRisposta.classList.add("mostra");
+  }
 
   const inputTestoLibero = document.getElementById("input-testo-libero");
   const btnInviaTestoLibero = document.getElementById("btn-invia-testo-libero");
@@ -976,13 +1039,19 @@ function renderRichiesta(richiesta, nodoAttivo) {
   lista.querySelectorAll("button.risposta").forEach(btn => {
     btn.addEventListener("click", async () => {
       disabilitaTutto(true);
+      erroreRisposta.classList.remove("mostra");
       const indice = parseInt(btn.dataset.indice, 10);
-      const risultato = await chiamaAPI(`/api/stanza/${STATO.roomId}/scegli`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ risposteIndice: indice, giocatoreId: STATO.giocatoreId }),
-      });
-      mostraRisultatoScelta(risultato);
+      try {
+        const risultato = await chiamaAPIAutenticata(
+          `/api/stanza/${STATO.roomId}/scegli`,
+          { risposteIndice: indice },
+          mostraErroreRisposta
+        );
+        mostraRisultatoScelta(risultato);
+      } catch (e) {
+        disabilitaTutto(false);
+        if (!e.sessioneNonValida) mostraErroreRisposta("Qualcosa è andato storto. Riprova.");
+      }
     });
   });
 
@@ -992,11 +1061,11 @@ function renderRichiesta(richiesta, nodoAttivo) {
     disabilitaTutto(true);
     mostraMessaggioTestoLibero("Un momento…", "attesa");
     try {
-      const risultato = await chiamaAPI(`/api/stanza/${STATO.roomId}/interpreta`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ testoLibero, richiestaId: richiesta.id, giocatoreId: STATO.giocatoreId }),
-      });
+      const risultato = await chiamaAPIAutenticata(
+        `/api/stanza/${STATO.roomId}/interpreta`,
+        { testoLibero, richiestaId: richiesta.id },
+        (testo) => mostraMessaggioTestoLibero(testo, "errore-testo")
+      );
 
       if (risultato.esito === "manuale") {
         inAttesaDiInterpretazione = true;
@@ -1019,7 +1088,9 @@ function renderRichiesta(richiesta, nodoAttivo) {
       // Automatica: stessa gestione del click su un bottone.
       mostraRisultatoScelta(risultato);
     } catch (e) {
-      if (e.status === 400) {
+      if (e.sessioneNonValida) {
+        disabilitaTutto(false);
+      } else if (e.status === 400) {
         // Questa richiesta non ha ancora una libreria per l'interprete:
         // fallback con grazia, il campo si disabilita per il resto della
         // richiesta invece di continuare a fallire.
@@ -1132,29 +1203,48 @@ function renderPannelloComandante(session) {
         <textarea id="note-comandante" placeholder="Appunti tuoi, solo su questo dispositivo…"></textarea>
         <p class="nota-privata">Restano solo su questo browser: non vengono mai inviate al server né agli altri giocatori.</p>
       </div>
+
+      <p class="errore" id="errore-pannello-comandante"></p>
     </div>
   `;
+
+  const erroreComandante = document.getElementById("errore-pannello-comandante");
+  function mostraErroreComandante(testo) {
+    erroreComandante.textContent = testo;
+    erroreComandante.classList.add("mostra");
+  }
 
   if (pendente) {
     document.querySelectorAll("#candidati-interpretazione button.risposta").forEach(btn => {
       btn.addEventListener("click", async () => {
         document.querySelectorAll("#candidati-interpretazione button.risposta").forEach(b => b.disabled = true);
+        erroreComandante.classList.remove("mostra");
         const risposteIndice = parseInt(btn.dataset.risposteIndice, 10);
-        await chiamaAPI(`/api/stanza/${STATO.roomId}/risolvi-interpretazione`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ risposteIndice }),
-        });
-        await aggiornaSchermataGioco();
+        try {
+          await chiamaAPIAutenticata(
+            `/api/stanza/${STATO.roomId}/risolvi-interpretazione`,
+            { risposteIndice },
+            mostraErroreComandante
+          );
+          await aggiornaSchermataGioco();
+        } catch (e) {
+          document.querySelectorAll("#candidati-interpretazione button.risposta").forEach(b => b.disabled = false);
+          if (!e.sessioneNonValida) mostraErroreComandante("Qualcosa è andato storto. Riprova.");
+        }
       });
     });
     document.getElementById("btn-annulla-interpretazione").addEventListener("click", async () => {
-      await chiamaAPI(`/api/stanza/${STATO.roomId}/risolvi-interpretazione`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ annulla: true }),
-      });
-      await aggiornaSchermataGioco();
+      erroreComandante.classList.remove("mostra");
+      try {
+        await chiamaAPIAutenticata(
+          `/api/stanza/${STATO.roomId}/risolvi-interpretazione`,
+          { annulla: true },
+          mostraErroreComandante
+        );
+        await aggiornaSchermataGioco();
+      } catch (e) {
+        if (!e.sessioneNonValida) mostraErroreComandante("Qualcosa è andato storto. Riprova.");
+      }
     });
   }
 
@@ -1162,22 +1252,32 @@ function renderPannelloComandante(session) {
     const input = document.getElementById("input-delta-margine");
     const delta = parseInt(input.value, 10);
     if (!Number.isFinite(delta) || delta === 0) return;
-    await chiamaAPI(`/api/stanza/${STATO.roomId}/risorse`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ risorsa: "margine", delta }),
-    });
-    await aggiornaSchermataGioco();
+    erroreComandante.classList.remove("mostra");
+    try {
+      await chiamaAPIAutenticata(
+        `/api/stanza/${STATO.roomId}/risorse`,
+        { risorsa: "margine", delta },
+        mostraErroreComandante
+      );
+      await aggiornaSchermataGioco();
+    } catch (e) {
+      if (!e.sessioneNonValida) mostraErroreComandante("Qualcosa è andato storto. Riprova.");
+    }
   });
 
   document.getElementById("btn-avvia-nodo-comandante").addEventListener("click", async () => {
     const nodoId = document.getElementById("select-nodo-comandante").value;
-    await chiamaAPI(`/api/stanza/${STATO.roomId}/avvia-nodo`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nodoId }),
-    });
-    await aggiornaSchermataGioco();
+    erroreComandante.classList.remove("mostra");
+    try {
+      await chiamaAPIAutenticata(
+        `/api/stanza/${STATO.roomId}/avvia-nodo`,
+        { nodoId },
+        mostraErroreComandante
+      );
+      await aggiornaSchermataGioco();
+    } catch (e) {
+      if (!e.sessioneNonValida) mostraErroreComandante("Qualcosa è andato storto. Riprova.");
+    }
   });
 
   const note = document.getElementById("note-comandante");

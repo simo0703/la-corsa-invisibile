@@ -73,6 +73,20 @@ async function chiamata(gs, path, method = "GET", body = null) {
   return { status: risposta.status, json };
 }
 
+// Cerca ricorsivamente una CHIAVE "token" in un oggetto/array -- usata per
+// verificare che GET /state non esponga mai il segreto, nemmeno annidato
+// in un punto imprevisto.
+function contieneChiaveToken(valore) {
+  if (Array.isArray(valore)) return valore.some(contieneChiaveToken);
+  if (valore && typeof valore === "object") {
+    return (
+      Object.keys(valore).some((chiave) => chiave === "token") ||
+      Object.values(valore).some(contieneChiaveToken)
+    );
+  }
+  return false;
+}
+
 console.log("--- Stato iniziale ---");
 {
   const { gs } = nuovaSessione();
@@ -101,6 +115,8 @@ console.log("\n--- /join ---");
     json.giocatori[0].competenze.cadenza === 3 && json.giocatori[0].competenze.precisione === 1
   );
   verifica("il primo giocatore della stanza diventa comandante", json.giocatori[0].comandante === true);
+  verifica("/join restituisce un token per il nuovo giocatore", typeof json.token === "string" && json.token.length > 0);
+  verifica("il token non compare nell'elenco giocatori della risposta di /join", json.giocatori[0].token === undefined);
 
   const secondo = await chiamata(gs, "/join", "POST", { nome: "Seconda", ruolo: "custode" });
   verifica(
@@ -110,6 +126,14 @@ console.log("\n--- /join ---");
 
   const ruoloIgnoto = await chiamata(gs, "/join", "POST", { nome: "Altro", ruolo: "non-esiste" });
   verifica("un ruolo sconosciuto risponde 400", ruoloIgnoto.status === 400);
+}
+
+console.log("\n--- GET /state non deve mai esporre il token ---");
+{
+  const { gs } = nuovaSessione();
+  await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
+  const { json } = await chiamata(gs, "/state");
+  verifica("GET /state non contiene mai la chiave \"token\", nemmeno annidata", !contieneChiaveToken(json));
 }
 
 console.log("\n--- /join: limite di 8 posti ---");
@@ -147,23 +171,86 @@ console.log("\n--- /join: limite di 8 posti ---");
 console.log("\n--- /risorse ---");
 {
   const { gs } = nuovaSessione();
-  const ok = await chiamata(gs, "/risorse", "POST", { risorsa: "cadenza", delta: 3 });
+  const join = await chiamata(gs, "/join", "POST", { nome: "Comandante", ruolo: "esploratore" });
+  const giocatoreId = join.json.giocatori[0].id;
+  const token = join.json.token;
+
+  const ok = await chiamata(gs, "/risorse", "POST", { risorsa: "cadenza", delta: 3, giocatoreId, token });
   verifica("modifica una risorsa nota", ok.json.risorseDiSquadra.cadenza === 3);
-  const male = await chiamata(gs, "/risorse", "POST", { risorsa: "non-esiste", delta: 1 });
+  const male = await chiamata(gs, "/risorse", "POST", { risorsa: "non-esiste", delta: 1, giocatoreId, token });
   verifica("una risorsa sconosciuta risponde 400", male.status === 400);
 
   // Il margine non è dentro risorseDiSquadra ma è accettato come chiave
   // speciale, con lo stesso pattern delta (per il pannello del comandante).
-  const su = await chiamata(gs, "/risorse", "POST", { risorsa: "margine", delta: 2 });
+  const su = await chiamata(gs, "/risorse", "POST", { risorsa: "margine", delta: 2, giocatoreId, token });
   verifica("il margine sale con un delta positivo", su.json.margine === 2);
-  const giu = await chiamata(gs, "/risorse", "POST", { risorsa: "margine", delta: -3 });
+  const giu = await chiamata(gs, "/risorse", "POST", { risorsa: "margine", delta: -3, giocatoreId, token });
   verifica("il margine scende con un delta negativo, senza limiti imposti qui", giu.json.margine === -1);
+}
+
+console.log("\n--- Autenticazione: /risorse e /avvia-nodo riservati al comandante ---");
+{
+  const { gs } = nuovaSessione();
+  const comandante = await chiamata(gs, "/join", "POST", { nome: "Comandante", ruolo: "esploratore" });
+  const idComandante = comandante.json.giocatori[0].id;
+  const tokenComandante = comandante.json.token;
+  const gregario = await chiamata(gs, "/join", "POST", { nome: "Gregario", ruolo: "custode" });
+  const idGregario = gregario.json.giocatori[1].id;
+  const tokenGregario = gregario.json.token;
+
+  const senzaToken = await chiamata(gs, "/risorse", "POST", { risorsa: "cadenza", delta: 1, giocatoreId: idComandante });
+  verifica("/risorse senza token risponde 400", senzaToken.status === 400);
+
+  const tokenSbagliato = await chiamata(gs, "/risorse", "POST", {
+    risorsa: "cadenza",
+    delta: 1,
+    giocatoreId: idComandante,
+    token: "token-inventato",
+  });
+  verifica("/risorse con token sbagliato risponde 401", tokenSbagliato.status === 401);
+
+  const nonComandante = await chiamata(gs, "/risorse", "POST", {
+    risorsa: "cadenza",
+    delta: 1,
+    giocatoreId: idGregario,
+    token: tokenGregario,
+  });
+  verifica("/risorse chiamato da un giocatore non comandante risponde 403", nonComandante.status === 403);
+
+  const senzaTokenNodo = await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino", giocatoreId: idComandante });
+  verifica("/avvia-nodo senza token risponde 400", senzaTokenNodo.status === 400);
+
+  const tokenSbagliatoNodo = await chiamata(gs, "/avvia-nodo", "POST", {
+    nodoId: "1836-torino",
+    giocatoreId: idComandante,
+    token: "token-inventato",
+  });
+  verifica("/avvia-nodo con token sbagliato risponde 401", tokenSbagliatoNodo.status === 401);
+
+  const nonComandanteNodo = await chiamata(gs, "/avvia-nodo", "POST", {
+    nodoId: "1836-torino",
+    giocatoreId: idGregario,
+    token: tokenGregario,
+  });
+  verifica("/avvia-nodo chiamato da un giocatore non comandante risponde 403", nonComandanteNodo.status === 403);
+
+  // Verifica positiva: con identita' e ruolo corretti, l'azione riservata funziona.
+  const ok = await chiamata(gs, "/avvia-nodo", "POST", {
+    nodoId: "1836-torino",
+    giocatoreId: idComandante,
+    token: tokenComandante,
+  });
+  verifica("/avvia-nodo con comandante autenticato funziona", ok.status === 200);
 }
 
 console.log("\n--- avvia-nodo + richiesta-attiva ---");
 {
   const { gs } = nuovaSessione();
-  const avvio = await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino" });
+  const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
+  const giocatoreId = join.json.giocatori[0].id;
+  const token = join.json.token;
+
+  const avvio = await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino", giocatoreId, token });
   verifica("avvia il nodo richiesto", avvio.json.session.nodoAttivo === "1836-torino");
   verifica(
     "la prima richiesta attiva è quella giusta",
@@ -176,7 +263,7 @@ console.log("\n--- avvia-nodo + richiesta-attiva ---");
       avvio.json.session.storicoNodo[0].concluso_il === null
   );
 
-  const nodoSconosciuto = await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "non-esiste" });
+  const nodoSconosciuto = await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "non-esiste", giocatoreId, token });
   verifica("un nodo sconosciuto risponde 400", nodoSconosciuto.status === 400);
 
   const attiva = await chiamata(gs, "/richiesta-attiva");
@@ -191,8 +278,28 @@ console.log("\n--- /scegli senza nodo avviato ---");
   const { gs } = nuovaSessione();
   const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
   const giocatoreId = join.json.giocatori[0].id;
-  const { status } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
+  const token = join.json.token;
+  const { status } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
   verifica("scegliere senza aver avviato un nodo risponde 400", status === 400);
+}
+
+console.log("\n--- Autenticazione: /scegli richiede identita' verificata ---");
+{
+  const { gs } = nuovaSessione();
+  const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
+  const giocatoreId = join.json.giocatori[0].id;
+  const token = join.json.token;
+  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino", giocatoreId, token });
+
+  const senzaToken = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
+  verifica("/scegli senza token risponde 400", senzaToken.status === 400);
+
+  const tokenSbagliato = await chiamata(gs, "/scegli", "POST", {
+    risposteIndice: 0,
+    giocatoreId,
+    token: "token-inventato",
+  });
+  verifica("/scegli con token sbagliato risponde 401", tokenSbagliato.status === 401);
 }
 
 console.log("\n--- Ramificazione: percorso aggressivo verso decalogo-vaira-severo ---");
@@ -200,16 +307,17 @@ console.log("\n--- Ramificazione: percorso aggressivo verso decalogo-vaira-sever
   const { gs, storage } = nuovaSessione();
   const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
   const giocatoreId = join.json.giocatori[0].id;
+  const token = join.json.token;
   // Dal Passo 9 questa risposta ha un tiro (competenzaRichiesta: "cadenza");
   // punteggio forzato molto alto per rendere il tier deterministico ("pieno").
   await impostaCompetenza(storage, giocatoreId, "cadenza", 20);
-  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino" });
+  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino", giocatoreId, token });
 
   // Risposta 0 su "decalogo-ginnastica": scelta aggressiva, con tiro.
   // Tier "pieno": cadenza +3, margine +1 (niente spiritoDiCorpo);
   // prossima: "decalogo-vaira-severo" a prescindere dal tier (dipende dalla
   // scelta fatta, non da come va il tiro).
-  const primaScelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
+  const primaScelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
   verifica("il tiro sul punteggio forzato è \"pieno\"", primaScelta.json.tiro && primaScelta.json.tiro.esito === "pieno");
   verifica("applica l'effetto su cadenza (tier pieno)", primaScelta.json.session.risorseDiSquadra.cadenza === 3);
   verifica("il tier pieno non tocca spiritoDiCorpo", primaScelta.json.session.risorseDiSquadra.spiritoDiCorpo === 0);
@@ -244,7 +352,7 @@ console.log("\n--- Ramificazione: percorso aggressivo verso decalogo-vaira-sever
 
   // Risposta 0 su "decalogo-vaira-severo": ammette la paura (effetto fisso,
   // nessun tiro). effetti attesi: passoAvanti +1, margine -1; prossima: null (fine ramo)
-  const secondaScelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
+  const secondaScelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
   verifica("nessun tiro su questa risposta (effetto fisso)", secondaScelta.json.tiro === null);
   verifica("applica l'effetto su passoAvanti", secondaScelta.json.session.risorseDiSquadra.passoAvanti === 1);
   verifica("il margine scende con l'effetto negativo (1 - 1 = 0)", secondaScelta.json.session.margine === 0);
@@ -270,9 +378,10 @@ console.log("\n--- Soglia del margine: la complicazione scatta e il margine si d
   const { gs, storage } = nuovaSessione();
   const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
   const giocatoreId = join.json.giocatori[0].id;
+  const token = join.json.token;
   // Punteggio forzato molto basso: tier deterministico "fallimento" (margine +3).
   await impostaCompetenza(storage, giocatoreId, "cadenza", -10);
-  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino" });
+  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino", giocatoreId, token });
 
   // Portiamo il margine a 3 a mano (simula l'accumulo di più nodi giocati
   // prima di questo, senza dover ripetere tutto il percorso): con la soglia
@@ -282,7 +391,7 @@ console.log("\n--- Soglia del margine: la complicazione scatta e il margine si d
   sessionePresente.margine = 3;
   await storage.put("session", sessionePresente);
 
-  const scelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId }); // tier fallimento: +3 margine → 6
+  const scelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token }); // tier fallimento: +3 margine → 6
   verifica("il tiro sul punteggio forzato è \"fallimento\"", scelta.json.tiro && scelta.json.tiro.esito === "fallimento");
   verifica("il margine supera la soglia (3 + 3 = 6 ≥ 5)", scelta.json.complicazione !== null);
   verifica(
@@ -300,14 +409,15 @@ console.log("\n--- Fallback in sequenza per nodi senza campo \"prossima\" (compa
   const { gs } = nuovaSessione();
   const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
   const giocatoreId = join.json.giocatori[0].id;
-  const avvio = await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1848-milano" });
+  const token = join.json.token;
+  const avvio = await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1848-milano", giocatoreId, token });
   verifica("avvia il nodo di Milano", avvio.json.richiestaAttiva.id === "milano-barricata");
 
   // "milano-barricata", risposta 2 ("parlare con chi presidia"): questa
   // risposta NON ha il campo "prossima" nel game-config.js -> deve
   // scattare il fallback in sequenza verso la richiesta successiva
   // dell'array, "milano-ferito".
-  const scelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 2, giocatoreId });
+  const scelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 2, giocatoreId, token });
   verifica(
     "senza \"prossima\", il fallback in sequenza porta alla richiesta successiva dell'array",
     scelta.json.prossimaRichiesta && scelta.json.prossimaRichiesta.id === "milano-ferito"
@@ -319,8 +429,9 @@ console.log("\n--- /scegli con indice di risposta inesistente ---");
   const { gs } = nuovaSessione();
   const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
   const giocatoreId = join.json.giocatori[0].id;
-  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino" });
-  const { status } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 99, giocatoreId });
+  const token = join.json.token;
+  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino", giocatoreId, token });
+  const { status } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 99, giocatoreId, token });
   verifica("un indice di risposta che non esiste risponde 400", status === 400);
 }
 
