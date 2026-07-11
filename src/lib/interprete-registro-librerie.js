@@ -22,6 +22,8 @@ const CARICATORI = {
   "decalogo-ginnastica": () => import("./interprete-libero/1836-torino/decalogo-ginnastica.js"),
   "decalogo-vaira": () => import("./interprete-libero/1836-torino/decalogo-vaira.js"),
   "decalogo-vaira-severo": () => import("./interprete-libero/1836-torino/decalogo-vaira-severo.js"),
+  "milano-barricata": () => import("./interprete-libero/1848-milano/milano-barricata.js"),
+  "milano-ferito": () => import("./interprete-libero/1848-milano/milano-ferito.js"),
 };
 
 // Registra (o sovrascrive) il caricatore di una libreria. Usato soprattutto

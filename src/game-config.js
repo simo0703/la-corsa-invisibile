@@ -240,8 +240,17 @@ export const GAME_CONFIG = {
             {
               testo: "Carica diretta, sfruttando la Cadenza accumulata",
               costoMinimo: { cadenza: 2 },
-              effetti: { cadenza: -2, passoAvanti: 1 },
-              esito: "Sfondate, ma il fiato è corto per il prossimo bivio.",
+              competenzaRichiesta: "cadenza",
+              effettiPerEsito: {
+                pieno: { cadenza: -1, passoAvanti: 2, margine: 1 },
+                parziale: { cadenza: -2, passoAvanti: 1, margine: 2 },
+                fallimento: { cadenza: -2, spiritoDiCorpo: -1, margine: 3 },
+              },
+              esito: {
+                pieno: "Sfondate come un solo corpo: nessuno spreca un movimento, la barricata cede tutta insieme.",
+                parziale: "Sfondate, ma il fiato è corto per il prossimo bivio.",
+                fallimento: "Sfondate comunque, ma qualcuno inciampa nel varco: il prezzo si paga subito, non dopo.",
+              },
             },
             {
               testo: "Aggirate il fianco nella nebbia dei vicoli",
