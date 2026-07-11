@@ -73,12 +73,21 @@ async function impostaCompetenza(storage, giocatoreId, competenzaId, valore) {
   await storage.put("session", session);
 }
 
+// Fa /crea + /join con un tokenCreazione valido, cosi' il giocatore
+// risultante e' davvero comandante (serve per compiere /avvia-nodo, azione
+// riservata -- vedi autenticaComandante() in GameSession.js).
+async function joinComandante(gs, nome = "Prova", ruolo = "esploratore") {
+  const tokenCreazione = crypto.randomUUID();
+  await chiamata(gs, "/crea", "POST", { tokenCreazione });
+  const join = await chiamata(gs, "/join", "POST", { nome, ruolo, tokenCreazione });
+  return { giocatoreId: join.json.giocatori[0].id, token: join.json.token };
+}
+
 async function sessionePronta(ruolo = "esploratore") {
   const { gs, storage } = nuovaSessione();
-  const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo });
-  const giocatoreId = join.json.giocatori[0].id;
-  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino" });
-  return { gs, storage, giocatoreId };
+  const { giocatoreId, token } = await joinComandante(gs, "Prova", ruolo);
+  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino", giocatoreId, token });
+  return { gs, storage, giocatoreId, token };
 }
 
 const TESTO_PIENO_STATICO =
@@ -107,9 +116,9 @@ console.log("\n--- registro: il caricatore reale di 1836-torino fallisce sotto N
 
 console.log("\n--- GameSession: senza pool disponibile, /scegli usa il testo statico (fallback) ---");
 {
-  const { gs, storage, giocatoreId } = await sessionePronta();
+  const { gs, storage, giocatoreId, token } = await sessionePronta();
   await impostaCompetenza(storage, giocatoreId, "cadenza", 20); // forza "pieno"
-  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
+  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
   verifica("il tiro è \"pieno\"", json.tiro.esito === "pieno");
   verifica("senza pool, l'esito resta il testo statico per tier", json.esito === TESTO_PIENO_STATICO);
 }
@@ -125,9 +134,9 @@ registraPool("1836-torino", () => Promise.resolve({ ottieniFrammenti: poolReale.
 
 console.log("\n--- GameSession: con il pool reale iniettato, /scegli usa il testo del Cronista ---");
 {
-  const { gs, storage, giocatoreId } = await sessionePronta();
+  const { gs, storage, giocatoreId, token } = await sessionePronta();
   await impostaCompetenza(storage, giocatoreId, "cadenza", 20); // forza "pieno"
-  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
+  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
   verifica("il tiro è ancora \"pieno\" (il pool non cambia il tiro)", json.tiro.esito === "pieno");
   verifica("l'esito NON è più il testo statico: è stato sostituito", json.esito !== TESTO_PIENO_STATICO);
   verifica("l'esito composto è una stringa non vuota", typeof json.esito === "string" && json.esito.length > 0);
@@ -148,9 +157,9 @@ console.log("\n--- GameSession: con il pool reale iniettato, /scegli usa il test
 
 console.log("\n--- GameSession: tier e ruolo diversi producono comunque un testo coerente ---");
 {
-  const { gs, storage, giocatoreId } = await sessionePronta("fanfara");
+  const { gs, storage, giocatoreId, token } = await sessionePronta("fanfara");
   await impostaCompetenza(storage, giocatoreId, "cadenza", -10); // forza "fallimento"
-  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
+  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
   verifica("il tiro è \"fallimento\"", json.tiro.esito === "fallimento");
   verifica("l'esito NON è il testo statico del tier fallimento", json.esito !== TESTO_FALLIMENTO_STATICO);
   verifica("l'esito composto è una stringa non vuota", typeof json.esito === "string" && json.esito.length > 0);
@@ -159,9 +168,9 @@ console.log("\n--- GameSession: tier e ruolo diversi producono comunque un testo
 
 console.log("\n--- risposte SENZA tiro: il Cronista non le tocca mai, anche col pool registrato ---");
 {
-  const { gs, giocatoreId } = await sessionePronta();
+  const { gs, giocatoreId, token } = await sessionePronta();
   // "con metodo" (indice 1): nessuna competenzaRichiesta, nessun tiro.
-  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 1, giocatoreId });
+  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 1, giocatoreId, token });
   verifica("nessun tiro su questa risposta", json.tiro === null);
   verifica(
     "l'esito resta il testo fisso scritto in game-config.js, non toccato dal Cronista",

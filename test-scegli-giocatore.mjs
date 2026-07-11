@@ -56,14 +56,23 @@ async function chiamata(gs, path, method = "GET", body = null) {
   return { status: risposta.status, json, testo };
 }
 
+// Fa /crea + /join con un tokenCreazione valido, cosi' il giocatore
+// risultante e' davvero comandante (serve per compiere /avvia-nodo, azione
+// riservata -- vedi autenticaComandante() in GameSession.js).
+async function joinComandante(gs, nome = "Prova", ruolo = "esploratore") {
+  const tokenCreazione = crypto.randomUUID();
+  await chiamata(gs, "/crea", "POST", { tokenCreazione });
+  const join = await chiamata(gs, "/join", "POST", { nome, ruolo, tokenCreazione });
+  return { giocatoreId: join.json.giocatori[0].id, token: join.json.token };
+}
+
 // Scorciatoia comune a più test: crea una sessione, unisce un giocatore e
 // avvia il nodo "1836-torino" (la prima richiesta ha sempre 3 risposte).
 async function sessionePronta() {
   const { gs, storage } = nuovaSessione();
-  const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
-  const giocatoreId = join.json.giocatori[0].id;
-  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino" });
-  return { gs, storage, giocatoreId };
+  const { giocatoreId, token } = await joinComandante(gs);
+  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino", giocatoreId, token });
+  return { gs, storage, giocatoreId, token };
 }
 
 console.log("--- giocatoreId mancante ---");
@@ -71,7 +80,7 @@ console.log("--- giocatoreId mancante ---");
   const { gs } = await sessionePronta();
   const { status, testo } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0 });
   verifica("senza giocatoreId nel body, risponde 400", status === 400);
-  verifica("il messaggio spiega che manca il giocatoreId", testo.includes("giocatoreId mancante"));
+  verifica("il messaggio spiega che manca il giocatoreId (o il token)", testo.includes("giocatoreId") && testo.includes("mancante"));
 }
 
 console.log("\n--- giocatoreId presente ma sconosciuto alla stanza ---");
@@ -80,6 +89,7 @@ console.log("\n--- giocatoreId presente ma sconosciuto alla stanza ---");
   const { status, testo } = await chiamata(gs, "/scegli", "POST", {
     risposteIndice: 0,
     giocatoreId: "id-inventato-non-unito",
+    token: "token-qualsiasi", // presente ma non associato a nessun giocatore: fa scattare "sconosciuto", non "mancante"
   });
   verifica("con un giocatoreId che non corrisponde a nessun giocatore unito, risponde 400", status === 400);
   verifica("il messaggio spiega che il giocatoreId è sconosciuto", testo.includes("sconosciuto"));
@@ -88,18 +98,19 @@ console.log("\n--- giocatoreId presente ma sconosciuto alla stanza ---");
 console.log("\n--- giocatoreId di un'ALTRA stanza non è valido qui ---");
 {
   const { gs: stanzaA } = await sessionePronta();
-  const { giocatoreId: giocatoreDellaStanzaB } = await sessionePronta(); // sessione B, mai unita ad A
+  const { giocatoreId: giocatoreDellaStanzaB, token: tokenDellaStanzaB } = await sessionePronta(); // sessione B, mai unita ad A
   const { status } = await chiamata(stanzaA, "/scegli", "POST", {
     risposteIndice: 0,
     giocatoreId: giocatoreDellaStanzaB,
+    token: tokenDellaStanzaB,
   });
   verifica("un giocatoreId valido altrove ma non in QUESTA stanza risponde comunque 400", status === 400);
 }
 
 console.log("\n--- giocatoreId valido: la scelta va a buon fine ---");
 {
-  const { gs, giocatoreId } = await sessionePronta();
-  const { status, json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
+  const { gs, giocatoreId, token } = await sessionePronta();
+  const { status, json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
   verifica("con un giocatoreId valido, la scelta risponde 200", status === 200);
   verifica(
     "storicoScelte registra il giocatoreId di chi ha scelto",
@@ -116,19 +127,20 @@ console.log("\n--- giocatoreId valido: la scelta va a buon fine ---");
 console.log("\n--- due giocatori diversi nella stessa stanza: lo storico distingue chi ha scelto quando ---");
 {
   const { gs, storage } = nuovaSessione();
-  const joinA = await chiamata(gs, "/join", "POST", { nome: "Prima", ruolo: "esploratore" });
+  // A si unisce col tokenCreazione: è lei la comandante, serve per /avvia-nodo.
+  const { giocatoreId: giocatoreA, token: tokenA } = await joinComandante(gs, "Prima", "esploratore");
   const joinB = await chiamata(gs, "/join", "POST", { nome: "Seconda", ruolo: "custode" });
-  const giocatoreA = joinA.json.giocatori[0].id;
   const giocatoreB = joinB.json.giocatori.find((g) => g.nome === "Seconda").id;
+  const tokenB = joinB.json.token;
   verifica("i due giocatori uniti hanno id diversi", giocatoreA !== giocatoreB);
 
-  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino" });
+  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino", giocatoreId: giocatoreA, token: tokenA });
   // decalogo-ginnastica, risposta 1 ("con metodo") -> prossima: decalogo-vaira
-  const sceltaA = await chiamata(gs, "/scegli", "POST", { risposteIndice: 1, giocatoreId: giocatoreA });
+  const sceltaA = await chiamata(gs, "/scegli", "POST", { risposteIndice: 1, giocatoreId: giocatoreA, token: tokenA });
   verifica("la prima scelta è di A", sceltaA.json.session.storicoScelte[0].giocatoreId === giocatoreA);
 
   // decalogo-vaira, risposta 0 ("dichiara la paura") -> prossima: null, fine ramo
-  const sceltaB = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId: giocatoreB });
+  const sceltaB = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId: giocatoreB, token: tokenB });
   verifica("la seconda scelta è di B", sceltaB.json.session.storicoScelte[1].giocatoreId === giocatoreB);
   verifica(
     "lo storico ha due voci, una per giocatore, nell'ordine in cui hanno scelto",

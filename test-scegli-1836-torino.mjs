@@ -67,19 +67,28 @@ async function impostaCompetenza(storage, giocatoreId, competenzaId, valore) {
   await storage.put("session", session);
 }
 
+// Fa /crea + /join con un tokenCreazione valido, cosi' il giocatore
+// risultante e' davvero comandante (serve per compiere /avvia-nodo, azione
+// riservata -- vedi autenticaComandante() in GameSession.js).
+async function joinComandante(gs, nome = "Prova", ruolo = "esploratore") {
+  const tokenCreazione = crypto.randomUUID();
+  await chiamata(gs, "/crea", "POST", { tokenCreazione });
+  const join = await chiamata(gs, "/join", "POST", { nome, ruolo, tokenCreazione });
+  return { giocatoreId: join.json.giocatori[0].id, token: join.json.token };
+}
+
 async function sessionePronta() {
   const { gs, storage } = nuovaSessione();
-  const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
-  const giocatoreId = join.json.giocatori[0].id;
-  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino" });
-  return { gs, storage, giocatoreId };
+  const { giocatoreId, token } = await joinComandante(gs);
+  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino", giocatoreId, token });
+  return { gs, storage, giocatoreId, token };
 }
 
 console.log("--- tier pieno (punteggio forzato molto alto) ---");
 {
-  const { gs, storage, giocatoreId } = await sessionePronta();
+  const { gs, storage, giocatoreId, token } = await sessionePronta();
   await impostaCompetenza(storage, giocatoreId, "cadenza", 20);
-  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
+  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
   verifica("il tiro è \"pieno\"", json.tiro && json.tiro.esito === "pieno");
   verifica(
     "effetti del tier pieno: cadenza +3, margine +1, spiritoDiCorpo invariato",
@@ -100,9 +109,9 @@ console.log("--- tier pieno (punteggio forzato molto alto) ---");
 
 console.log("\n--- tier fallimento (punteggio forzato molto basso) ---");
 {
-  const { gs, storage, giocatoreId } = await sessionePronta();
+  const { gs, storage, giocatoreId, token } = await sessionePronta();
   await impostaCompetenza(storage, giocatoreId, "cadenza", -10);
-  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
+  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
   verifica("il tiro è \"fallimento\"", json.tiro && json.tiro.esito === "fallimento");
   verifica(
     "effetti del tier fallimento: cadenza +1, spiritoDiCorpo -2, margine +3",
@@ -131,8 +140,8 @@ console.log("\n--- con la competenza reale assegnata dal ruolo (nessun punteggio
   const tierVisti = new Set();
   let coerenteSempre = true;
   for (let i = 0; i < 30; i++) {
-    const { gs, giocatoreId } = await sessionePronta(); // competenza reale, non forzata
-    const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
+    const { gs, giocatoreId, token } = await sessionePronta(); // competenza reale, non forzata
+    const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
     if (!json.tiro || (json.tiro.esito !== "parziale" && json.tiro.esito !== "fallimento")) {
       coerenteSempre = false;
     }
@@ -158,8 +167,8 @@ console.log("\n--- con la competenza reale assegnata dal ruolo (nessun punteggio
 
 console.log("\n--- coesistenza nello stesso nodo: le altre risposte restano a effetto fisso ---");
 {
-  const { gs: gsMetodo, giocatoreId: idMetodo } = await sessionePronta();
-  const metodo = await chiamata(gsMetodo, "/scegli", "POST", { risposteIndice: 1, giocatoreId: idMetodo });
+  const { gs: gsMetodo, giocatoreId: idMetodo, token: tokenMetodo } = await sessionePronta();
+  const metodo = await chiamata(gsMetodo, "/scegli", "POST", { risposteIndice: 1, giocatoreId: idMetodo, token: tokenMetodo });
   verifica("\"con metodo\" (indice 1) non ha tiro", metodo.json.tiro === null);
   verifica("\"con metodo\" applica il suo effetto fisso invariato (cadenza +1)", metodo.json.session.risorseDiSquadra.cadenza === 1);
   verifica("\"con metodo\" mostra ancora il suo esito fisso invariato", metodo.json.esito === "Meno brillanti, ma nessuno resta indietro.");
@@ -168,8 +177,8 @@ console.log("\n--- coesistenza nello stesso nodo: le altre risposte restano a ef
     metodo.json.prossimaRichiesta && metodo.json.prossimaRichiesta.id === "decalogo-vaira"
   );
 
-  const { gs: gsAiuto, giocatoreId: idAiuto } = await sessionePronta();
-  const aiuto = await chiamata(gsAiuto, "/scegli", "POST", { risposteIndice: 2, giocatoreId: idAiuto });
+  const { gs: gsAiuto, giocatoreId: idAiuto, token: tokenAiuto } = await sessionePronta();
+  const aiuto = await chiamata(gsAiuto, "/scegli", "POST", { risposteIndice: 2, giocatoreId: idAiuto, token: tokenAiuto });
   verifica("\"aiutando chi fatica di più\" (indice 2) non ha tiro", aiuto.json.tiro === null);
   verifica(
     "\"aiutando chi fatica di più\" applica il suo effetto fisso invariato (spiritoDiCorpo +1)",
@@ -179,10 +188,10 @@ console.log("\n--- coesistenza nello stesso nodo: le altre risposte restano a ef
 
 console.log("\n--- percorso completo: dalla risposta con tiro alla chiusura del nodo ---");
 {
-  const { gs, storage, giocatoreId } = await sessionePronta();
+  const { gs, storage, giocatoreId, token } = await sessionePronta();
   await impostaCompetenza(storage, giocatoreId, "cadenza", -10); // forza "fallimento"
 
-  const primaScelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
+  const primaScelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
   verifica("prima scelta: tiro fallimento registrato", primaScelta.json.tiro.esito === "fallimento");
   verifica("il nodo non è ancora concluso", primaScelta.json.esitoNodo === null);
 
@@ -190,7 +199,7 @@ console.log("\n--- percorso completo: dalla risposta con tiro alla chiusura del 
   verifica("si è nel ramo severo dopo il tiro fallito", attiva.json.richiestaAttiva.id === "decalogo-vaira-severo");
 
   // "decalogo-vaira-severo", risposta 0: ammette la paura (effetto fisso).
-  const secondaScelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
+  const secondaScelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
   verifica("seconda scelta: nessun tiro (effetto fisso)", secondaScelta.json.tiro === null);
   verifica("il nodo si chiude con un esito finale", secondaScelta.json.esitoNodo !== null);
   verifica(

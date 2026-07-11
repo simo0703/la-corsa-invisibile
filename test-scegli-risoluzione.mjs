@@ -115,19 +115,28 @@ const NODO_DI_PROVA = {
 };
 GAME_CONFIG.nodiTemporali.push(NODO_DI_PROVA);
 
+// Fa /crea + /join con un tokenCreazione valido, cosi' il giocatore
+// risultante e' davvero comandante (serve per compiere /avvia-nodo, azione
+// riservata -- vedi autenticaComandante() in GameSession.js).
+async function joinComandante(gs, nome = "Prova", ruolo = "esploratore") {
+  const tokenCreazione = crypto.randomUUID();
+  await chiamata(gs, "/crea", "POST", { tokenCreazione });
+  const join = await chiamata(gs, "/join", "POST", { nome, ruolo, tokenCreazione });
+  return { giocatoreId: join.json.giocatori[0].id, token: join.json.token };
+}
+
 // Scorciatoia: sessione con un giocatore unito e il nodo di prova avviato.
 async function sessionePronta() {
   const { gs, storage } = nuovaSessione();
-  const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
-  const giocatoreId = join.json.giocatori[0].id;
-  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "test-nodo-tiro" });
-  return { gs, storage, giocatoreId };
+  const { giocatoreId, token } = await joinComandante(gs);
+  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "test-nodo-tiro", giocatoreId, token });
+  return { gs, storage, giocatoreId, token };
 }
 
 console.log("--- risposta senza competenzaRichiesta: nessun tiro, effetto fisso come sempre ---");
 {
-  const { gs, giocatoreId } = await sessionePronta();
-  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 1, giocatoreId });
+  const { gs, giocatoreId, token } = await sessionePronta();
+  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 1, giocatoreId, token });
   verifica("tiro è null quando la risposta non lo richiede", json.tiro === null);
   verifica("l'effetto fisso viene applicato", json.session.risorseDiSquadra.spiritoDiCorpo === 2);
   verifica("l'esito è il testo fisso, non un oggetto per tier", json.esito === "Esito fisso di prova");
@@ -136,9 +145,9 @@ console.log("--- risposta senza competenzaRichiesta: nessun tiro, effetto fisso 
 
 console.log("\n--- punteggio molto basso: il tiro è sempre fallimento ---");
 {
-  const { gs, storage, giocatoreId } = await sessionePronta();
+  const { gs, storage, giocatoreId, token } = await sessionePronta();
   await impostaCompetenza(storage, giocatoreId, "cadenza", -10); // totale sempre <5
-  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
+  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
   verifica("il tiro registra esito fallimento", json.tiro !== null && json.tiro.esito === "fallimento");
   verifica(
     "vengono applicati gli effettiPerEsito.fallimento (cadenza -1, margine +1)",
@@ -149,9 +158,9 @@ console.log("\n--- punteggio molto basso: il tiro è sempre fallimento ---");
 
 console.log("\n--- punteggio molto alto: il tiro è sempre pieno ---");
 {
-  const { gs, storage, giocatoreId } = await sessionePronta();
+  const { gs, storage, giocatoreId, token } = await sessionePronta();
   await impostaCompetenza(storage, giocatoreId, "cadenza", 20); // totale sempre >=8
-  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
+  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
   verifica("il tiro registra esito pieno", json.tiro !== null && json.tiro.esito === "pieno");
   verifica("vengono applicati gli effettiPerEsito.pieno (cadenza +3)", json.session.risorseDiSquadra.cadenza === 3);
   verifica("il testo mostrato è quello del tier pieno", json.esito === "Esito pieno di prova");
@@ -166,9 +175,9 @@ console.log("\n--- coerenza interna su molti tentativi (punteggio a cavallo tra 
   const esitiVisti = new Set();
   let coerenteSempre = true;
   for (let i = 0; i < 40; i++) {
-    const { gs, storage, giocatoreId } = await sessionePronta();
+    const { gs, storage, giocatoreId, token } = await sessionePronta();
     await impostaCompetenza(storage, giocatoreId, "cadenza", 4);
-    const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
+    const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
     if (!json.tiro || (json.tiro.esito !== "parziale" && json.tiro.esito !== "pieno")) {
       coerenteSempre = false;
     }
@@ -203,11 +212,10 @@ console.log("\n--- robustezza: contenuto malformato non manda in crash il motore
   GAME_CONFIG.nodiTemporali.push(nodoSenzaEffetti);
 
   const { gs, storage } = nuovaSessione();
-  const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
-  const giocatoreId = join.json.giocatori[0].id;
+  const { giocatoreId, token } = await joinComandante(gs);
   await impostaCompetenza(storage, giocatoreId, "cadenza", 20); // forza "pieno"
-  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "test-nodo-tiro-senza-effetti" });
-  const { status, json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
+  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "test-nodo-tiro-senza-effetti", giocatoreId, token });
+  const { status, json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
   verifica("nessun crash: la richiesta risponde comunque 200", status === 200);
   verifica("nessun effetto applicato quando effettiPerEsito manca (fallback a {})", json.session.risorseDiSquadra.cadenza === 0);
   verifica("esito testuale è null quando anche il campo esito manca per il tier", json.esito === null);
@@ -215,12 +223,12 @@ console.log("\n--- robustezza: contenuto malformato non manda in crash il motore
 
 console.log("\n--- robustezza: competenza mancante nel record del giocatore (vecchie sessioni) trattata come 0 ---");
 {
-  const { gs, storage, giocatoreId } = await sessionePronta();
+  const { gs, storage, giocatoreId, token } = await sessionePronta();
   const session = await storage.get("session");
   delete session.giocatori.find((g) => g.id === giocatoreId).competenze.cadenza;
   await storage.put("session", session);
 
-  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
+  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
   verifica(
     "punteggio mancante trattato come 0 (totale = dado, sempre <5 -> fallimento)",
     json.tiro !== null && json.tiro.esito === "fallimento" && json.tiro.competenza === 0
