@@ -11,5 +11,8 @@
   },
   "devDependencies": {
     "wrangler": "^3.90.0"
+  },
+  "dependencies": {
+    "snowball-stemmers": "^0.6.0"
   }
 }

@@ -406,6 +406,57 @@
   button.risposta:hover:not(:disabled) { border-color: var(--crimson); background: var(--bg-panel-raised); }
   button.risposta:disabled { opacity: 0.5; cursor: default; }
 
+  /* ESPERIMENTO: interprete di testo libero (solo dove esiste una
+     libreria per la richiesta corrente, oggi solo 1836-torino). Si
+     affianca ai bottoni, non li sostituisce. */
+  .testo-libero-box {
+    margin-top: 4px;
+    margin-bottom: 20px;
+  }
+  .testo-libero-box .separatore {
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin: 4px 0 12px;
+  }
+  .testo-libero-box textarea { min-height: 60px; margin-bottom: 10px; }
+  .messaggio-testo-libero {
+    font-size: 0.85rem;
+    margin-top: 10px;
+    display: none;
+  }
+  .messaggio-testo-libero.mostra { display: block; }
+  .messaggio-testo-libero.attesa { color: var(--brass); }
+  .messaggio-testo-libero.senza-corrispondenza { color: var(--text-muted); }
+  .messaggio-testo-libero.errore-testo { color: var(--crimson-bright); }
+
+  /* Nel pannello del comandante: interpretazione pendente da risolvere. */
+  .interpretazione-pendente .testo-libero-scritto {
+    font-style: italic;
+    color: var(--text-muted);
+    background: var(--bg-panel-raised);
+    border-radius: 3px;
+    padding: 10px 12px;
+    margin: 8px 0 12px;
+  }
+  .interpretazione-pendente .candidati-interpretazione {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .interpretazione-pendente button.risposta {
+    font-size: 0.9rem;
+    padding: 10px 12px;
+  }
+  .interpretazione-pendente .punteggio-candidato {
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+  }
+
   .esito-box {
     background: var(--bg-panel-raised);
     border: 1px solid var(--brass);
@@ -845,7 +896,43 @@ function renderSelezioneNodo() {
   });
 }
 
+// Applica il risultato di una scelta già decisa dal server (bottone
+// cliccato, testo libero risolto in automatico, o risolto a mano dal
+// comandante) — stesso rendering per tutti e tre i casi, mai duplicato.
+// `risultato` ha sempre la stessa forma: { session, esito, prossimaRichiesta,
+// esitoNodo, complicazione, tiro, competenzaId }.
+function mostraRisultatoScelta(risultato) {
+  renderRisorse(risultato.session.risorseDiSquadra);
+  renderGiocatori(risultato.session.giocatori);
+  renderTavolo(risultato.session.giocatori);
+  renderSchedaPersonale(risultato.session.giocatori);
+  const competenzaInfo = risultato.competenzaId ? CONFIG.competenze[risultato.competenzaId] : null;
+  const nomeCompetenza = competenzaInfo ? competenzaInfo.nome : risultato.competenzaId;
+  mostraEsito(
+    risultato.esito,
+    risultato.prossimaRichiesta,
+    risultato.esitoNodo,
+    risultato.session.nodoAttivo,
+    risultato.tiro,
+    nomeCompetenza
+  );
+}
+
+// ESPERIMENTO: se true, questa richiesta ha già mostrato di NON avere una
+// libreria per l'interprete di testo libero (risposta 400 da /interpreta):
+// evita di ritentare inutilmente per il resto della richiesta corrente.
+// "prova sempre, disabilita con grazia se fallisce" — vedi log delle decisioni.
+let richiestaSenzaLibreria = false;
+
+// ESPERIMENTO: true mentre questo giocatore aspetta che il comandante
+// risolva un'interpretazione ambigua del SUO testo libero. Il polling
+// (avviaPolling) lo controlla per sapere quando aggiornare la vista senza
+// che il giocatore debba ricaricare la pagina a mano.
+let inAttesaDiInterpretazione = false;
+
 function renderRichiesta(richiesta, nodoAttivo) {
+  richiestaSenzaLibreria = false;
+  inAttesaDiInterpretazione = false;
   const area = document.getElementById("area-nodo");
   const nodo = trovaNodo(nodoAttivo);
   area.innerHTML = `
@@ -855,42 +942,95 @@ function renderRichiesta(richiesta, nodoAttivo) {
       <p class="prompt">${richiesta.prompt}</p>
     </div>
     <div class="risposte-lista" id="lista-risposte"></div>
+    <div class="testo-libero-box" id="testo-libero-box">
+      <div class="separatore">oppure</div>
+      <div class="campo">
+        <label for="input-testo-libero">Scrivi con parole tue cosa fate</label>
+        <textarea id="input-testo-libero" placeholder="Es. vado più veloce che posso…"></textarea>
+      </div>
+      <button class="secondario" id="btn-invia-testo-libero">Invia</button>
+      <p class="messaggio-testo-libero" id="messaggio-testo-libero"></p>
+    </div>
   `;
+
   const lista = document.getElementById("lista-risposte");
   lista.innerHTML = richiesta.risposte.map((r, i) =>
     `<button class="risposta" data-indice="${i}">${r.testo}</button>`
   ).join("");
+
+  const inputTestoLibero = document.getElementById("input-testo-libero");
+  const btnInviaTestoLibero = document.getElementById("btn-invia-testo-libero");
+  const messaggioTestoLibero = document.getElementById("messaggio-testo-libero");
+
+  function mostraMessaggioTestoLibero(testo, classe) {
+    messaggioTestoLibero.textContent = testo;
+    messaggioTestoLibero.className = "messaggio-testo-libero mostra" + (classe ? " " + classe : "");
+  }
+
+  function disabilitaTutto(disabilitato) {
+    lista.querySelectorAll("button.risposta").forEach(b => b.disabled = disabilitato);
+    inputTestoLibero.disabled = disabilitato;
+    btnInviaTestoLibero.disabled = disabilitato;
+  }
+
   lista.querySelectorAll("button.risposta").forEach(btn => {
     btn.addEventListener("click", async () => {
-      lista.querySelectorAll("button.risposta").forEach(b => b.disabled = true);
+      disabilitaTutto(true);
       const indice = parseInt(btn.dataset.indice, 10);
-      // La risposta scelta (con l'eventuale competenzaRichiesta) è già nota
-      // lato client, presa dalla richiesta attiva: non serve che il server
-      // la rimandi indietro solo per sapere il nome leggibile della
-      // competenza usata nel tiro.
-      const rispostaScelta = richiesta.risposte[indice];
       const risultato = await chiamaAPI(`/api/stanza/${STATO.roomId}/scegli`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ risposteIndice: indice, giocatoreId: STATO.giocatoreId }),
       });
-      renderRisorse(risultato.session.risorseDiSquadra);
-      renderGiocatori(risultato.session.giocatori);
-      renderTavolo(risultato.session.giocatori);
-      renderSchedaPersonale(risultato.session.giocatori);
-      const competenzaInfo = rispostaScelta.competenzaRichiesta
-        ? CONFIG.competenze[rispostaScelta.competenzaRichiesta]
-        : null;
-      const nomeCompetenza = competenzaInfo ? competenzaInfo.nome : rispostaScelta.competenzaRichiesta;
-      mostraEsito(
-        risultato.esito,
-        risultato.prossimaRichiesta,
-        risultato.esitoNodo,
-        risultato.session.nodoAttivo,
-        risultato.tiro,
-        nomeCompetenza
-      );
+      mostraRisultatoScelta(risultato);
     });
+  });
+
+  btnInviaTestoLibero.addEventListener("click", async () => {
+    const testoLibero = inputTestoLibero.value.trim();
+    if (!testoLibero) return;
+    disabilitaTutto(true);
+    mostraMessaggioTestoLibero("Un momento…", "attesa");
+    try {
+      const risultato = await chiamaAPI(`/api/stanza/${STATO.roomId}/interpreta`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ testoLibero, richiestaId: richiesta.id, giocatoreId: STATO.giocatoreId }),
+      });
+
+      if (risultato.esito === "manuale") {
+        inAttesaDiInterpretazione = true;
+        mostraMessaggioTestoLibero(
+          "La tua risposta è ambigua: il comandante deve scegliere. Attendi…",
+          "attesa"
+        );
+        // Bottoni e campo restano disabilitati: si sblocca tutto quando il
+        // polling rileva che l'interpretazionePendente è stata risolta.
+        return;
+      }
+
+      if (risultato.esito === "nessuna_corrispondenza") {
+        inputTestoLibero.value = "";
+        mostraMessaggioTestoLibero("Non ho capito, riprova con altre parole oppure scegli un bottone.", "senza-corrispondenza");
+        disabilitaTutto(false);
+        return;
+      }
+
+      // Automatica: stessa gestione del click su un bottone.
+      mostraRisultatoScelta(risultato);
+    } catch (e) {
+      if (e.status === 400) {
+        // Questa richiesta non ha ancora una libreria per l'interprete:
+        // fallback con grazia, il campo si disabilita per il resto della
+        // richiesta invece di continuare a fallire.
+        richiestaSenzaLibreria = true;
+        document.getElementById("testo-libero-box").style.display = "none";
+        disabilitaTutto(false);
+      } else {
+        mostraMessaggioTestoLibero("Qualcosa è andato storto. Riprova.", "errore-testo");
+        disabilitaTutto(false);
+      }
+    }
   });
 }
 
@@ -941,9 +1081,26 @@ function renderPannelloComandante(session) {
     box.innerHTML = "";
     return;
   }
+  const pendente = session.interpretazionePendente;
   box.innerHTML = `
     <div class="pannello-comandante">
       <div class="titolo-pannello">Pannello del comandante</div>
+
+      ${pendente ? `
+      <div class="sezione interpretazione-pendente">
+        <div class="etichetta">Testo libero da risolvere</div>
+        <p class="testo-libero-scritto">"${pendente.testoLibero}"</p>
+        <div class="candidati-interpretazione" id="candidati-interpretazione">
+          ${pendente.candidati.map(c => `
+            <button class="risposta" data-risposte-indice="${c.risposteIndice}">
+              ${c.testoRisposta ?? "(risposta " + c.risposteIndice + ")"}
+              <span class="punteggio-candidato">— punteggio ${c.punteggio.toFixed(2)}</span>
+            </button>
+          `).join("")}
+        </div>
+        <button class="secondario" id="btn-annulla-interpretazione">Nessuno di questi: fai riprovare il giocatore</button>
+      </div>
+      ` : ""}
 
       <div class="sezione">
         <div class="etichetta">Margine</div>
@@ -978,6 +1135,29 @@ function renderPannelloComandante(session) {
     </div>
   `;
 
+  if (pendente) {
+    document.querySelectorAll("#candidati-interpretazione button.risposta").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        document.querySelectorAll("#candidati-interpretazione button.risposta").forEach(b => b.disabled = true);
+        const risposteIndice = parseInt(btn.dataset.risposteIndice, 10);
+        await chiamaAPI(`/api/stanza/${STATO.roomId}/risolvi-interpretazione`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ risposteIndice }),
+        });
+        await aggiornaSchermataGioco();
+      });
+    });
+    document.getElementById("btn-annulla-interpretazione").addEventListener("click", async () => {
+      await chiamaAPI(`/api/stanza/${STATO.roomId}/risolvi-interpretazione`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ annulla: true }),
+      });
+      await aggiornaSchermataGioco();
+    });
+  }
+
   document.getElementById("btn-applica-margine").addEventListener("click", async () => {
     const input = document.getElementById("input-delta-margine");
     const delta = parseInt(input.value, 10);
@@ -1010,7 +1190,7 @@ function renderPannelloComandante(session) {
 async function aggiornaSchermataGioco() {
   document.getElementById("testo-codice-stanza").textContent = "stanza " + STATO.roomId.slice(0, 8);
 
-  const [{ session }, { session: session2, richiestaAttiva }] = await Promise.all([
+  const [, { session: session2, richiestaAttiva }] = await Promise.all([
     chiamaAPI(`/api/stanza/${STATO.roomId}/state`),
     chiamaAPI(`/api/stanza/${STATO.roomId}/richiesta-attiva`),
   ]);
@@ -1037,11 +1217,22 @@ function avviaPolling() {
   if (intervalloPolling) return;
   intervalloPolling = setInterval(async () => {
     try {
-      const { session } = await chiamaAPI(`/api/stanza/${STATO.roomId}/state`);
+      const session = await chiamaAPI(`/api/stanza/${STATO.roomId}/state`);
       renderRisorse(session.risorseDiSquadra);
       renderGiocatori(session.giocatori);
       renderTavolo(session.giocatori);
       renderSchedaPersonale(session.giocatori);
+      renderPannelloComandante(session);
+
+      // Se questo giocatore stava aspettando che il comandante risolvesse
+      // il suo testo libero ambiguo, e non c'è più nulla in attesa,
+      // aggiorna tutta la schermata di gioco (bottoni sbloccati, prossima
+      // richiesta o selezione nodo a seconda di come è stata risolta) —
+      // senza bisogno che il giocatore ricarichi la pagina a mano.
+      if (inAttesaDiInterpretazione && !session.interpretazionePendente) {
+        inAttesaDiInterpretazione = false;
+        await aggiornaSchermataGioco();
+      }
     } catch (e) {}
   }, 6000);
 }

@@ -2,6 +2,8 @@ import { GAME_CONFIG } from "../game-config.js";
 import { creaCompetenzeIniziali, risolviAzione } from "../lib/risoluzione.js";
 import { componiNarrazione } from "../lib/narratore-simulato.js";
 import { trovaPoolPerNodo } from "../lib/narratore-registro-pool.js";
+import { interpreta } from "../lib/interprete-libero/interprete.js";
+import { trovaLibreriaPerRichiesta } from "../lib/interprete-registro-librerie.js";
 
 // Un Durable Object per stanza/sessione: isolamento totale tra sessioni diverse.
 // Le risorse sono a livello di SQUADRA (party-level), non per singolo personaggio:
@@ -46,6 +48,23 @@ import { trovaPoolPerNodo } from "../lib/narratore-registro-pool.js";
 // contesto.storicoFrammenti resta sempre [] per ora (decisione: nessun
 // nuovo campo di stato finché non emerge un bisogno reale — vedi il log
 // delle decisioni).
+//
+// Interprete di testo libero (interprete-libero/): il testo libero SI
+// AFFIANCA ai bottoni delle risposte, non li sostituisce. Il matching gira
+// qui nel Worker (non nel browser). La logica di "applicare una risposta"
+// (effetti, Cronista, storicoScelte, complicazione, prossimaRichiesta) è
+// estratta in applicaRisposta(), riusata sia da /scegli (bottone cliccato)
+// sia da /interpreta e /risolvi-interpretazione (testo libero) — nessuna
+// duplicazione tra i tre flussi. Quando l'interprete è ambiguo o incerto,
+// la richiesta resta PENDENTE in session.interpretazionePendente finché il
+// comandante non la risolve con /risolvi-interpretazione: deve funzionare
+// tra dispositivi diversi (chi scrive il testo e il comandante possono
+// essere su browser separati), quindi vive nello stato della stanza, non
+// nella sola risposta immediata. Se una richiesta non ha una libreria
+// registrata in interprete-registro-librerie.js (tutti i nodi tranne
+// 1836-torino, per ora), /interpreta risponde con un errore chiaro e il
+// client resta a soli bottoni per quella richiesta — stesso fallback
+// silenzioso già usato per i nodi senza pool del Cronista.
 
 export class GameSession {
   constructor(state, env) {
@@ -74,6 +93,7 @@ export class GameSession {
         storicoScelte: [], // { richiestaId, risposteTesto, esito, giocatoreId, tiro, timestamp }
         storicoNodo: [], // { nodoId, iniziato_il, concluso_il, esitoFinale }
         aiUsageStanza: 0, // contatore generazioni AI usate in questa stanza
+        interpretazionePendente: null, // { giocatoreId, richiestaId, testoLibero, candidati } o null
         // Migrazione automatica: ogni nuovo campo va aggiunto qui E
         // nella funzione migrateState() sotto, altrimenti le sessioni
         // create prima dell'aggiornamento falliscono in silenzio.
@@ -116,6 +136,10 @@ export class GameSession {
     }
     if (session.aiUsageStanza === undefined) {
       session.aiUsageStanza = 0;
+      changed = true;
+    }
+    if (session.interpretazionePendente === undefined) {
+      session.interpretazionePendente = null;
       changed = true;
     }
     if (changed) this.state.storage.put("session", session);
@@ -241,105 +265,254 @@ export class GameSession {
       const risposta = richiestaAttiva.risposte[risposteIndice];
       if (!risposta) return new Response("Risposta sconosciuta", { status: 400 });
 
-      // Risposta con tiro: il punteggio di competenza del giocatore che sta
-      // scegliendo decide l'esito (pieno/parziale/fallimento), che a sua
-      // volta seleziona quali effetti applicare e quale testo mostrare.
-      // Risposta senza `competenzaRichiesta`: effetto fisso e testo fisso,
-      // esattamente come prima di questo passaggio.
-      let tiro = null;
-      let effettiDaApplicare = risposta.effetti || {};
-      let testoEsito = risposta.esito;
-      if (risposta.competenzaRichiesta) {
-        const punteggio = giocatore.competenze[risposta.competenzaRichiesta] ?? 0;
-        tiro = risolviAzione(punteggio);
-        effettiDaApplicare = (risposta.effettiPerEsito && risposta.effettiPerEsito[tiro.esito]) || {};
-        testoEsito = (risposta.esito && risposta.esito[tiro.esito]) || null;
+      const risultato = await this.applicaRisposta(session, richiestaAttiva, risposta, giocatoreId);
+      await this.state.storage.put("session", session);
+      return Response.json({ session, ...risultato });
+    }
+
+    // Testo libero: SI AFFIANCA ai bottoni, non li sostituisce (vedi
+    // commento in cima al file). Riceve { testoLibero, richiestaId,
+    // giocatoreId }. Tre esiti possibili da interpreta():
+    // - "automatica": applica subito la risposta trovata, stessa forma di
+    //   risposta di /scegli (cosi' il client puo' riusare lo stesso rendering);
+    // - "manuale": salva in session.interpretazionePendente per il
+    //   comandante, risponde solo { esito: "manuale", session };
+    // - "nessuna_corrispondenza": nessuna modifica allo stato, risponde
+    //   solo { esito: "nessuna_corrispondenza" } perche' il client mostri
+    //   un messaggio invece di un errore grezzo.
+    if (url.pathname.endsWith("/interpreta") && request.method === "POST") {
+      const { testoLibero, richiestaId, giocatoreId } = await request.json();
+      const session = await this.initState();
+
+      if (!giocatoreId) {
+        return new Response("giocatoreId mancante: serve sapere chi sta scrivendo", { status: 400 });
+      }
+      const giocatore = session.giocatori.find((g) => g.id === giocatoreId);
+      if (!giocatore) {
+        return new Response("giocatoreId sconosciuto: nessun giocatore con questo id nella stanza", {
+          status: 400,
+        });
       }
 
-      // Effetti: le chiavi possono essere risorse di squadra oppure "margine".
-      const margineDeltaAzione = effettiDaApplicare.margine ?? 0;
-      for (const [chiave, delta] of Object.entries(effettiDaApplicare)) {
-        if (chiave === "margine") {
-          session.margine += delta;
-        } else {
-          session.risorseDiSquadra[chiave] = (session.risorseDiSquadra[chiave] || 0) + delta;
-        }
+      const opzioni = await trovaLibreriaPerRichiesta(richiestaId);
+      if (!opzioni) {
+        return new Response("Questa richiesta non supporta ancora il testo libero", { status: 400 });
       }
 
-      // Cronista: solo per risposte con tiro, solo se il nodo attivo ha un
-      // pool disponibile (vedi commento in cima al file). Sostituisce
-      // testoEsito quando applicabile.
-      if (tiro) {
-        const pool = await trovaPoolPerNodo(session.nodoAttivo);
-        if (pool) {
-          const ruoloGiocatore = GAME_CONFIG.ruoli.find((r) => r.id === giocatore.ruolo);
-          const { testo } = componiNarrazione(pool, {
-            esito: tiro.esito,
-            competenzaId: risposta.competenzaRichiesta,
-            ruoloId: giocatore.ruolo,
-            margine: { valore: session.margine, soglia: GAME_CONFIG.margineSoglia ?? null, delta: margineDeltaAzione },
-            variabili: { ruolo: ruoloGiocatore?.nomeConArticolo ?? giocatore.ruolo },
-            storicoFrammenti: [],
-          });
-          testoEsito = testo;
-        }
+      const richiestaAttiva = this.trovaRichiestaAttiva(session);
+      if (!richiestaAttiva || richiestaAttiva.id !== richiestaId) {
+        return new Response("Nessuna richiesta attiva corrispondente: avvia prima il nodo giusto", {
+          status: 400,
+        });
       }
 
-      session.orologio += 1;
-
-      session.storicoScelte.push({
-        richiestaId: richiestaAttiva.id,
-        risposteTesto: risposta.testo,
-        esito: testoEsito,
-        giocatoreId,
-        tiro,
-        timestamp: new Date().toISOString(),
+      // Soglie PROVVISORIE: da tarare con test dal vivo, non ancora
+      // validate su un volume reale di testo libero scritto da persone vere.
+      const SOGLIA_ALTA_PROVVISORIA = 0.6;
+      const MARGINE_DISTACCO_PROVVISORIO = 0.15;
+      const decisione = interpreta(testoLibero, opzioni, {
+        sogliaAlta: SOGLIA_ALTA_PROVVISORIA,
+        margineDistacco: MARGINE_DISTACCO_PROVVISORIO,
       });
 
-      // Complicazione da margine: soglia configurabile in game-config.js.
-      // Al superamento, segnaliamo la complicazione e riportiamo il margine
-      // a meta' soglia (attenuazione, non azzeramento) -- punto da confermare.
-      let complicazione = null;
-      const soglia = GAME_CONFIG.margineSoglia ?? null;
-      if (soglia !== null && session.margine >= soglia) {
-        complicazione = GAME_CONFIG.margineComplicazioneTesto
-          ?? "Il margine e' esaurito: qualcosa va storto.";
-        session.margine = Math.floor(soglia / 2);
-      }
-
-      // Prossima richiesta: attenzione, tre casi distinti.
-      // - campo "prossima" assente -> nodo non ramificato, si va in sequenza (compatibilità).
-      // - "prossima": "<id>" -> ramificazione esplicita verso quella richiesta.
-      // - "prossima": null (scritto esplicitamente) -> fine ramo, il nodo si chiude qui,
-      //   anche se nell'array ci sono altre richieste dopo. Necessario per non "sbandare"
-      //   in sequenza per errore in un nodo che usa la ramificazione.
-      let prossimaRichiesta = null;
-      if (Object.prototype.hasOwnProperty.call(risposta, "prossima")) {
-        prossimaRichiesta = risposta.prossima
-          ? nodo.richieste.find((r) => r.id === risposta.prossima) ?? null
-          : null;
-      } else {
-        const indiceCorrente = nodo.richieste.findIndex((r) => r.id === richiestaAttiva.id);
-        prossimaRichiesta = nodo.richieste[indiceCorrente + 1] ?? null;
-      }
-      session.richiestaIndice += 1;
-      session.richiestaAttivaId = prossimaRichiesta ? prossimaRichiesta.id : null;
-
-      let esitoNodo = null;
-      if (!prossimaRichiesta) {
-        esitoNodo = this.valutaEsitoNodo(session);
-        const diario = session.storicoNodo[session.storicoNodo.length - 1];
-        if (diario && diario.nodoId === session.nodoAttivo && !diario.concluso_il) {
-          diario.concluso_il = new Date().toISOString();
-          diario.esitoFinale = esitoNodo;
+      if (decisione.tipo === "automatica") {
+        const indice = parseInt(decisione.opzione.effetto.risposteIndice, 10);
+        const risposta = richiestaAttiva.risposte[indice];
+        if (!risposta) {
+          return new Response(
+            "La libreria dell'interprete punta a una risposta inesistente (risposteIndice non valido)",
+            { status: 500 }
+          );
         }
+        const risultato = await this.applicaRisposta(session, richiestaAttiva, risposta, giocatoreId);
+        await this.state.storage.put("session", session);
+        return Response.json({ session, ...risultato });
       }
 
+      if (decisione.tipo === "manuale") {
+        session.interpretazionePendente = {
+          giocatoreId,
+          richiestaId,
+          testoLibero,
+          candidati: decisione.candidati.map((c) => {
+            const indice = parseInt(c.opzione.effetto.risposteIndice, 10);
+            return {
+              id: c.id,
+              risposteIndice: indice,
+              punteggio: c.punteggio,
+              testoRisposta: richiestaAttiva.risposte[indice]?.testo ?? null,
+            };
+          }),
+        };
+        await this.state.storage.put("session", session);
+        return Response.json({ esito: "manuale", session });
+      }
+
+      // "nessuna_corrispondenza": nessuna modifica allo stato.
+      return Response.json({ esito: "nessuna_corrispondenza" });
+    }
+
+    // Il comandante risolve un'interpretazione pendente: sceglie uno dei
+    // candidati ({ risposteIndice }) o scarta tutto ({ annulla: true }),
+    // rimettendo il giocatore davanti alla richiesta senza applicare nulla.
+    // Nessun controllo qui su "solo il comandante puo' chiamarlo" -- stesso
+    // livello (assente) di autorizzazione di ogni altro endpoint del Worker.
+    if (url.pathname.endsWith("/risolvi-interpretazione") && request.method === "POST") {
+      const { risposteIndice, annulla } = await request.json();
+      const session = await this.initState();
+
+      if (!session.interpretazionePendente) {
+        return new Response("Nessuna interpretazione in attesa di risoluzione", { status: 400 });
+      }
+
+      if (annulla) {
+        session.interpretazionePendente = null;
+        await this.state.storage.put("session", session);
+        return Response.json({ session });
+      }
+
+      const pendente = session.interpretazionePendente;
+      const richiestaAttiva = this.trovaRichiestaAttiva(session);
+      if (!richiestaAttiva || richiestaAttiva.id !== pendente.richiestaId) {
+        // La richiesta e' cambiata da quando l'interpretazione e' rimasta
+        // pendente (es. qualcun altro ha gia' scelto un bottone nel
+        // frattempo): scarta senza applicare, invece di rischiare di
+        // applicare una risposta alla richiesta sbagliata.
+        session.interpretazionePendente = null;
+        await this.state.storage.put("session", session);
+        return new Response("La richiesta non e' piu' attiva: interpretazione scartata", { status: 409 });
+      }
+      const risposta = richiestaAttiva.risposte[risposteIndice];
+      if (!risposta) return new Response("Risposta sconosciuta", { status: 400 });
+
+      const risultato = await this.applicaRisposta(session, richiestaAttiva, risposta, pendente.giocatoreId);
+      session.interpretazionePendente = null;
       await this.state.storage.put("session", session);
-      return Response.json({ session, esito: testoEsito, prossimaRichiesta, esitoNodo, complicazione, tiro });
+      return Response.json({ session, ...risultato });
     }
 
     return new Response("Not found", { status: 404 });
+  }
+
+  // Applica gli effetti di una risposta scelta (a bottone o via interprete
+  // di testo libero: stessa logica per entrambi, mai duplicata) -- tiro se
+  // la risposta ha competenzaRichiesta, effetti sulle risorse/margine,
+  // Cronista se applicabile, storicoScelte, complicazione da margine,
+  // prossima richiesta (ramificazione o sequenza), ed esito del nodo se la
+  // richiesta era l'ultima. Muta `session` sul posto (chi chiama e'
+  // responsabile di salvarla su storage), restituisce i campi da comporre
+  // nella risposta HTTP: { esito, prossimaRichiesta, esitoNodo,
+  // complicazione, tiro }.
+  async applicaRisposta(session, richiestaAttiva, risposta, giocatoreId) {
+    const giocatore = session.giocatori.find((g) => g.id === giocatoreId);
+    const nodo = GAME_CONFIG.nodiTemporali.find((n) => n.id === session.nodoAttivo);
+
+    // Risposta con tiro: il punteggio di competenza del giocatore che sta
+    // scegliendo decide l'esito (pieno/parziale/fallimento), che a sua
+    // volta seleziona quali effetti applicare e quale testo mostrare.
+    // Risposta senza `competenzaRichiesta`: effetto fisso e testo fisso.
+    let tiro = null;
+    let effettiDaApplicare = risposta.effetti || {};
+    let testoEsito = risposta.esito;
+    if (risposta.competenzaRichiesta) {
+      const punteggio = giocatore.competenze[risposta.competenzaRichiesta] ?? 0;
+      tiro = risolviAzione(punteggio);
+      effettiDaApplicare = (risposta.effettiPerEsito && risposta.effettiPerEsito[tiro.esito]) || {};
+      testoEsito = (risposta.esito && risposta.esito[tiro.esito]) || null;
+    }
+
+    // Effetti: le chiavi possono essere risorse di squadra oppure "margine".
+    const margineDeltaAzione = effettiDaApplicare.margine ?? 0;
+    for (const [chiave, delta] of Object.entries(effettiDaApplicare)) {
+      if (chiave === "margine") {
+        session.margine += delta;
+      } else {
+        session.risorseDiSquadra[chiave] = (session.risorseDiSquadra[chiave] || 0) + delta;
+      }
+    }
+
+    // Cronista: solo per risposte con tiro, solo se il nodo attivo ha un
+    // pool disponibile (vedi commento in cima al file). Sostituisce
+    // testoEsito quando applicabile.
+    if (tiro) {
+      const pool = await trovaPoolPerNodo(session.nodoAttivo);
+      if (pool) {
+        const ruoloGiocatore = GAME_CONFIG.ruoli.find((r) => r.id === giocatore.ruolo);
+        const { testo } = componiNarrazione(pool, {
+          esito: tiro.esito,
+          competenzaId: risposta.competenzaRichiesta,
+          ruoloId: giocatore.ruolo,
+          margine: { valore: session.margine, soglia: GAME_CONFIG.margineSoglia ?? null, delta: margineDeltaAzione },
+          variabili: { ruolo: ruoloGiocatore?.nomeConArticolo ?? giocatore.ruolo },
+          storicoFrammenti: [],
+        });
+        testoEsito = testo;
+      }
+    }
+
+    session.orologio += 1;
+
+    session.storicoScelte.push({
+      richiestaId: richiestaAttiva.id,
+      risposteTesto: risposta.testo,
+      esito: testoEsito,
+      giocatoreId,
+      tiro,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Complicazione da margine: soglia configurabile in game-config.js.
+    // Al superamento, segnaliamo la complicazione e riportiamo il margine
+    // a meta' soglia (attenuazione, non azzeramento) -- punto da confermare.
+    let complicazione = null;
+    const soglia = GAME_CONFIG.margineSoglia ?? null;
+    if (soglia !== null && session.margine >= soglia) {
+      complicazione = GAME_CONFIG.margineComplicazioneTesto
+        ?? "Il margine e' esaurito: qualcosa va storto.";
+      session.margine = Math.floor(soglia / 2);
+    }
+
+    // Prossima richiesta: attenzione, tre casi distinti.
+    // - campo "prossima" assente -> nodo non ramificato, si va in sequenza (compatibilità).
+    // - "prossima": "<id>" -> ramificazione esplicita verso quella richiesta.
+    // - "prossima": null (scritto esplicitamente) -> fine ramo, il nodo si chiude qui,
+    //   anche se nell'array ci sono altre richieste dopo. Necessario per non "sbandare"
+    //   in sequenza per errore in un nodo che usa la ramificazione.
+    let prossimaRichiesta = null;
+    if (Object.prototype.hasOwnProperty.call(risposta, "prossima")) {
+      prossimaRichiesta = risposta.prossima
+        ? nodo.richieste.find((r) => r.id === risposta.prossima) ?? null
+        : null;
+    } else {
+      const indiceCorrente = nodo.richieste.findIndex((r) => r.id === richiestaAttiva.id);
+      prossimaRichiesta = nodo.richieste[indiceCorrente + 1] ?? null;
+    }
+    session.richiestaIndice += 1;
+    session.richiestaAttivaId = prossimaRichiesta ? prossimaRichiesta.id : null;
+
+    let esitoNodo = null;
+    if (!prossimaRichiesta) {
+      esitoNodo = this.valutaEsitoNodo(session);
+      const diario = session.storicoNodo[session.storicoNodo.length - 1];
+      if (diario && diario.nodoId === session.nodoAttivo && !diario.concluso_il) {
+        diario.concluso_il = new Date().toISOString();
+        diario.esitoFinale = esitoNodo;
+      }
+    }
+
+    // competenzaId: quale competenza ha deciso il tiro (null se nessun
+    // tiro). Serve al client per mostrare il nome leggibile nel dettaglio
+    // del tiro -- per un click su un bottone il client lo sa già in
+    // anticipo (ha la risposta scelta), ma per l'interprete di testo
+    // libero no (è il server a decidere quale risposta si applica).
+    return {
+      esito: testoEsito,
+      prossimaRichiesta,
+      esitoNodo,
+      complicazione,
+      tiro,
+      competenzaId: risposta.competenzaRichiesta ?? null,
+    };
   }
 
   trovaRichiestaAttiva(session) {
