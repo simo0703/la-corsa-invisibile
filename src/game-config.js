@@ -478,8 +478,17 @@ export const GAME_CONFIG = {
             },
             {
               testo: "Ignorate la provocazione e restate calmi",
-              effetti: { spiritoDiCorpo: 1 },
-              esito: "Il capo villaggio osserva la vostra pazienza. Forse è proprio questo che stava aspettando di vedere.",
+              competenzaRichiesta: "ancoraggio",
+              effettiPerEsito: {
+                pieno: { spiritoDiCorpo: 2, margine: 1 },
+                parziale: { spiritoDiCorpo: 1, margine: 2 },
+                fallimento: { spiritoDiCorpo: -1, cadenza: 1, margine: 3 },
+              },
+              esito: {
+                pieno: "Il capo villaggio osserva la pazienza fino in fondo, senza che un muscolo tradisca tensione: è proprio questo che serve per convincerlo.",
+                parziale: "Il capo villaggio osserva la vostra pazienza. Forse è proprio questo che stava aspettando di vedere.",
+                fallimento: "La calma tiene, ma a fatica: il capo villaggio nota l'esitazione, anche se nessuno degli uomini si è mosso.",
+              },
             },
           ],
         },
