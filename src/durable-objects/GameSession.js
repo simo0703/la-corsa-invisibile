@@ -25,7 +25,13 @@ import { trovaLibreriaPerRichiesta } from "../lib/interprete-registro-librerie.j
 // dichiarare `competenzaRichiesta: "<id competenza>"` invece di (o oltre) un
 // effetto fisso. Quando presente:
 // - il punteggio si legge da giocatore.competenze[competenzaRichiesta]
-//   (assegnate a /join, vedi sotto) e si risolve con risolviAzione();
+//   (assegnate a /join, vedi sotto), con l'eventuale bonusContesto della
+//   risposta sommato sopra (vedi commento su `bonusContesto` in
+//   game-config.js), e si risolve con risolviAzione();
+// - il ruolo del giocatore puo' sovrascrivere il numero di facce del dado
+//   (campo `dadoFacce` sull'oggetto ruolo) SOLO quando competenzaRichiesta
+//   coincide con la competenzaPrincipale di quel ruolo -- altrimenti resta
+//   il dado di default (GAME_CONFIG.risoluzione.dadoFacce);
 // - gli effetti applicati vengono da `risposta.effettiPerEsito[esitoDelTiro]`
 //   invece che da `risposta.effetti` (che resta il campo usato dalle
 //   risposte SENZA tiro: le due forme convivono nello stesso nodo);
@@ -627,9 +633,17 @@ export class GameSession {
     let tiro = null;
     let effettiDaApplicare = risposta.effetti || {};
     let testoEsito = risposta.esito;
+    const ruoloGiocatore = GAME_CONFIG.ruoli.find((r) => r.id === giocatore.ruolo);
     if (risposta.competenzaRichiesta) {
-      const punteggio = giocatore.competenze[risposta.competenzaRichiesta] ?? 0;
-      tiro = risolviAzione(punteggio);
+      let punteggio = giocatore.competenze[risposta.competenzaRichiesta] ?? 0;
+      if (risposta.bonusContesto && risposta.bonusContesto.competenza === risposta.competenzaRichiesta) {
+        punteggio += risposta.bonusContesto.valore;
+      }
+      const facce =
+        ruoloGiocatore?.dadoFacce && risposta.competenzaRichiesta === ruoloGiocatore.competenzaPrincipale
+          ? ruoloGiocatore.dadoFacce
+          : undefined;
+      tiro = risolviAzione(punteggio, null, facce);
       effettiDaApplicare = (risposta.effettiPerEsito && risposta.effettiPerEsito[tiro.esito]) || {};
       testoEsito = (risposta.esito && risposta.esito[tiro.esito]) || null;
     }
@@ -650,7 +664,6 @@ export class GameSession {
     if (tiro) {
       const pool = await trovaPoolPerNodo(session.nodoAttivo);
       if (pool) {
-        const ruoloGiocatore = GAME_CONFIG.ruoli.find((r) => r.id === giocatore.ruolo);
         const { testo } = componiNarrazione(pool, {
           esito: tiro.esito,
           competenzaId: risposta.competenzaRichiesta,

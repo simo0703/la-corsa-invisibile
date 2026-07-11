@@ -1,15 +1,32 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 11 luglio 2026 (fine sessione, dopo il Passo 18 — tutti e 5
-i nodi temporali hanno ora almeno una risposta a tiro reale con pool
-Cronista e librerie di testo libero collegate; lavoro sospeso qui su
+Aggiornato al: 11 luglio 2026 (fine sessione, dopo il Passo 20 — bilanciamento
+Esploratore: dado di ruolo + bonus condizionale; lavoro sospeso qui su
 richiesta, nuova chat da avviare)
 
 Questo file serve a non perdersi tra una sessione di lavoro e l'altra: raccoglie cosa
 è stato deciso, cosa è ancora un'ipotesi da confermare, e cosa manca. Va aggiornato
 ogni 3-4 passaggi di lavoro, non a ogni singola modifica.
 
-**Punto di ripresa**: con il Passo 18, **tutti e 5 i nodi temporali** del
+**Nota su un buco nel log**: tra il Passo 18 e questa sessione sono state fatte
+almeno 3 commit (token di sessione per autenticare le azioni comandante, rimozione
+della "corsa al comandante" a favore del `tokenCreazione`, cessione volontaria del
+ruolo) che non risultano loggate qui sotto come Passi numerati — la sessione che le
+ha scritte non ha aggiornato questo file. Non ricostruito retroattivamente in questa
+sessione (fuori scope); se serve, va fatto a parte guardando `git log`.
+
+**Punto di ripresa**: con il Passo 20, l'Esploratore ha un primo bilanciamento
+di classe: dado di risoluzione 1d6 (invece del default 1d4) quando tira con la
+propria competenza principale (Cadenza), e un meccanismo generico di bonus
+condizionale (+1 a una competenza, dichiarato a mano su una risposta) pensato
+per inseguimento/fuga/terreno non rivelato — vedi Passo 20 nel changelog per i
+dettagli e le scelte di design. Nessuna risposta esistente nei 5 nodi è stata
+ancora taggata con questo bonus: è infrastruttura pronta, non ancora usata nel
+contenuto narrativo reale. Il Passo 19 ha corretto una regressione pre-esistente
+(4 file di test rimasti senza token dopo l'introduzione dell'autenticazione,
+vedi nota sul buco nel log sopra) — commit separato dal bilanciamento.
+Restano invariate le basi descritte per il Passo 18: **tutti e 5 i nodi
+temporali** del
 gioco (`1836-torino`, `1848-milano`, `1915-carso-piave`,
 `emergenza-civile`, `missione-moderna`) hanno ora almeno una risposta
 convertita a tiro reale (`competenzaRichiesta`), un pool di contenuto per
@@ -581,6 +598,124 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**11/07/2026 — Passo 20: bilanciamento Esploratore (dado di ruolo + bonus condizionale)**
+File modificati: `src/game-config.js`, `src/durable-objects/GameSession.js`,
+`src/lib/risoluzione.js`, `test-risoluzione.mjs`, `test-scegli-risoluzione.mjs`,
+`test-scegli-1836-torino.mjs`.
+- Richiesta dall'autore: dado di Cadenza dell'Esploratore da 1d4 a 1d6 (Cadenza
+  base resta 3, invariata) più un nuovo bonus condizionale (+1 a una
+  competenza) per inseguimento/fuga/terreno non rivelato.
+- **Scoperta prima di scrivere codice**: il dado non era mai stato "per
+  classe" — `GAME_CONFIG.risoluzione.dadoFacce` è un unico valore globale
+  usato da `tiraDado()`/`risolviAzione()` per qualunque ruolo/competenza.
+  Non esisteva nessun bonus condizionale nel codice (cercato "bonus" in
+  tutto `src/`, zero risultati) né nessuno stato di "contesto scena" in
+  `GameSession` (initState/migrateState non tracciano nulla del genere).
+  Due domande poste e risolte con l'utente prima di implementare (**non
+  decise unilateralmente**, essendo scelte di design non ovvie dal codice):
+  a chi si applica il dado 1d6 (risposta: solo Esploratore + competenza
+  Cadenza, non "chiunque tiri con Cadenza" né "Esploratore su qualunque
+  competenza") e come si applica il bonus (risposta: dichiarazione manuale
+  per-risposta in `game-config.js`, non rilevamento automatico da uno stato
+  di scena — zero campi nuovi in `initState()`/`migrateState()`).
+- `src/lib/risoluzione.js`: `tiraDado(facce)` e `risolviAzione(competenza,
+  dadoForzato, facce)` accettano ora un terzo parametro opzionale `facce`
+  (default `GAME_CONFIG.risoluzione.dadoFacce`, backward compatible: le
+  chiamate esistenti con 1 o 2 argomenti restano invariate).
+- `src/game-config.js`: ruolo `esploratore` ha ora `dadoFacce: 6` (si
+  applica in `GameSession.js` SOLO quando `competenzaRichiesta` della
+  risposta coincide con la `competenzaPrincipale` del ruolo di chi sceglie
+  — nessuna stringa "esploratore"/"cadenza" scritta in `GameSession.js`,
+  rispettando la regola del muro). Documentato anche il nuovo pattern
+  `bonusContesto: { competenza: "<id>", valore: <n> }`, utilizzabile su
+  qualunque risposta con `competenzaRichiesta`: applicato SOLO quando
+  `bonusContesto.competenza` coincide con `competenzaRichiesta` della
+  stessa risposta. **Nessuna risposta esistente nei 5 nodi è stata taggata
+  con questo campo** — non era ovvio quale risposta rappresenti
+  narrativamente un inseguimento/fuga/terreno non rivelato, e non è stato
+  deciso unilateralmente: resta un campo pronto all'uso, da applicare a
+  mano quando si scriverà (o riscriverà) una risposta che lo giustifica.
+- `src/durable-objects/GameSession.js` (`applicaRisposta`): `ruoloGiocatore`
+  ora calcolato una sola volta (prima era ricalcolato più sotto per la
+  narrazione del Cronista, tolta la duplicazione), usato sia per il
+  bonusContesto (sommato al punteggio prima del tiro) sia per l'override
+  del dado (passato come terzo argomento a `risolviAzione`).
+- **Regressione pre-esistente trovata e corretta separatamente (Passo 19,
+  vedi sotto)**: senza quel fix, `test-scegli-risoluzione.mjs` e
+  `test-scegli-1836-torino.mjs` (che dovevo comunque modificare qui) non
+  passavano nemmeno prima di questa modifica — bloccava la verifica.
+- **Test aggiornati per evitare falsi negativi/test flaky introdotti dal
+  cambio**: `test-scegli-risoluzione.mjs`, blocco "competenza mancante nel
+  record del giocatore" — usava ruolo Esploratore su una risposta a
+  competenza Cadenza; con 1d6 un dado di 5 o 6 avrebbe dato "parziale"
+  invece del "fallimento" atteso (test flaky ~33% delle volte). Cambiato a
+  ruolo "custode" (nessun `dadoFacce` di ruolo), comportamento del test
+  invariato. `test-scegli-1836-torino.mjs`, blocco "con la competenza
+  reale dell'Esploratore" (nodo REALE `1836-torino`, `decalogo-ginnastica`)
+  — l'assunzione "mai pieno con Cadenza 3" (vera con 1d4, 3+4=7 sotto la
+  soglia di 8) non è più vera con 1d6 (3+6=9): riscritto per verificare che
+  tutti e tre i tier compaiano su 60 tentativi, con gli effetti/margine
+  attesi per ciascuno (prima verificava solo parziale/fallimento).
+- Test nuovi in `test-risoluzione.mjs`: range esatto del dado di ruolo
+  forzando gli estremi (Cadenza 3 + 1d6 → 4-9; con bonus +1 → 5-10, come
+  richiesto), verifica statistica che "pieno" compaia su 100 tentativi con
+  Cadenza 3 reale, verifica che il comportamento di default (senza terzo
+  argomento) resti sul vecchio range 4-7.
+- Test nuovi in `test-scegli-risoluzione.mjs`: wiring end-to-end
+  dell'override del dado (Esploratore vede "pieno" su 60 tentativi,
+  Custode con la stessa competenza no — isola l'effetto del ruolo da
+  quello della competenza), e del `bonusContesto` (chiamata singola e
+  deterministica via `tiro.competenza` restituito da `/scegli`: con bonus
+  dichiarato risulta 3+1=4, con bonus su una competenza diversa da
+  `competenzaRichiesta` resta 3 — verifica che il mismatch venga ignorato,
+  non silenziosamente applicato).
+- Non toccato: nessuna risposta reale nei 5 nodi (il bonus resta
+  infrastruttura non ancora usata, vedi sopra), `public/index.html` (il
+  dettaglio del tiro mostrato è già generico — competenza/dado/totale/esito
+  — non serve sapere quante facce ha il dado).
+
+**11/07/2026 — Passo 19: corretti 4 test rimasti senza token dopo l'introduzione dell'auth**
+File modificati: `test-scegli-risoluzione.mjs`, `test-scegli-1836-torino.mjs`,
+`test-scegli-cronista.mjs`, `test-scegli-giocatore.mjs`.
+- **Regressione pre-esistente scoperta per caso**, non richiesta: verificando
+  con `git stash` che il fallimento di `test-scegli-risoluzione.mjs` non fosse
+  causato dal lavoro del Passo 20, si è trovato che falliva già su `main`
+  (HEAD `2015797`, prima di qualunque modifica di questa sessione). Causa:
+  le commit precedenti (token di sessione, rimozione della corsa al
+  comandante, cessione volontaria — non loggate qui, vedi nota in cima al
+  file) hanno reso `/avvia-nodo` e `/scegli` riservati (richiedono
+  `giocatoreId`+`token`, vedi `autenticaComandante()`/`autenticaGiocatore()`
+  in `GameSession.js`), ma 4 file di test non erano mai stati aggiornati e
+  chiamavano ancora quegli endpoint senza credenziali — ogni chiamata
+  prendeva 400 e il test crashava al primo assert su `json` (null perché la
+  risposta non era JSON).
+- Segnalato esplicitamente all'utente prima di agire (non deciso
+  unilateralmente), con scelta tra sistemare tutti e 4 subito, solo i 2
+  necessari per il Passo 20, o niente. Confermato: sistemarli tutti e 4,
+  in un commit separato dal bilanciamento Esploratore.
+- Fix identico nei 4 file: aggiunto un helper `joinComandante()` (stesso
+  pattern già in uso in `test-game-session.mjs`) che fa `/crea` +
+  `/join` con un `tokenCreazione`, cosi' il giocatore risultante e'
+  davvero comandante; `giocatoreId`+`token` passati a ogni chiamata
+  `/avvia-nodo` e `/scegli`. `test-scegli-giocatore.mjs` ha richiesto due
+  aggiustamenti in più, specifici alla natura dei suoi test (verificano
+  proprio gli errori di autenticazione): il test "giocatoreId mancante"
+  aggiornato per il nuovo testo del messaggio ("giocatoreId o token
+  mancante", non più solo "giocatoreId mancante"), e il test "giocatoreId
+  sconosciuto" ora passa un token qualsiasi (altrimenti l'errore "token
+  mancante" scatterebbe prima di quello "sconosciuto" che il test vuole
+  verificare).
+- Nessun cambio di comportamento o di asserzioni sul merito: stesso identico
+  contenuto testato di prima, solo il plumbing di autenticazione.
+- Verificato con `git stash`: applicato il fix da solo (senza le modifiche
+  del Passo 20) contro il codice invariato su `main`, tutti e 4 i file
+  passano con le stesse asserzioni originali. Poi riapplicato sopra il
+  lavoro del Passo 20 (che tocca due di questi stessi file per il
+  bilanciamento) e ri-verificato: tutti i 18 file di test del repository
+  passano.
+- Commit locale creato separatamente da quello del Passo 20 (non pushato,
+  in attesa di conferma esplicita per il push, come da metodo di lavoro).
 
 **11/07/2026 — Passo 18: `missione-moderna` — tiro reale (ancoraggio) + pool Cronista + librerie interprete**
 Nuovi file: `src/lib/narratore-missione-moderna.md`, `src/lib/narratore-missione-moderna.js`,

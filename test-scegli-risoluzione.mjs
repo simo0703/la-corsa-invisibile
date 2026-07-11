@@ -223,7 +223,13 @@ console.log("\n--- robustezza: contenuto malformato non manda in crash il motore
 
 console.log("\n--- robustezza: competenza mancante nel record del giocatore (vecchie sessioni) trattata come 0 ---");
 {
-  const { gs, storage, giocatoreId, token } = await sessionePronta();
+  // Ruolo "custode", non "esploratore": il Custode non ha un dadoFacce di
+  // ruolo (resta sul default 1d4), quindi il totale resta sempre <5 come
+  // richiede questo test. Con l'Esploratore (1d6 su Cadenza) sarebbe
+  // flaky: un dado di 5 o 6 darebbe "parziale" invece di "fallimento".
+  const { gs, storage } = nuovaSessione();
+  const { giocatoreId, token } = await joinComandante(gs, "Prova", "custode");
+  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "test-nodo-tiro", giocatoreId, token });
   const session = await storage.get("session");
   delete session.giocatori.find((g) => g.id === giocatoreId).competenze.cadenza;
   await storage.put("session", session);
@@ -232,6 +238,126 @@ console.log("\n--- robustezza: competenza mancante nel record del giocatore (vec
   verifica(
     "punteggio mancante trattato come 0 (totale = dado, sempre <5 -> fallimento)",
     json.tiro !== null && json.tiro.esito === "fallimento" && json.tiro.competenza === 0
+  );
+}
+
+console.log("\n--- dadoFacce di ruolo: si applica solo quando competenzaRichiesta è la competenzaPrincipale del ruolo ---");
+{
+  // Esploratore (competenzaPrincipale: cadenza, dadoFacce: 6): con Cadenza
+  // 3 reale, non forzata, su molti tentativi deve comparire "pieno" --
+  // impossibile con il vecchio dado di default (1d4, 3+4=7 sotto la soglia
+  // di 8). Copertura generica (nodo di prova); il contenuto narrativo
+  // reale è verificato a parte in test-scegli-1836-torino.mjs.
+  const tierVisti = new Set();
+  for (let i = 0; i < 60; i++) {
+    const { gs, giocatoreId, token } = await sessionePronta(); // ruolo esploratore, competenza reale (3)
+    const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
+    tierVisti.add(json.tiro?.esito);
+  }
+  verifica(
+    "su 60 tentativi, Esploratore con Cadenza 3 reale vede almeno un tier \"pieno\" (dado 1d6 di ruolo)",
+    tierVisti.has("pieno")
+  );
+}
+{
+  // Custode (competenzaPrincipale: spiritoDiCorpo, nessun dadoFacce): con
+  // Cadenza 3 reale su NODO_DI_PROVA (che richiede comunque "cadenza", non
+  // la competenza principale del Custode), il dado resta il default 1d4 --
+  // "pieno" non deve mai comparire in altrettanti tentativi.
+  const { gs, storage } = nuovaSessione();
+  const { giocatoreId, token } = await joinComandante(gs, "Prova", "custode");
+  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "test-nodo-tiro", giocatoreId, token });
+  await impostaCompetenza(storage, giocatoreId, "cadenza", 3);
+
+  let vistoPieno = false;
+  for (let i = 0; i < 60; i++) {
+    const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
+    if (json.tiro?.esito === "pieno") vistoPieno = true;
+    // resetta lo stato per rigiocare la stessa risposta al tentativo successivo
+    const session = await storage.get("session");
+    session.richiestaAttivaId = "test-richiesta-tiro";
+    session.richiestaIndice = 0;
+    await storage.put("session", session);
+  }
+  verifica(
+    "su 60 tentativi, Custode con Cadenza 3 (competenza non principale) non vede mai \"pieno\": resta sul dado di default 1d4",
+    !vistoPieno
+  );
+}
+
+console.log("\n--- bonusContesto: dichiarato su una risposta, aggiunge il valore alla competenza prima del tiro ---");
+{
+  const nodoBonus = {
+    id: "test-nodo-bonus-contesto",
+    titolo: "Nodo di prova bonus contesto (solo test)",
+    richieste: [
+      {
+        id: "test-richiesta-bonus-contesto",
+        situazione: "Situazione di prova: inseguimento.",
+        prompt: "Prompt di prova.",
+        risposte: [
+          {
+            testo: "Risposta con bonus di contesto su Cadenza",
+            competenzaRichiesta: "cadenza",
+            bonusContesto: { competenza: "cadenza", valore: 1 },
+            esito: { pieno: "n/d", parziale: "n/d", fallimento: "n/d" },
+            prossima: null,
+          },
+        ],
+      },
+    ],
+    esitoFinale: { varianti: [], default: "n/d" },
+  };
+  GAME_CONFIG.nodiTemporali.push(nodoBonus);
+
+  // Ruolo "custode": nessun dadoFacce di ruolo, cosi' isoliamo l'effetto
+  // del bonus da quello dell'override del dado (testato a parte sopra).
+  const { gs, storage } = nuovaSessione();
+  const { giocatoreId, token } = await joinComandante(gs, "Prova", "custode");
+  await impostaCompetenza(storage, giocatoreId, "cadenza", 3);
+  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "test-nodo-bonus-contesto", giocatoreId, token });
+
+  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
+  verifica(
+    "il tiro usa competenza 3 + bonusContesto 1 = 4, non la competenza grezza",
+    json.tiro !== null && json.tiro.competenza === 4
+  );
+}
+
+console.log("\n--- bonusContesto: ignorato se la sua competenza non coincide con competenzaRichiesta ---");
+{
+  const nodoBonusMismatch = {
+    id: "test-nodo-bonus-mismatch",
+    titolo: "Nodo di prova bonus contesto disallineato (solo test)",
+    richieste: [
+      {
+        id: "test-richiesta-bonus-mismatch",
+        situazione: "n/d",
+        prompt: "n/d",
+        risposte: [
+          {
+            testo: "Risposta con bonus dichiarato su un'altra competenza",
+            competenzaRichiesta: "cadenza",
+            bonusContesto: { competenza: "precisione", valore: 1 },
+            esito: { pieno: "n/d", parziale: "n/d", fallimento: "n/d" },
+            prossima: null,
+          },
+        ],
+      },
+    ],
+    esitoFinale: { varianti: [], default: "n/d" },
+  };
+  GAME_CONFIG.nodiTemporali.push(nodoBonusMismatch);
+
+  const { gs, storage } = nuovaSessione();
+  const { giocatoreId, token } = await joinComandante(gs, "Prova", "custode");
+  await impostaCompetenza(storage, giocatoreId, "cadenza", 3);
+  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "test-nodo-bonus-mismatch", giocatoreId, token });
+
+  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
+  verifica(
+    "bonusContesto su un'altra competenza non altera il tiro (competenza resta 3)",
+    json.tiro !== null && json.tiro.competenza === 3
   );
 }
 

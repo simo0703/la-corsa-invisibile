@@ -62,6 +62,11 @@ export const GAME_CONFIG = {
 
   // Formula di risoluzione: punteggio competenza + un dado piccolo che
   // corregge senza mai dominare (max 4 punti su un punteggio che arriva a 5).
+  // `dadoFacce` qui è il valore di DEFAULT per qualunque ruolo/competenza.
+  // Un ruolo può sovrascriverlo per la propria competenza principale con un
+  // campo `dadoFacce` sull'oggetto ruolo stesso (vedi "esploratore" sotto):
+  // si applica SOLO quando la risposta richiede quella competenza
+  // principale, altrimenti resta questo dado di default.
   risoluzione: {
     dadoFacce: 4,
     sogliaSuccessoPieno: 8,
@@ -81,6 +86,11 @@ export const GAME_CONFIG = {
       ispirazione: "7° Reggimento — Celeritate ac virtute",
       focus: "Muoversi rapidamente, scoprire pericoli nascosti, vedere prima.",
       competenzaPrincipale: "cadenza",
+      // Override del dado di risoluzione, solo quando il tiro usa la
+      // propria competenza principale (Cadenza): 1d6 invece del default
+      // 1d4 (vedi `risoluzione.dadoFacce` sopra). Cadenza base resta 3,
+      // invariata: il range di un tiro normale passa da 4-7 a 4-9.
+      dadoFacce: 6,
     },
     {
       id: "fanfara",
@@ -115,6 +125,18 @@ export const GAME_CONFIG = {
   // Ogni risposta modifica le risorse di squadra (vedi risorseDiSquadra sopra).
   // Un valore negativo è un costo, uno positivo un guadagno. Un campo vuoto {}
   // significa "nessun effetto meccanico, solo narrativo".
+  //
+  // Bonus condizionali: una risposta con `competenzaRichiesta` può anche
+  // dichiarare `bonusContesto: { competenza: "<id>", valore: <n> }` per
+  // aggiungere `valore` al punteggio di quella competenza SOLO per questo
+  // tiro, quando `competenza` coincide con la `competenzaRichiesta` della
+  // stessa risposta (altrimenti viene ignorato). Applicato MANUALMENTE da
+  // chi scrive il nodo -- non c'è rilevamento automatico del contesto di
+  // scena -- quindi va aggiunto a mano sulle risposte che rappresentano
+  // narrativamente un inseguimento, una fuga, o l'attraversamento/
+  // esplorazione di un terreno non ancora rivelato nella scena (pensato
+  // per il bonus Cadenza dell'Esploratore, ma il campo è generico: funziona
+  // per qualunque competenza).
   nodiTemporali: [
     {
       id: "1836-torino",

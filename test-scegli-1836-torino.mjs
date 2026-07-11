@@ -133,23 +133,26 @@ console.log("\n--- tier fallimento (punteggio forzato molto basso) ---");
 console.log("\n--- con la competenza reale assegnata dal ruolo (nessun punteggio forzato) ---");
 {
   // Esploratore: Cadenza è la competenza principale, punteggio 3 (da
-  // creaCompetenzeIniziali). Con 1d4: totale in [4,7] -> mai "pieno" (serve
-  // 8+), sempre "parziale" (3 dadi su 4) o "fallimento" (1 dado su 4). Su 30
-  // tentativi la probabilità di non vedere mai "parziale" è (1/4)^30,
-  // trascurabile: se il codice è corretto lo vediamo comunque.
+  // creaCompetenzeIniziali), e su questa competenza l'Esploratore tira 1d6
+  // invece del default 1d4 (vedi `dadoFacce` sul ruolo in game-config.js).
+  // Totale in [4,9]: dado 1 -> 4, fallimento; dado 2-4 -> 5-7, parziale;
+  // dado 5-6 -> 8-9, pieno. A differenza del vecchio 1d4 (dove "pieno" era
+  // matematicamente irraggiungibile con questo punteggio), ora tutti e tre
+  // i tier sono possibili. Su 60 tentativi la probabilità di non vedere mai
+  // "fallimento" (1 dado su 6) è (5/6)^60 ≈ 0.002%, trascurabile.
   const tierVisti = new Set();
   let coerenteSempre = true;
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 60; i++) {
     const { gs, giocatoreId, token } = await sessionePronta(); // competenza reale, non forzata
     const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
-    if (!json.tiro || (json.tiro.esito !== "parziale" && json.tiro.esito !== "fallimento")) {
+    if (!json.tiro) {
       coerenteSempre = false;
     }
     tierVisti.add(json.tiro?.esito);
 
-    const cadenzaAttesa = json.tiro.esito === "parziale" ? 2 : 1;
-    const spiritoAtteso = json.tiro.esito === "parziale" ? -1 : -2;
-    const margineAtteso = json.tiro.esito === "parziale" ? 2 : 3;
+    const cadenzaAttesa = { pieno: 3, parziale: 2, fallimento: 1 }[json.tiro.esito];
+    const spiritoAtteso = { pieno: 0, parziale: -1, fallimento: -2 }[json.tiro.esito];
+    const margineAtteso = { pieno: 1, parziale: 2, fallimento: 3 }[json.tiro.esito];
     if (
       json.session.risorseDiSquadra.cadenza !== cadenzaAttesa ||
       json.session.risorseDiSquadra.spiritoDiCorpo !== spiritoAtteso ||
@@ -159,10 +162,15 @@ console.log("\n--- con la competenza reale assegnata dal ruolo (nessun punteggio
     }
   }
   verifica(
-    "con la Cadenza reale dell'Esploratore (3), il tiro è sempre parziale o fallimento, mai pieno",
+    "con la Cadenza reale dell'Esploratore (3) e il dado 1d6 di ruolo, gli effetti/margine restano coerenti col tier estratto in ogni tentativo",
     coerenteSempre
   );
-  verifica("su 30 tentativi si vede almeno un tier \"parziale\"", tierVisti.has("parziale"));
+  verifica("su 60 tentativi si vede almeno un tier \"parziale\"", tierVisti.has("parziale"));
+  verifica(
+    "su 60 tentativi si vede almeno un tier \"pieno\" (impossibile con il vecchio dado 1d4)",
+    tierVisti.has("pieno")
+  );
+  verifica("su 60 tentativi si vede almeno un tier \"fallimento\"", tierVisti.has("fallimento"));
 }
 
 console.log("\n--- coesistenza nello stesso nodo: le altre risposte restano a effetto fisso ---");

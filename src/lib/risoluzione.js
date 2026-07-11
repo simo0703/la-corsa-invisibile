@@ -39,16 +39,19 @@ export function creaCompetenzeIniziali(ruoloId, distribuzioneExtra = {}) {
   return competenze;
 }
 
-// Tira il dado correttivo configurato (default 1d4).
-export function tiraDado() {
-  const facce = GAME_CONFIG.risoluzione.dadoFacce;
+// Tira il dado correttivo (default 1d4, il valore configurato in
+// GAME_CONFIG.risoluzione.dadoFacce). `facce` può essere sovrascritto dal
+// chiamante -- serve ai ruoli che hanno un dado diverso per la propria
+// competenza principale (vedi `ruolo.dadoFacce` in game-config.js).
+export function tiraDado(facce = GAME_CONFIG.risoluzione.dadoFacce) {
   return 1 + Math.floor(Math.random() * facce);
 }
 
 // Risolve un'azione: punteggio di competenza + dado, confrontato con le
 // due soglie configurate. Ritorna il totale, il tiro grezzo e l'esito.
-export function risolviAzione(punteggioCompetenza, tiroDadoForzato = null) {
-  const dado = tiroDadoForzato ?? tiraDado();
+// `facce` si propaga a tiraDado() solo quando il dado non è forzato.
+export function risolviAzione(punteggioCompetenza, tiroDadoForzato = null, facce = GAME_CONFIG.risoluzione.dadoFacce) {
+  const dado = tiroDadoForzato ?? tiraDado(facce);
   const totale = punteggioCompetenza + dado;
   const { sogliaSuccessoPieno, sogliaSuccessoParziale } = GAME_CONFIG.risoluzione;
 
