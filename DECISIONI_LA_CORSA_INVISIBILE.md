@@ -1,45 +1,43 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 10 luglio 2026 (fine sessione, dopo il Passo 12 — lavoro sospeso qui su richiesta)
+Aggiornato al: 11 luglio 2026 (fine sessione, dopo il Passo 15 — lavoro sospeso qui su richiesta, nuova chat da avviare)
 
 Questo file serve a non perdersi tra una sessione di lavoro e l'altra: raccoglie cosa
 è stato deciso, cosa è ancora un'ipotesi da confermare, e cosa manca. Va aggiornato
 ogni 3-4 passaggi di lavoro, non a ogni singola modifica.
 
-**Punto di ripresa**: esiste ora un'identità comandante e un pannello
-dedicato nella schermata di gioco (Passo 12). Il comandante non è un ruolo
-a parte: è il primo giocatore che fa `/join` in una stanza appena creata
-(`session.giocatori.length === 0`), gioca anche lui con uno dei 4 ruoli,
-ma vede in più un pannello (margine con soglia, avvio/cambio nodo, modifica
-manuale del margine, note private mai inviate al server). Nessun controllo
-di autorizzazione lato server: il flag `comandante` sblocca solo l'interfaccia
-lato client, coerente con il resto dell'API (nessuna infrastruttura di
-sessione/token nel Worker). Limite noto e accettato: se il link viene
-condiviso prima che il creatore stesso faccia `/join`, un altro giocatore
-potrebbe diventare comandante per primo.
-Margine modificabile manualmente estendendo `/risorse` (non un endpoint
-dedicato): "margine" è ora una chiave speciale accettata da quell'endpoint,
-con lo stesso pattern delta già usato per le risorse di squadra.
+**Punto di ripresa**: il testo libero (interprete di linguaggio naturale) è
+collegato al gioco (Passo 13), ma **solo per il nodo pilota `1836-torino`**
+— si affianca ai bottoni delle risposte, non li sostituisce. Il matching
+gira lato server (nuovo modulo `src/lib/interprete-libero/`, copiato da
+`simulatore-interprete` e convertito in ESM). Le librerie di frasi
+d'esempio sono file `.md` per richiesta, registrate in
+`src/lib/interprete-registro-librerie.js` (stesso schema del registro
+`nodoId → pool` del Cronista). Quando l'interprete è ambiguo, la richiesta
+resta `session.interpretazionePendente` finché il comandante non la
+risolve (`POST /risolvi-interpretazione`) — funziona tra dispositivi
+diversi, verificato dal vivo con due tab separate. **Bug reale trovato e
+corretto durante questa verifica**: il polling di `public/index.html`
+(`avviaPolling`) non ha mai aggiornato nulla in tempo reale per nessun
+giocatore, da prima di questa sessione — destrutturava `{ session }` da
+`GET /state`, che invece restituisce la sessione senza involucro. Corretto.
+Da qui, le risposte "a tiro" si sono estese oltre `1836-torino`: nel Passo
+14 "Carica diretta" (`1848-milano` → `milano-barricata`) è passata da
+effetto fisso a `competenzaRichiesta: "cadenza"`, con pool Cronista e
+librerie interprete dedicate per **tutte e 6** le risposte del nodo (anche
+le 5 rimaste fisse, che il testo libero copre comunque). Nel Passo 15
+"Uscite a recuperarlo sotto il fuoco" (`1915-carso-piave` →
+`carso-bombardamento`) è passata a `competenzaRichiesta: "passoAvanti"` —
+**senza** pool Cronista né libreria interprete per questo nodo (non
+richiesti in questo passo): il testo d'esito resta quello fisso per tier
+scritto in `game-config.js`, comportamento atteso.
 Il bug noto di `public/index.html` (non mandava mai `giocatoreId` a
-`/scegli`) è corretto dal Passo 11 — `STATO.giocatoreId`
-viene salvato dalla risposta di `/join` e incluso nel body di `/scegli`.
-**Verificato dal vivo**, non solo a lettura di codice: `wrangler dev` +
-browser reale, join di un Esploratore, avvio di `1836-torino`, scelta "A
-tutta velocità" — nessuna richiesta fallita (il 400 sparito), ed è uscito
-prima il tier "parziale" poi (in una stanza nuova) "fallimento", in
-entrambi i casi con il testo composto dal Cronista, non più quello statico
-("pieno" non è mai uscito: con la Cadenza base dell'Esploratore, 3, è
-matematicamente irraggiungibile — 3 + dado massimo 4 = 7, sotto la soglia
-di 8 — non un problema del fix, coerente con quanto già verificato nei
-test automatici).
-Il Cronista è collegato al flusso di `/scegli` dal Passo 10 — per il nodo
-`1836-torino`, l'unico con una risposta reale con tiro finora (Passo 9).
-Si attiva **solo** per risposte con `competenzaRichiesta`; quando il pool
-del nodo attivo è disponibile, **sostituisce** il testo statico, tramite un
-registro `nodoId → pool` (`src/lib/narratore-registro-pool.js`) — nessuna
-stringa di nodo o di ruolo scritta in `GameSession.js`.
-`storicoFrammenti` (anti-ripetizione del Cronista) resta sempre `[]`:
-nessun nuovo campo di sessione per ora, vedi nota più sotto.
+`/scegli`) è corretto dal Passo 11.
+Il Cronista è collegato al flusso di `/scegli` dal Passo 10, tramite un
+registro `nodoId → pool` (`src/lib/narratore-registro-pool.js`) — oggi
+copre `1836-torino` e `1848-milano`. `storicoFrammenti`
+(anti-ripetizione del Cronista) resta sempre `[]`: nessun nuovo campo di
+sessione per ora, vedi nota più sotto.
 Restano da confermare: la definizione del Margine, e poi codice del libro /
 chat / chiamata vocale (vedi sotto) — invariato dal Passo 3.
 
@@ -349,6 +347,93 @@ oggi contiene un `index.html` minimo).
     `/join` reale) → `comandante: false`, pannello assente, resto della
     schermata invariato.
 
+14. **Interprete di testo libero collegato, nodo pilota `1836-torino`
+    (fatto nel Passo 13)**: architettura decisa esplicitamente prima di
+    scrivere codice. Il testo libero **si affianca** ai bottoni delle
+    risposte, non li sostituisce. Il matching gira **lato server** (nuovo
+    endpoint nel Worker), non nel browser. Il motore
+    (`normalizza`/`stopword`/`libreria`/`punteggio`/`interprete`, copiato
+    da `github.com/simo0703/simulatore-interprete` e convertito da
+    CommonJS a ESM) vive come **file locali** in
+    `src/lib/interprete-libero/`, non come dipendenza npm esterna —
+    stesso pattern già usato per `narratore-simulato.js` del Cronista.
+    Le librerie di frasi d'esempio sono **un file `.md` per richiesta**
+    (non dentro `game-config.js`), con un registro
+    `richiestaId → libreria` (`src/lib/interprete-registro-librerie.js`,
+    stesso schema del registro `nodoId → pool` del Cronista): import
+    dinamico dentro `try/catch`, `registraLibreria()` per iniezione nei
+    test — se una richiesta non ha una libreria registrata, il client
+    resta a soli bottoni per quella richiesta, nessun errore.
+    Quando l'interprete è **ambiguo o incerto**, la richiesta resta
+    **pendente** nello stato della stanza (`session.interpretazionePendente`,
+    con migrazione in `initState()`/`migrateState()`) finché il
+    comandante non la risolve con `POST /risolvi-interpretazione`
+    (candidato scelto, o `annulla: true` per far riprovare il giocatore
+    senza applicare nulla) — deve funzionare tra dispositivi diversi
+    (chi scrive il testo e il comandante su browser separati), quindi
+    non poteva essere gestita solo nella risposta HTTP immediata.
+    **Refactoring necessario**: la logica di "applicare una risposta"
+    (tiro, effetti, Cronista, `storicoScelte`, complicazione da margine,
+    prossima richiesta/ramificazione, esito del nodo) è stata estratta
+    da `/scegli` in `GameSession.applicaRisposta()`, riusata da tre punti
+    (`/scegli`, `/interpreta` esito automatico, `/risolvi-interpretazione`)
+    senza duplicazione.
+    Soglie di decisione (`sogliaAlta: 0.6`, `margineDistacco: 0.15`)
+    **esplicitamente provvisorie**, commentate come tali nel codice — non
+    ancora tarate su un volume reale di testo scritto da persone vere.
+    **Bug reale scoperto durante la verifica dal vivo di questo passo**
+    (non introdotto qui, preesistente): `avviaPolling()` in
+    `public/index.html` destrutturava `const { session } = await
+    chiamaAPI(.../state)`, ma `GET /state` restituisce la sessione senza
+    involucro (`Response.json(session)` in `GameSession.js`) — quindi
+    `session` era sempre `undefined`, ogni tick lanciava un errore
+    ingoiato in silenzio da un `catch(e){}` vuoto, e il polling non ha
+    **mai** aggiornato risorse/giocatori/pannello comandante in tempo
+    reale per nessun giocatore, in nessuna sessione di gioco precedente
+    a questa correzione. Corretto (tolta la destrutturazione errata, in
+    due punti: `avviaPolling()` e `aggiornaSchermataGioco()`).
+    **Verificato dal vivo** con `wrangler dev` e due tab browser separate
+    (localStorage isolato per simulare due dispositivi): testo chiaro →
+    selezione automatica identica a un click; testo ambiguo → compare nel
+    pannello comandante con i candidati e i punteggi, risolverlo applica
+    l'effetto giusto, annullarlo non applica nulla e il giocatore in
+    attesa su un dispositivo separato si sblocca **da solo** tramite il
+    polling reale (una volta corretto il bug sopra); testo estraneo →
+    messaggio "non ho capito", nessuna rottura; nodo senza libreria
+    (`1848-milano`, prima del Passo 14) → campo nascosto con grazia dopo
+    un 400, bottoni sempre funzionanti.
+    **Vincolo tecnico scoperto**: `snowball-stemmers` (dipendenza npm
+    aggiunta per lo stemming italiano) espone `newStemmer` in modo che
+    Node sintetizza comunque un default export, ma esbuild (bundler di
+    Wrangler) no — un `import snowball from "snowball-stemmers"` restava
+    `undefined` **solo sotto Workers reali**, non sotto Node puro né nel
+    bundling `--dry-run`. Scoperto solo grazie a un vero `wrangler dev`
+    (non bastavano i test Node). Risolto con l'import nominale
+    (`import { newStemmer } from "snowball-stemmers"`).
+
+15. **`1848-milano`: "Carica diretta" a tiro reale + pool Cronista +
+    librerie interprete (fatto nel Passo 14)**: la risposta "Carica
+    diretta, sfruttando la Cadenza accumulata" (`milano-barricata`) è
+    passata da effetto fisso a `competenzaRichiesta: "cadenza"`, stesso
+    schema già usato per `1836-torino`. Aggiunto anche il pool Cronista
+    per il nodo (`src/lib/narratore-1848-milano.md`/`.js`, registrato in
+    `narratore-registro-pool.js`) e le librerie interprete per
+    **entrambe** le richieste del nodo (`milano-barricata`,
+    `milano-ferito`, 3 opzioni ciascuna — comprese le risposte rimaste a
+    effetto fisso, che il testo libero copre comunque anche senza tiro).
+    Verificato dal vivo: il Cronista compone testo variabile sul tiro
+    (non più il testo statico), il testo libero funziona su tutte e 6 le
+    opzioni, nessuna interferenza tra i registri di `1836-torino` e
+    `1848-milano`.
+
+16. **`1915-carso-piave`: "Uscite a recuperarlo sotto il fuoco" a tiro
+    reale (fatto nel Passo 15)**: stessa conversione (`carso-bombardamento`
+    → `competenzaRichiesta: "passoAvanti"`), ma **senza** pool Cronista né
+    libreria interprete per questo nodo in questo passo — non richiesti.
+    Il testo d'esito per tier resta quello scritto a mano in
+    `game-config.js` (`effettiPerEsito`/`esito`), comportamento atteso e
+    coerente con come funzionava già prima dell'esistenza del Cronista.
+
 ---
 
 ## Ipotesi in attesa di conferma (NON dare per deciso)
@@ -385,10 +470,24 @@ oggi contiene un `index.html` minimo).
       di quella richiesta e degli altri 4 nodi restano a effetto fisso**
 - [x] Collegare il Cronista a `GameSession.js` per il nodo `1836-torino` —
       fatto nel Passo 10, tramite registro `nodoId → pool` generico
-- [ ] Pool di frammenti narrativi veri per gli altri 4 nodi (Milano, Carso/Piave,
+- [x] Pool di frammenti narrativi veri per `1848-milano` — fatto nel Passo 14
+- [ ] Pool di frammenti narrativi veri per gli altri 3 nodi (Carso/Piave,
       Emergenza civile, missione moderna) — quando pronti, basta aggiungerli
       al registro (`src/lib/narratore-registro-pool.js`), zero modifiche a
       `GameSession.js`
+- [x] Interprete di testo libero collegato al gioco (nodo pilota
+      `1836-torino`) — fatto nel Passo 13, esteso a `1848-milano` nel
+      Passo 14 (librerie per tutte e 6 le risposte del nodo)
+- [ ] Interprete di testo libero per gli altri 3 nodi senza libreria ancora
+      (Carso/Piave — solo `carso-bombardamento` ha un tiro reale, ma zero
+      librerie interprete finora —, Emergenza civile, missione moderna)
+- [ ] Tarare le soglie provvisorie dell'interprete (`sogliaAlta: 0.6`,
+      `margineDistacco: 0.15` in `GameSession.js`) su testo libero reale
+      scritto da persone vere, non solo su frasi di test scritte a mano
+- [ ] Convertire altre risposte fisse a tiro reale nei nodi che già hanno
+      almeno una risposta convertita (`1836-torino`, `1848-milano`,
+      `1915-carso-piave`), e nei 2 nodi ancora senza nessun tiro reale
+      (Emergenza civile, missione moderna)
 - [x] `public/index.html` non mandava `giocatoreId` a `/scegli` — corretto
       nel Passo 11, verificato dal vivo con `wrangler dev` + browser
 - [x] Identità comandante (primo giocatore della stanza) + pannello nella
@@ -409,6 +508,111 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**11/07/2026 — Passo 15: `1915-carso-piave` — "Uscite a recuperarlo" a tiro reale**
+File modificati: `src/game-config.js`.
+- `carso-bombardamento` → risposta "Uscite a recuperarlo sotto il fuoco":
+  da `effetti`/`esito` fissi a `competenzaRichiesta: "passoAvanti"`,
+  `effettiPerEsito`/`esito` per tier (pieno/parziale/fallimento), stesso
+  schema del Passo 9 (`1836-torino`) e del Passo 14 (`1848-milano`).
+- **Nessun pool Cronista né libreria interprete** aggiunti per questo nodo
+  in questo passo (non richiesti): il testo d'esito per tier resta quello
+  scritto a mano in `game-config.js`.
+- L'altra risposta della stessa richiesta ("Aspettate una pausa nel
+  fuoco") non toccata, resta a effetto fisso.
+- Verificato dal vivo con `wrangler dev`: dado variabile (1-4) su più
+  tentativi, tier corretto applicato con effetti/testo coerenti,
+  `competenzaId: "passoAvanti"` restituito, nessuna regressione
+  sull'altra risposta della stessa richiesta.
+- Commit `18a9293`.
+
+**11/07/2026 — Passo 14: `1848-milano` — tiro reale + pool Cronista + librerie interprete**
+Nuovi file: `src/lib/narratore-1848-milano.md`, `src/lib/narratore-1848-milano.js`,
+`src/lib/interprete-libero/1848-milano/` (milano-barricata.md/.js,
+milano-ferito.md/.js), `test-narratore-1848-milano.mjs`,
+`test-interprete-libero-1848-milano.mjs`.
+File modificati: `src/game-config.js`, `src/lib/narratore-registro-pool.js`,
+`src/lib/interprete-registro-librerie.js`.
+- `milano-barricata` → risposta "Carica diretta, sfruttando la Cadenza
+  accumulata": da effetto fisso a `competenzaRichiesta: "cadenza"`, stesso
+  schema di `1836-torino`.
+- Pool Cronista per il nodo, contenuto fornito dall'utente, stessa
+  struttura esatta (3 slot apertura/sviluppo/eco, stesse sottotabelle
+  baseline/per-ruolo/per-competenza/per-fascia-margine) di
+  `narratore-corsa-invisibile.md` — registrato in
+  `narratore-registro-pool.js` (`"1848-milano": () =>
+  import("./narratore-1848-milano.js")`), voce di `1836-torino` non toccata.
+- Librerie interprete per **entrambe** le richieste del nodo
+  (`milano-barricata`, `milano-ferito`), 3 opzioni ciascuna, contenuto
+  fornito dall'utente, registrate in `interprete-registro-librerie.js` —
+  coprono anche le 5 risposte rimaste a effetto fisso: il testo libero
+  funziona indipendentemente dal tiro.
+- Nuovi test dedicati per entrambi (pool e librerie), stesso schema dei
+  test equivalenti per `1836-torino`, adattati ai conteggi reali del
+  contenuto di questo nodo (es. 8 frammenti eco invece di 9, 2 varianti
+  "critico" invece di 3).
+- **Verificato dal vivo**: il Cronista compone testo variabile sul tiro di
+  "Carica diretta" (4 tentativi, tutti diversi); testo libero verificato
+  su tutte e 6 le opzioni (frase chiara → automatica per ciascuna, frase
+  estranea → nessuna_corrispondenza); nessuna regressione su
+  `1836-torino` (registri di pool e librerie isolati correttamente per
+  nodo/richiesta).
+- Commit `83b11c0`.
+
+**11/07/2026 — Passo 13: interprete di testo libero collegato al gioco (nodo pilota `1836-torino`)**
+Nuovi file: `src/lib/interprete-libero/` (normalizza.js, stopword.js,
+libreria.js, punteggio.js, interprete.js — copiati da
+`simulatore-interprete`, convertiti in ESM; più `1836-torino/` con le 3
+librerie del nodo pilota e i relativi wrapper `.js`; più
+`libreria-prova/opzioni-test.md`), `src/lib/interprete-registro-librerie.js`,
+`test-interprete-libero.mjs`, `test-interpreta.mjs`.
+File modificati: `package.json`/`package-lock.json` (dipendenza
+`snowball-stemmers`), `src/durable-objects/GameSession.js`,
+`public/index.html`.
+- Architettura decisa esplicitamente con l'utente prima di scrivere
+  codice (vedi punto 14 in "Decisioni confermate" per il dettaglio
+  completo): il testo libero si affianca ai bottoni, matching lato
+  server, motore come file locali (non dipendenza npm), librerie `.md`
+  per richiesta con registro dedicato, richieste ambigue restano
+  pendenti nello stato della stanza per la risoluzione cross-device.
+- `GameSession.js`: logica di "applicare una risposta" estratta da
+  `/scegli` in `applicaRisposta(session, richiestaAttiva, risposta,
+  giocatoreId)`, riusata da `/scegli`, `/interpreta` (esito automatico) e
+  `/risolvi-interpretazione` — zero duplicazione. Nuovo campo di stato
+  `session.interpretazionePendente` (default `null`, migrato in
+  `initState()`/`migrateState()`). Nuovo `POST /interpreta`
+  (`testoLibero`, `richiestaId`, `giocatoreId` → `automatica` applica
+  subito, `manuale` salva il pendente per il comandante, `nessuna_corrispondenza`
+  nessuna modifica di stato). Nuovo `POST /risolvi-interpretazione`
+  (comandante applica un candidato o annulla).
+- Soglie di decisione (`sogliaAlta: 0.6`, `margineDistacco: 0.15`)
+  esplicitamente commentate come provvisorie nel codice.
+- **Bug preesistente scoperto e corretto durante la verifica dal vivo**
+  (non introdotto in questo passo): `avviaPolling()` e
+  `aggiornaSchermataGioco()` in `public/index.html` destrutturavano
+  `{ session }` da `GET /state`, che restituisce invece la sessione
+  senza involucro — `session` era sempre `undefined`, ogni tick del
+  polling falliva in silenzio (`catch(e){}` vuoto). Il polling non ha
+  **mai** aggiornato risorse/giocatori/pannello comandante in tempo
+  reale per nessun giocatore, in nessuna sessione precedente a questa
+  correzione. Corretto in entrambi i punti.
+- `public/index.html`: campo testo libero + bottone "Invia" accanto ai
+  bottoni delle risposte (renderizzato sempre, disabilitato con grazia
+  su 400 se la richiesta non ha una libreria), gestione dei tre esiti di
+  `/interpreta`, sezione nel pannello comandante per risolvere
+  un'interpretazione pendente (candidati con punteggio, o annulla),
+  polling esteso per sbloccare automaticamente il giocatore in attesa.
+- **Vincolo tecnico scoperto**: `snowball-stemmers` — import di default
+  funzionante sotto Node ma `undefined` sotto Workers reali (esbuild non
+  sintetizza il default in questo caso), scoperto solo con `wrangler dev`
+  vero (non con i test Node né col bundling `--dry-run`). Risolto con
+  l'import nominale.
+- **Verificato dal vivo** con `wrangler dev` e due tab browser separate
+  (localStorage isolato per due dispositivi): tutti e 4 gli scenari
+  richiesti (testo chiaro, testo ambiguo con risoluzione/annullo
+  cross-device, testo estraneo, nodo senza libreria) confermati, incluso
+  lo sblocco automatico via polling una volta corretto il bug sopra.
+- Commit `ba4cb83`.
 
 **10/07/2026 — Passo 12: identità comandante + pannello comandante**
 Nuovo file: nessuno.
