@@ -411,8 +411,17 @@ export const GAME_CONFIG = {
             },
             {
               testo: "Restate a parlare, guadagnando la loro fiducia",
-              effetti: { spiritoDiCorpo: 1, cadenza: -1 },
-              esito: "Escono con le proprie gambe, convinti, non trascinati.",
+              competenzaRichiesta: "spiritoDiCorpo",
+              effettiPerEsito: {
+                pieno: { spiritoDiCorpo: 2, cadenza: -1, margine: 1 },
+                parziale: { spiritoDiCorpo: 1, cadenza: -1, margine: 2 },
+                fallimento: { spiritoDiCorpo: -1, cadenza: -2, margine: 3 },
+              },
+              esito: {
+                pieno: "Escono con le proprie gambe, convinti fino in fondo: le parole hanno pesato più della paura.",
+                parziale: "Escono con le proprie gambe, ma il tempo perso a convincerli si fa sentire su tutta la squadra.",
+                fallimento: "Escono, alla fine — ma solo quando il tempo è quasi scaduto, e la fiducia guadagnata resta fragile.",
+              },
             },
           ],
         },
