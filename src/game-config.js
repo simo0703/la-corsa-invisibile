@@ -334,8 +334,17 @@ export const GAME_CONFIG = {
           risposte: [
             {
               testo: "Uscite a recuperarlo sotto il fuoco",
-              effetti: { spiritoDiCorpo: -1, passoAvanti: 2 },
-              esito: "Lo riportate dentro. Il prezzo pagato in paura superata resta inciso in ognuno di voi.",
+              competenzaRichiesta: "passoAvanti",
+              effettiPerEsito: {
+                pieno: { passoAvanti: 3, spiritoDiCorpo: 1, margine: 1 },
+                parziale: { passoAvanti: 2, spiritoDiCorpo: -1, margine: 2 },
+                fallimento: { passoAvanti: 1, spiritoDiCorpo: -2, margine: 3 },
+              },
+              esito: {
+                pieno: "Lo riportate dentro senza che il fuoco vi sfiori: il coraggio, stavolta, non ha avuto prezzo.",
+                parziale: "Lo riportate dentro. Il prezzo pagato in paura superata resta inciso in ognuno di voi.",
+                fallimento: "Lo riportate dentro, ma per un soffio: le schegge hanno sfiorato più di uno di voi, e il fiato è ancora corto.",
+              },
             },
             {
               testo: "Aspettate una pausa nel fuoco per muovervi",
