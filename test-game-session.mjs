@@ -45,6 +45,18 @@ function nuovaSessione() {
   return { gs, storage };
 }
 
+// Fa /crea + /join con un tokenCreazione valido: il giocatore risultante è
+// DAVVERO comandante (non solo per nome, come bastava prima di questo
+// passo) -- scorciatoia per i test che devono compiere azioni riservate
+// (/avvia-nodo, /risorse, /risolvi-interpretazione) e non stanno testando
+// l'assegnazione del comandante in sé.
+async function joinComandante(gs, nome = "Prova", ruolo = "esploratore") {
+  const tokenCreazione = crypto.randomUUID();
+  await chiamata(gs, "/crea", "POST", { tokenCreazione });
+  const join = await chiamata(gs, "/join", "POST", { nome, ruolo, tokenCreazione });
+  return { giocatoreId: join.json.giocatori[0].id, token: join.json.token };
+}
+
 // Forza il punteggio di una competenza direttamente nello storage: serve a
 // rendere deterministico l'esito di un tiro nei test (il dado non è
 // forzabile dall'API pubblica, giustamente).
@@ -114,7 +126,10 @@ console.log("\n--- /join ---");
     "le competenze vengono assegnate in base al ruolo (Esploratore: Cadenza principale a 3)",
     json.giocatori[0].competenze.cadenza === 3 && json.giocatori[0].competenze.precisione === 1
   );
-  verifica("il primo giocatore della stanza diventa comandante", json.giocatori[0].comandante === true);
+  verifica(
+    "senza tokenCreazione (nessun /crea chiamato prima), il giocatore NON diventa comandante",
+    json.giocatori[0].comandante === false
+  );
   verifica("/join restituisce un token per il nuovo giocatore", typeof json.token === "string" && json.token.length > 0);
   verifica("il token non compare nell'elenco giocatori della risposta di /join", json.giocatori[0].token === undefined);
 
@@ -126,6 +141,66 @@ console.log("\n--- /join ---");
 
   const ruoloIgnoto = await chiamata(gs, "/join", "POST", { nome: "Altro", ruolo: "non-esiste" });
   verifica("un ruolo sconosciuto risponde 400", ruoloIgnoto.status === 400);
+}
+
+console.log("\n--- /crea + /join: assegnazione del comandante tramite tokenCreazione ---");
+{
+  const { gs } = nuovaSessione();
+  const tokenCreazione = "token-creazione-prova";
+  const crea = await chiamata(gs, "/crea", "POST", { tokenCreazione });
+  verifica("POST /crea risponde 200", crea.status === 200);
+  verifica("la stanza resta vuota dopo /crea (nessun giocatore aggiunto)", crea.json.giocatori.length === 0);
+  verifica("la risposta di /crea non include mai tokenCreazione", crea.json.tokenCreazione === undefined);
+
+  const creatore = await chiamata(gs, "/join", "POST", { nome: "Creatore", ruolo: "esploratore", tokenCreazione });
+  verifica(
+    "chi presenta il tokenCreazione corretto diventa comandante",
+    creatore.json.giocatori[0].comandante === true
+  );
+
+  // Un secondo giocatore, anche con lo STESSO token (già consumato dal
+  // primo), non ruba il ruolo: session.tokenCreazione è stato azzerato al
+  // primo uso valido, e comunque un comandante è già assegnato.
+  const secondoConStessoToken = await chiamata(gs, "/join", "POST", {
+    nome: "Doppia tab",
+    ruolo: "custode",
+    tokenCreazione,
+  });
+  verifica(
+    "un secondo /join con lo STESSO tokenCreazione valido non ruba il ruolo (già assegnato)",
+    secondoConStessoToken.json.giocatori[1].comandante === false
+  );
+}
+
+console.log("\n--- /join: tokenCreazione assente o sbagliato non assegna comandante ---");
+{
+  const { gs: gsSenzaToken } = nuovaSessione();
+  await chiamata(gsSenzaToken, "/crea", "POST", { tokenCreazione: "token-vero" });
+  const senzaToken = await chiamata(gsSenzaToken, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
+  verifica(
+    "/join senza tokenCreazione non assegna comandante, anche se la stanza ne ha uno valido in attesa",
+    senzaToken.json.giocatori[0].comandante === false
+  );
+
+  const { gs: gsTokenSbagliato } = nuovaSessione();
+  await chiamata(gsTokenSbagliato, "/crea", "POST", { tokenCreazione: "token-vero" });
+  const tokenSbagliato = await chiamata(gsTokenSbagliato, "/join", "POST", {
+    nome: "Prova",
+    ruolo: "esploratore",
+    tokenCreazione: "token-inventato",
+  });
+  verifica(
+    "/join con tokenCreazione sbagliato non assegna comandante",
+    tokenSbagliato.json.giocatori[0].comandante === false
+  );
+}
+
+console.log("\n--- GET /state non deve mai esporre tokenCreazione ---");
+{
+  const { gs } = nuovaSessione();
+  await chiamata(gs, "/crea", "POST", { tokenCreazione: "token-segreto-creazione" });
+  const { json } = await chiamata(gs, "/state");
+  verifica("GET /state non contiene mai la chiave \"tokenCreazione\"", !("tokenCreazione" in json));
 }
 
 console.log("\n--- GET /state non deve mai esporre il token ---");
@@ -171,9 +246,7 @@ console.log("\n--- /join: limite di 8 posti ---");
 console.log("\n--- /risorse ---");
 {
   const { gs } = nuovaSessione();
-  const join = await chiamata(gs, "/join", "POST", { nome: "Comandante", ruolo: "esploratore" });
-  const giocatoreId = join.json.giocatori[0].id;
-  const token = join.json.token;
+  const { giocatoreId, token } = await joinComandante(gs, "Comandante");
 
   const ok = await chiamata(gs, "/risorse", "POST", { risorsa: "cadenza", delta: 3, giocatoreId, token });
   verifica("modifica una risorsa nota", ok.json.risorseDiSquadra.cadenza === 3);
@@ -191,9 +264,7 @@ console.log("\n--- /risorse ---");
 console.log("\n--- Autenticazione: /risorse e /avvia-nodo riservati al comandante ---");
 {
   const { gs } = nuovaSessione();
-  const comandante = await chiamata(gs, "/join", "POST", { nome: "Comandante", ruolo: "esploratore" });
-  const idComandante = comandante.json.giocatori[0].id;
-  const tokenComandante = comandante.json.token;
+  const { giocatoreId: idComandante, token: tokenComandante } = await joinComandante(gs, "Comandante");
   const gregario = await chiamata(gs, "/join", "POST", { nome: "Gregario", ruolo: "custode" });
   const idGregario = gregario.json.giocatori[1].id;
   const tokenGregario = gregario.json.token;
@@ -246,9 +317,7 @@ console.log("\n--- Autenticazione: /risorse e /avvia-nodo riservati al comandant
 console.log("\n--- avvia-nodo + richiesta-attiva ---");
 {
   const { gs } = nuovaSessione();
-  const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
-  const giocatoreId = join.json.giocatori[0].id;
-  const token = join.json.token;
+  const { giocatoreId, token } = await joinComandante(gs);
 
   const avvio = await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino", giocatoreId, token });
   verifica("avvia il nodo richiesto", avvio.json.session.nodoAttivo === "1836-torino");
@@ -286,9 +355,7 @@ console.log("\n--- /scegli senza nodo avviato ---");
 console.log("\n--- Autenticazione: /scegli richiede identita' verificata ---");
 {
   const { gs } = nuovaSessione();
-  const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
-  const giocatoreId = join.json.giocatori[0].id;
-  const token = join.json.token;
+  const { giocatoreId, token } = await joinComandante(gs);
   await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino", giocatoreId, token });
 
   const senzaToken = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId });
@@ -305,9 +372,7 @@ console.log("\n--- Autenticazione: /scegli richiede identita' verificata ---");
 console.log("\n--- Ramificazione: percorso aggressivo verso decalogo-vaira-severo ---");
 {
   const { gs, storage } = nuovaSessione();
-  const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
-  const giocatoreId = join.json.giocatori[0].id;
-  const token = join.json.token;
+  const { giocatoreId, token } = await joinComandante(gs);
   // Dal Passo 9 questa risposta ha un tiro (competenzaRichiesta: "cadenza");
   // punteggio forzato molto alto per rendere il tier deterministico ("pieno").
   await impostaCompetenza(storage, giocatoreId, "cadenza", 20);
@@ -376,9 +441,7 @@ console.log("\n--- Ramificazione: percorso aggressivo verso decalogo-vaira-sever
 console.log("\n--- Soglia del margine: la complicazione scatta e il margine si dimezza ---");
 {
   const { gs, storage } = nuovaSessione();
-  const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
-  const giocatoreId = join.json.giocatori[0].id;
-  const token = join.json.token;
+  const { giocatoreId, token } = await joinComandante(gs);
   // Punteggio forzato molto basso: tier deterministico "fallimento" (margine +3).
   await impostaCompetenza(storage, giocatoreId, "cadenza", -10);
   await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino", giocatoreId, token });
@@ -407,9 +470,7 @@ console.log("\n--- Soglia del margine: la complicazione scatta e il margine si d
 console.log("\n--- Fallback in sequenza per nodi senza campo \"prossima\" (compatibilità) ---");
 {
   const { gs } = nuovaSessione();
-  const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
-  const giocatoreId = join.json.giocatori[0].id;
-  const token = join.json.token;
+  const { giocatoreId, token } = await joinComandante(gs);
   const avvio = await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1848-milano", giocatoreId, token });
   verifica("avvia il nodo di Milano", avvio.json.richiestaAttiva.id === "milano-barricata");
 
@@ -427,9 +488,7 @@ console.log("\n--- Fallback in sequenza per nodi senza campo \"prossima\" (compa
 console.log("\n--- /scegli con indice di risposta inesistente ---");
 {
   const { gs } = nuovaSessione();
-  const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
-  const giocatoreId = join.json.giocatori[0].id;
-  const token = join.json.token;
+  const { giocatoreId, token } = await joinComandante(gs);
   await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino", giocatoreId, token });
   const { status } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 99, giocatoreId, token });
   verifica("un indice di risposta che non esiste risponde 400", status === 400);

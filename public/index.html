@@ -630,7 +630,7 @@
 <script>
 const API = ""; // stesso dominio
 let CONFIG = null;
-let STATO = { roomId: null, nome: null, ruolo: null, giocatoreId: null, token: null, comandante: false, competenze: null };
+let STATO = { roomId: null, nome: null, ruolo: null, giocatoreId: null, token: null, tokenCreazione: null, comandante: false, competenze: null };
 
 function mostraSchermo(id) {
   document.querySelectorAll(".schermo").forEach(s => s.classList.remove("attivo"));
@@ -750,6 +750,10 @@ document.getElementById("btn-crea-stanza").addEventListener("click", async () =>
   try {
     const risposta = await chiamaAPI("/api/crea-stanza", { method: "POST" });
     STATO.roomId = risposta.roomId;
+    // tokenCreazione prova "sei tu il creatore" al successivo /join (vedi
+    // GameSession.js): salvato subito, cosi' sopravvive anche se la pagina
+    // viene ricaricata tra la creazione della stanza e il join vero e proprio.
+    STATO.tokenCreazione = risposta.tokenCreazione;
     salvaStato();
     history.replaceState(null, "", "?stanza=" + risposta.roomId);
     mostraSchermo("schermo-join");
@@ -777,10 +781,16 @@ document.getElementById("btn-join").addEventListener("click", async () => {
   btn.disabled = true;
   btn.textContent = "Un momento…";
   try {
+    // tokenCreazione va mandato SOLO se questo dispositivo ce l'ha (chi ha
+    // creato la stanza): chi arriva da un link condiviso non lo possiede
+    // mai, ed è il comportamento atteso, non un errore -- semplicemente
+    // non diventerà comandante (vedi GameSession.js).
+    const corpoJoin = { nome, ruolo };
+    if (STATO.tokenCreazione) corpoJoin.tokenCreazione = STATO.tokenCreazione;
     const session = await chiamaAPI(`/api/stanza/${STATO.roomId}/join`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nome, ruolo }),
+      body: JSON.stringify(corpoJoin),
     });
     STATO.nome = nome;
     STATO.ruolo = ruolo;
@@ -792,6 +802,11 @@ document.getElementById("btn-join").addEventListener("click", async () => {
     STATO.token = session.token;
     STATO.comandante = mioGiocatore.comandante === true;
     STATO.competenze = mioGiocatore.competenze;
+    // tokenCreazione è "one-shot" lato server (consumato al primo /join che
+    // lo usa con successo): dopo un /join riuscito non ha più senso
+    // tenerlo lato client, sia che abbia assegnato comandante sia che non
+    // l'abbia fatto (es. era già stato consumato da un altro tentativo).
+    STATO.tokenCreazione = null;
     salvaStato();
     mostraSchermo("schermo-gioco");
     await aggiornaSchermataGioco();

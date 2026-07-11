@@ -97,6 +97,9 @@ export class GameSession {
         storicoNodo: [], // { nodoId, iniziato_il, concluso_il, esitoFinale }
         aiUsageStanza: 0, // contatore generazioni AI usate in questa stanza
         interpretazionePendente: null, // { giocatoreId, richiestaId, testoLibero, candidati } o null
+        tokenCreazione: null, // segreto impostato da POST /crea (vedi sotto): prova
+        // "sei tu il creatore della stanza", consumato al primo /join che lo usa
+        // con successo. Mai esposto al client (vedi sessionPubblica()).
         // Migrazione automatica: ogni nuovo campo va aggiunto qui E
         // nella funzione migrateState() sotto, altrimenti le sessioni
         // create prima dell'aggiornamento falliscono in silenzio.
@@ -145,18 +148,25 @@ export class GameSession {
       session.interpretazionePendente = null;
       changed = true;
     }
+    if (session.tokenCreazione === undefined) {
+      session.tokenCreazione = null;
+      changed = true;
+    }
     if (changed) this.state.storage.put("session", session);
     return session;
   }
 
   // Versione della sessione sicura da esporre al client: toglie il token
-  // segreto di ogni giocatore. Usata da OGNI risposta che include la
-  // sessione (o il suo elenco giocatori), senza eccezioni -- il token non
-  // deve mai comparire in una risposta HTTP dopo /join.
+  // segreto di ogni giocatore E il tokenCreazione a livello di sessione.
+  // Usata da OGNI risposta che include la sessione (o il suo elenco
+  // giocatori), senza eccezioni -- nessuno dei due token deve mai comparire
+  // in una risposta HTTP dopo il momento in cui viene generato (/join per
+  // il primo, /crea per il secondo).
   sessionPubblica(session) {
+    const { tokenCreazione, ...sessioneSenzaTokenCreazione } = session;
     return {
-      ...session,
-      giocatori: session.giocatori.map(({ token, ...pubblico }) => pubblico),
+      ...sessioneSenzaTokenCreazione,
+      giocatori: session.giocatori.map(({ token, ...giocatorePubblico }) => giocatorePubblico),
     };
   }
 
@@ -204,22 +214,51 @@ export class GameSession {
       return Response.json(this.sessionPubblica(session));
     }
 
-    // Il comandante/narratore e' chi crea la stanza, ma non e' un ruolo a
-    // parte: e' il PRIMO giocatore che si unisce a una stanza appena
-    // creata (nessuno ancora in session.giocatori). Gioca anche lui con
-    // uno dei 4 ruoli come chiunque altro. Limite noto (INVARIATO in
-    // questo passaggio): se il link viene condiviso prima che il
-    // creatore stesso faccia /join, un altro giocatore potrebbe diventare
-    // comandante per primo -- accettabile per ora, si affronta a parte.
+    // Chiamato una sola volta da POST /api/crea-stanza (src/index.js),
+    // subito dopo aver istanziato questa Durable Object -- PRIMA che il
+    // link della stanza esista o venga condiviso. Salva il tokenCreazione
+    // generato da index.js: sara' la prova che il successivo /join con
+    // quel token e' proprio il creatore, non semplicemente "il primo ad
+    // arrivare" (vecchia logica, vulnerabile). Non assegna nessun
+    // giocatore: la stanza resta vuota finche' il creatore stesso non fa
+    // /join con questo token in mano.
+    if (url.pathname.endsWith("/crea") && request.method === "POST") {
+      const { tokenCreazione } = await request.json();
+      const session = await this.initState();
+      session.tokenCreazione = tokenCreazione ?? null;
+      await this.state.storage.put("session", session);
+      return Response.json(this.sessionPubblica(session));
+    }
+
+    // Il comandante/narratore e' chi ha creato la stanza (POST
+    // /api/crea-stanza), provato dal possesso di tokenCreazione -- non
+    // piu' "il PRIMO giocatore che si unisce a una stanza appena creata"
+    // (vecchia logica: session.giocatori.length === 0, rimossa perche'
+    // vulnerabile -- se il link veniva condiviso prima che il creatore
+    // stesso facesse /join, chiunque altro poteva rubare il ruolo).
+    // Gioca comunque con uno dei 4 ruoli come chiunque altro.
     //
-    // token: segreto generato qui, salvato nel giocatore lato server e
-    // restituito UNA SOLA VOLTA in questa risposta (mai da /state o da
-    // qualunque altra rotta, vedi sessionPubblica()). E' la prova di
-    // identita' richiesta dagli endpoint riservati al comandante e da
-    // /scegli e /interpreta -- da sola giocatoreId (pubblico, visibile a
-    // chiunque nella stanza via /state) non basta piu'.
+    // comandante = true SOLO SE: tokenCreazione ricevuto corrisponde a
+    // quello salvato per la sessione, E nessuno ha gia' comandante===true.
+    // La seconda condizione e' il caso limite esplicito: il token prova
+    // "sei tu il creatore", non "sei sempre comandante ogni volta che lo
+    // mandi" -- viene consumato (azzerato) al primo uso valido, cosi' un
+    // secondo /join con lo stesso token corretto (es. doppia tab aperta
+    // per errore dal creatore, o un retry di rete) non ruba il ruolo a chi
+    // lo ha gia' preso. Una stanza il cui /api/crea-stanza non e' mai
+    // stato chiamato (tokenCreazione resta null) non avra' mai un
+    // comandante -- coerente col fatto che nessuno ha "creato" quella
+    // stanza nel senso qui inteso.
+    //
+    // token (diverso da tokenCreazione): segreto generato qui, salvato nel
+    // giocatore lato server e restituito UNA SOLA VOLTA in questa
+    // risposta (mai da /state o da qualunque altra rotta, vedi
+    // sessionPubblica()). E' la prova di identita' richiesta dagli
+    // endpoint riservati al comandante e da /scegli e /interpreta -- da
+    // sola giocatoreId (pubblico, visibile a chiunque nella stanza via
+    // /state) non basta piu'.
     if (url.pathname.endsWith("/join") && request.method === "POST") {
-      const { nome, ruolo } = await request.json();
+      const { nome, ruolo, tokenCreazione } = await request.json();
       const session = await this.initState();
       // Limite fisso ai posti disponibili (vedi GAME_CONFIG.maxGiocatori):
       // controllato PRIMA di validare il ruolo, cosi' una stanza piena
@@ -235,7 +274,15 @@ export class GameSession {
       } catch {
         return new Response("Ruolo sconosciuto", { status: 400 });
       }
-      const comandante = session.giocatori.length === 0;
+      const comandanteGiaAssegnato = session.giocatori.some((g) => g.comandante);
+      const comandante =
+        !comandanteGiaAssegnato &&
+        tokenCreazione != null &&
+        session.tokenCreazione != null &&
+        tokenCreazione === session.tokenCreazione;
+      if (comandante) {
+        session.tokenCreazione = null; // consumato: un solo uso, vedi commento sopra
+      }
       const token = crypto.randomUUID();
       session.giocatori.push({ id: crypto.randomUUID(), nome, ruolo, competenze, comandante, token });
       await this.state.storage.put("session", session);

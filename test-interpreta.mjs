@@ -46,6 +46,20 @@ function nuovaSessione() {
   return { gs, storage };
 }
 
+// Fa /crea + /join con un tokenCreazione valido: il giocatore risultante è
+// DAVVERO comandante (il primo giocatore di una stanza NON lo è più
+// automaticamente, vedi GameSession.js) -- scorciatoia per i test che
+// devono compiere azioni riservate (/avvia-nodo, /risolvi-interpretazione)
+// e non stanno testando l'assegnazione del comandante in sé. Stessa logica
+// minima di joinComandante() in test-game-session.mjs, duplicata qui
+// perché i due file di test non condividono utility.
+async function joinComandante(gs, nome = "Prova", ruolo = "esploratore") {
+  const tokenCreazione = crypto.randomUUID();
+  await chiamata(gs, "/crea", "POST", { tokenCreazione });
+  const join = await chiamata(gs, "/join", "POST", { nome, ruolo, tokenCreazione });
+  return { giocatoreId: join.json.giocatori[0].id, token: join.json.token };
+}
+
 async function chiamata(gs, path_, method = "GET", body = null) {
   const init = { method };
   if (body !== null) {
@@ -84,9 +98,7 @@ registraLibreria("decalogo-ginnastica", () => Promise.resolve({ opzioni: opzioni
 
 async function sessionePronta() {
   const { gs, storage } = nuovaSessione();
-  const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "esploratore" });
-  const giocatoreId = join.json.giocatori[0].id;
-  const token = join.json.token;
+  const { giocatoreId, token } = await joinComandante(gs);
   await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino", giocatoreId, token });
   return { gs, storage, giocatoreId, token };
 }
@@ -257,9 +269,7 @@ console.log("\n--- /risolvi-interpretazione: la richiesta è cambiata nel fratte
 console.log("\n--- Autenticazione: /interpreta e /risolvi-interpretazione ---");
 {
   const { gs } = nuovaSessione();
-  const comandante = await chiamata(gs, "/join", "POST", { nome: "Comandante", ruolo: "esploratore" });
-  const idComandante = comandante.json.giocatori[0].id;
-  const tokenComandante = comandante.json.token;
+  const { giocatoreId: idComandante, token: tokenComandante } = await joinComandante(gs, "Comandante");
   const gregario = await chiamata(gs, "/join", "POST", { nome: "Gregario", ruolo: "custode" });
   const idGregario = gregario.json.giocatori[1].id;
   const tokenGregario = gregario.json.token;
