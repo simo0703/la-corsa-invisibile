@@ -732,21 +732,90 @@ oggi contiene un `index.html` minimo).
       né distingue questo caso. Serve differenziare almeno "non sei tu il
       comandante" (403) da "token non valido/sessione da rifare" (401) con
       due messaggi separati, senza toccare `GameSession.js`.
+- [x] Peso delle immagini (texture nodi + sfondo tavolo) — fatto: da ~19 MB
+      totali per schermata a ~1,3 MB (PNG → JPEG, 1600px, qualità 85), vedi
+      changelog "Ottimizzazione peso immagini"
 - [ ] Rifinire dal vivo i due esperimenti visivi (texture nodi + sfondo
       tavolo/badge, entrambi marcati "primo passaggio" nel codice):
       posizioni di `POSTI_TAVOLO` mai aggiustate dopo averle viste in
       browser; opacità/leggibilità del velo sulle texture dei pannelli
       (`.situazione-box`/`.pannello-comandante`) verificata solo via
-      `getComputedStyle`, non ancora con una vera controprova visiva (il
-      pannello di preview usato in sessione è andato in timeout, probabile
-      peso delle immagini); le 5 texture pesano 9-10 MB ciascuna — da
-      comprimere/ridimensionare prima di andare in produzione, specialmente
-      per connessioni mobili (una schermata di gioco con nodo attivo scarica
-      oggi ~19 MB di immagini in tutto).
+      `getComputedStyle`, **mai con una vera controprova visiva** — il
+      pannello di preview è andato in timeout su schermate con sfondo tavolo
+      sia con le immagini originali (8-10 MB) sia con quelle ottimizzate
+      (~250 KB): il peso non sembra essere la causa reale, da capire in una
+      sessione futura con un ambiente di preview diverso o uno screenshot
+      fatto dall'utente stesso.
 
 ---
 
 ## Changelog tecnico
+
+**12/07/2026 — Ottimizzazione peso immagini: tavolo-sfondo + 5 texture nodi, PNG → JPEG**
+File modificati: `public/index.html`, `src/game-config.js` (solo un commento);
+6 asset sostituiti in `public/img/` (stesso nome base, estensione cambiata
+da `.png` a `.jpg`).
+- Richiesto dall'autore subito dopo il commit dell'esperimento texture
+  (`52825c6`, non ancora pushato in quel momento): le 5 texture nuove (9-10
+  MB ciascuna) sommate a `tavolo-sfondo.png` (8,8 MB) portavano una singola
+  schermata di gioco con nodo attivo a ~19 MB di immagini — troppo per un
+  gioco pensato anche per pubblico mobile/sconosciuto.
+- **Tentata prima la strada "stesso formato"** (PNG con palette
+  quantizzata, via `sharp`, unico strumento di compressione immagini
+  disponibile in questo ambiente — nessun `pngquant`/`oxipng`/`cwebp`
+  installato): anche ridotta a 1200px di larghezza e 128 colori, restava
+  sopra i 500 KB (199 KB solo a quella risoluzione ridotta) **con banding
+  visibile** nelle ombre/gradazioni scure attorno al tavolo — confrontato
+  visivamente prima di scegliere, non solo sui numeri.
+- **Scelto JPEG** (autorizzato esplicitamente in anticipo dall'autore per
+  texture di sfondo pieno, nessuna trasparenza reale da preservare
+  nonostante `hasAlpha: true` nei PNG originali): qualità 85, `mozjpeg`,
+  ridimensionate da 2816×1536 a 1600px di larghezza (proporzioni invariate
+  — la `.tavolo-vista` in `public/index.html` usa `aspect-ratio`, non pixel
+  letti, quindi non ha richiesto modifiche). Nessun banding visibile a
+  questa combinazione risoluzione/qualità, verificato guardando il file
+  prima di applicarlo a tutti e 6.
+- **Risultato per file** (prima → dopo):
+
+  | File | Prima | Dopo | Riduzione |
+  |---|---|---|---|
+  | `tavolo-sfondo` | 8,43 MB | 275 KB | 96,8% |
+  | `texture-1836-torino` | 9,75 MB | 225 KB | 97,7% |
+  | `texture-1848-milano` | 9,90 MB | 272 KB | 97,3% |
+  | `texture-1915-carso-piave` | 9,65 MB | 208 KB | 97,9% |
+  | `texture-emergenza-civile` | 8,54 MB | 167 KB | 98,1% |
+  | `texture-missione-moderna` | 9,64 MB | 223 KB | 97,7% |
+
+  Totale: 55,9 MB → 1,34 MB. Tutti i file ben sotto il target di 300-500 KB
+  indicato dall'autore.
+- **Conseguenza dell'estensione cambiata**: aggiornati i 3 riferimenti in
+  `public/index.html` (2 per `tavolo-sfondo.jpg` in CSS, 1 per il template
+  `texture-${nodoId}.jpg` in `applicaTexturaNodo()`) e un commento in
+  `src/game-config.js` che citava ancora `tavolo-sfondo.png` — nessuna
+  modifica alla LOGICA, solo ai nomi file. `/img/badge-${ruolo}.png` (badge
+  dei ruoli, non toccati in questo passaggio) restano `.png` di proposito:
+  hanno bordo circolare via CSS (`border-radius: 50%`) e sono già piccoli
+  (250-380 KB), fuori scope per questa ottimizzazione.
+- **Verifica dal vivo con `wrangler dev`**: rifatta con successo la
+  connessione della variabile `--texture-nodo-attivo` e dei
+  `background-image` calcolati su `.situazione-box`/`.pannello-comandante`
+  con i nuovi nomi `.jpg` (via `getComputedStyle`, DOM reale in esecuzione).
+  **Screenshot ancora non ottenuto in questa sessione**: il pannello di
+  preview è andato in timeout anche con i file già ridotti a ~250 KB
+  (provato su due tab diverse) — l'ipotesi "il timeout era dovuto al peso
+  delle immagini" **non è stata confermata**: il problema persiste anche a
+  file 30 volte più piccoli, quindi è più probabile un limite/instabilità
+  del pannello di anteprima in questa sessione che una conseguenza diretta
+  delle immagini. Verifica quindi rimasta sul DOM/CSS calcolato, non su una
+  controprova visiva diretta — resta un punto aperto da riprovare in una
+  sessione futura (vedi "Cosa manca").
+- Rilanciata l'intera suite di test (23 file): nessuna regressione.
+- **Non toccato**: `tavolo-sfondo.jpg`/le texture non sono state
+  ulteriormente ritoccate oltre a resize+ricompressione (nessun crop,
+  nessuna modifica di contenuto); `POSTI_TAVOLO` (le percentuali dei posti
+  sul tavolo) restano quelle esistenti, non ancora rifinite dal vivo.
+
+---
 
 **12/07/2026 — Esperimenti visivi: sfondo/badge del tavolo (mai documentato prima) + texture dei nodi nei pannelli**
 File modificati: `public/index.html`; nuovi asset

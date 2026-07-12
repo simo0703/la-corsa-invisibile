@@ -15,7 +15,7 @@ export const GAME_CONFIG = {
     "Il margine è esaurito: qualcosa si è rotto nel piano, e la squadra deve reagire.",
 
   // Numero massimo di giocatori per stanza: gli 8 posti fissi al tavolo
-  // (vedi lo sfondo tavolo-sfondo.png in public/img/ e i POSTI_TAVOLO in
+  // (vedi lo sfondo tavolo-sfondo.jpg in public/img/ e i POSTI_TAVOLO in
   // public/index.html). Oltre questo limite, /join rifiuta il nuovo
   // giocatore invece di aggiungerlo senza un posto dove metterlo.
   maxGiocatori: 8,

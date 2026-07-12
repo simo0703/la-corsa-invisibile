@@ -220,7 +220,7 @@
      spostano quando il contenuto sotto cambia altezza. */
   #schermo-gioco {
     position: relative;
-    background-image: url('/img/tavolo-sfondo.png');
+    background-image: url('/img/tavolo-sfondo.jpg');
     background-size: cover;
     background-position: center;
     border-radius: 6px;
@@ -234,7 +234,7 @@
     margin-bottom: 18px;
     border-radius: 4px;
     overflow: hidden;
-    background-image: url('/img/tavolo-sfondo.png');
+    background-image: url('/img/tavolo-sfondo.jpg');
     background-size: cover;
     background-position: center;
     border: 1px solid var(--line);
@@ -431,7 +431,7 @@
 
   /* ESPERIMENTO VISIVO (primo passaggio, da valutare): texture del nodo
      attivo come sfondo, dietro allo stesso velo scuro semi-trasparente già
-     usato per tavolo-sfondo.png (rgba(var(--bg-rgb), ...) -- qui più opaco,
+     usato per tavolo-sfondo.jpg (rgba(var(--bg-rgb), ...) -- qui più opaco,
      0.82 invece di 0.75, perché questo box sta già sopra il velo di
      .contenuto-scuro e il testo dentro va protetto due volte). La variabile
      --texture-nodo-attivo è impostata da applicaTexturaNodo() su
@@ -1254,15 +1254,20 @@ function renderTavolo(giocatori) {
 // mai ricreato) in base al nodo attivo nella sessione -- .situazione-box e
 // .pannello-comandante la ereditano e la usano come sfondo (vedi i commenti
 // su quelle due regole). Nome file convenzione uguale ai badge dei ruoli
-// (`/img/texture-${nodoId}.png`, come `/img/badge-${ruolo}.png` sopra):
-// nessuna mappa nodoId -> file da mantenere a parte. Senza nodo attivo
-// (stanza appena creata, nessun /avvia-nodo ancora chiamato) la variabile
-// torna "none": i due pannelli restano nel loro aspetto solido di sempre.
+// (`/img/texture-${nodoId}.jpg`, come `/img/badge-${ruolo}.png` sopra):
+// nessuna mappa nodoId -> file da mantenere a parte. JPEG invece di PNG
+// (come i badge/tavolo-sfondo): texture di sfondo pieno, nessuna
+// trasparenza da preservare, compressione lossy molto più efficace per
+// questo tipo di immagine (vedi DECISIONI_LA_CORSA_INVISIBILE.md per il
+// confronto PNG-a-palette vs JPEG che ha guidato la scelta). Senza nodo
+// attivo (stanza appena creata, nessun /avvia-nodo ancora chiamato) la
+// variabile torna "none": i due pannelli restano nel loro aspetto solido
+// di sempre.
 function applicaTexturaNodo(nodoId) {
   const schermoGioco = document.getElementById("schermo-gioco");
   schermoGioco.style.setProperty(
     "--texture-nodo-attivo",
-    nodoId ? `url('/img/texture-${nodoId}.png')` : "none"
+    nodoId ? `url('/img/texture-${nodoId}.jpg')` : "none"
   );
 }
 
