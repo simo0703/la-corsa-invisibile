@@ -92,6 +92,23 @@ export async function creaSessioneProfilo(db, profiloId) {
   return { token, scadeIl };
 }
 
+// Verifica un token di sessione dichiarato dal client (Passo 2 del sistema
+// di token: usato da GameSession.js al /join, NON un endpoint HTTP proprio).
+// Calcola l'hash del token ricevuto e lo cerca in sessioni_profilo -- MAI
+// l'inverso (decifrare l'hash), lo stesso principio del confronto pin_hash.
+// Ritorna il profiloId se il token esiste ed è ancora valido (non scaduto),
+// altrimenti null -- token assente, inesistente o scaduto sono trattati
+// identicamente: nessuno dei tre è un'eccezione, il chiamante deve solo
+// decidere se trattare il giocatore come ospite.
+export async function verificaTokenSessione(db, token) {
+  if (!token) return null;
+  const tokenHash = await hashSha256(token);
+  const riga = await db.prepare("SELECT profilo_id, scade_il FROM sessioni_profilo WHERE token_hash = ?").bind(tokenHash).first();
+  if (!riga) return null;
+  if (Date.parse(riga.scade_il) <= Date.now()) return null;
+  return riga.profilo_id;
+}
+
 // PBKDF2-SHA256 via Web Crypto (crypto.subtle): disponibile nativamente sia
 // nel runtime dei Cloudflare Workers sia sotto Node puro (dove girano questi
 // test) -- nessuna dipendenza esterna.

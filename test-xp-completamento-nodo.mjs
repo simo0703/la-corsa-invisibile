@@ -105,20 +105,33 @@ async function chiamata(gs, path, method = "GET", body = null) {
   return { status: risposta.status, json };
 }
 
-async function joinComandante(gs, nome = "Prova", ruolo = "esploratore", profiloId = null) {
-  const tokenCreazione = crypto.randomUUID();
-  await chiamata(gs, "/crea", "POST", { tokenCreazione });
-  const body = { nome, ruolo, tokenCreazione };
-  if (profiloId !== null) body.profiloId = profiloId;
-  const join = await chiamata(gs, "/join", "POST", body);
-  return { giocatoreId: join.json.giocatori[0].id, token: join.json.token };
+// Dal Passo 2 del sistema di token di sessione, /join non accetta più un
+// profiloId dichiarato direttamente (si ricava solo verificando un
+// profiloToken -- copertura dedicata in test-join-profilo-token.mjs).
+// Questo file testa SOLO assegnaXpCompletamentoNodo (Fase 3): il profiloId
+// qui è solo una precondizione di setup, non l'oggetto del test, quindi lo
+// impostiamo direttamente sullo storage dopo un /join normale -- stesso
+// principio già usato da impostaCompetenza in altri file di test.
+async function impostaProfiloId(storage, giocatoreId, profiloId) {
+  const session = await storage.get("session");
+  session.giocatori.find((g) => g.id === giocatoreId).profiloId = profiloId;
+  await storage.put("session", session);
 }
 
-async function join(gs, nome, ruolo, profiloId = null) {
-  const body = { nome, ruolo };
-  if (profiloId !== null) body.profiloId = profiloId;
-  const risposta = await chiamata(gs, "/join", "POST", body);
-  return { giocatoreId: risposta.json.giocatori[risposta.json.giocatori.length - 1].id };
+async function joinComandante(gs, storage, nome = "Prova", ruolo = "esploratore", profiloId = null) {
+  const tokenCreazione = crypto.randomUUID();
+  await chiamata(gs, "/crea", "POST", { tokenCreazione });
+  const join = await chiamata(gs, "/join", "POST", { nome, ruolo, tokenCreazione });
+  const giocatoreId = join.json.giocatori[0].id;
+  if (profiloId !== null) await impostaProfiloId(storage, giocatoreId, profiloId);
+  return { giocatoreId, token: join.json.token };
+}
+
+async function join(gs, storage, nome, ruolo, profiloId = null) {
+  const risposta = await chiamata(gs, "/join", "POST", { nome, ruolo });
+  const giocatoreId = risposta.json.giocatori[risposta.json.giocatori.length - 1].id;
+  if (profiloId !== null) await impostaProfiloId(storage, giocatoreId, profiloId);
+  return { giocatoreId };
 }
 
 // Nodo di prova: una sola richiesta con una sola risposta a "prossima: null"
@@ -151,8 +164,8 @@ console.log("--- completamento nodo assegna XP e registra il nodo per un giocato
   const nodoId = nuovoNodoId();
   GAME_CONFIG.nodiTemporali.push(nodoDiProva(nodoId));
 
-  const { gs } = nuovaSessione({ DB: db });
-  const { giocatoreId, token } = await joinComandante(gs, "Prova", "esploratore", 42);
+  const { gs, storage } = nuovaSessione({ DB: db });
+  const { giocatoreId, token } = await joinComandante(gs, storage, "Prova", "esploratore", 42);
   await chiamata(gs, "/avvia-nodo", "POST", { nodoId, giocatoreId, token });
 
   const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
@@ -169,8 +182,8 @@ console.log("\n--- giocatore senza profiloId non riceve nulla e non causa errori
   const nodoId = nuovoNodoId();
   GAME_CONFIG.nodiTemporali.push(nodoDiProva(nodoId));
 
-  const { gs } = nuovaSessione({ DB: db });
-  const { giocatoreId, token } = await joinComandante(gs, "Prova", "esploratore"); // nessun profiloId
+  const { gs, storage } = nuovaSessione({ DB: db });
+  const { giocatoreId, token } = await joinComandante(gs, storage, "Prova", "esploratore"); // nessun profiloId
   await chiamata(gs, "/avvia-nodo", "POST", { nodoId, giocatoreId, token });
 
   const { status, json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
@@ -186,8 +199,8 @@ console.log("\n--- un giocatore che ha già il nodo in nodi_completati non ricev
   db.seminaRiga(7, { nodiCompletati: [nodoId], xpTotale: XP_PER_NODO }); // già completato in passato, magari in un'altra stanza
   GAME_CONFIG.nodiTemporali.push(nodoDiProva(nodoId));
 
-  const { gs } = nuovaSessione({ DB: db });
-  const { giocatoreId, token } = await joinComandante(gs, "Prova", "esploratore", 7);
+  const { gs, storage } = nuovaSessione({ DB: db });
+  const { giocatoreId, token } = await joinComandante(gs, storage, "Prova", "esploratore", 7);
   await chiamata(gs, "/avvia-nodo", "POST", { nodoId, giocatoreId, token });
   await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
 
@@ -202,8 +215,8 @@ console.log("\n--- un fallimento D1 non blocca il completamento del nodo per la 
   const nodoId = nuovoNodoId();
   GAME_CONFIG.nodiTemporali.push(nodoDiProva(nodoId));
 
-  const { gs } = nuovaSessione({ DB: dbGuasto });
-  const { giocatoreId, token } = await joinComandante(gs, "Prova", "esploratore", 99);
+  const { gs, storage } = nuovaSessione({ DB: dbGuasto });
+  const { giocatoreId, token } = await joinComandante(gs, storage, "Prova", "esploratore", 99);
   await chiamata(gs, "/avvia-nodo", "POST", { nodoId, giocatoreId, token });
 
   const { status, json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
@@ -217,8 +230,8 @@ console.log("\n--- binding D1 assente (env.DB non configurato): non causa errori
   const nodoId = nuovoNodoId();
   GAME_CONFIG.nodiTemporali.push(nodoDiProva(nodoId));
 
-  const { gs } = nuovaSessione(); // env = {}, nessun DB
-  const { giocatoreId, token } = await joinComandante(gs, "Prova", "esploratore", 123);
+  const { gs, storage } = nuovaSessione(); // env = {}, nessun DB
+  const { giocatoreId, token } = await joinComandante(gs, storage, "Prova", "esploratore", 123);
   await chiamata(gs, "/avvia-nodo", "POST", { nodoId, giocatoreId, token });
 
   const { status, json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
@@ -234,10 +247,10 @@ console.log("\n--- più giocatori nella stessa stanza: ognuno viene processato i
   db.seminaRiga(2, { nodiCompletati: [nodoId], xpTotale: XP_PER_NODO }); // già fatto, non deve ricevere di nuovo
   GAME_CONFIG.nodiTemporali.push(nodoDiProva(nodoId));
 
-  const { gs } = nuovaSessione({ DB: db });
-  const comandante = await joinComandante(gs, "Prima", "esploratore", 1);
-  await join(gs, "Seconda", "custode", 2); // secondo giocatore, già completato
-  await join(gs, "Terza", "incursore"); // terzo giocatore, senza profiloId
+  const { gs, storage } = nuovaSessione({ DB: db });
+  const comandante = await joinComandante(gs, storage, "Prima", "esploratore", 1);
+  await join(gs, storage, "Seconda", "custode", 2); // secondo giocatore, già completato
+  await join(gs, storage, "Terza", "incursore"); // terzo giocatore, senza profiloId
 
   await chiamata(gs, "/avvia-nodo", "POST", { nodoId, giocatoreId: comandante.giocatoreId, token: comandante.token });
   await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId: comandante.giocatoreId, token: comandante.token });

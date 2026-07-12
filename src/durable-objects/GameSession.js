@@ -4,7 +4,7 @@ import { componiNarrazione } from "../lib/narratore-simulato.js";
 import { trovaPoolPerNodo } from "../lib/narratore-registro-pool.js";
 import { interpreta } from "simulatore-interprete/src/interprete.js";
 import { trovaLibreriaPerRichiesta } from "../lib/interprete-registro-librerie.js";
-import { assegnaXpCompletamentoNodo, otteniCompetenzeBonificate } from "../lib/profili-giocatore.js";
+import { assegnaXpCompletamentoNodo, otteniCompetenzeBonificate, verificaTokenSessione } from "../lib/profili-giocatore.js";
 
 // Un Durable Object per stanza/sessione: isolamento totale tra sessioni diverse.
 // Le risorse sono a livello di SQUADRA (party-level), non per singolo personaggio:
@@ -91,10 +91,11 @@ export class GameSession {
         // (tabella giocatori_persistenti su D1, vedi
         // src/lib/profili-giocatore.js) creato con login/registrazione
         // PRIMA di arrivare a /join -- login rimane facoltativo, un
-        // giocatore puo' ancora entrare senza. Nessuna verifica che il
-        // profiloId dichiarato corrisponda davvero a un login riuscito in
-        // questa fase (rimandata a una fase successiva se necessaria):
-        // qui e' solo un dato che il client dichiara di avere.
+        // giocatore puo' ancora entrare senza. Dal Passo 2 del sistema di
+        // token di sessione: MAI dichiarato direttamente dal client, si
+        // ricava SOLO verificando un profiloToken contro sessioni_profilo
+        // (vedi verificaProfiloDaToken) -- un token assente/scaduto/non
+        // valido non blocca il join, il giocatore entra come ospite.
         // token e' un segreto lato server: mai incluso nelle risposte che
         // espongono l'elenco giocatori (vedi sessionPubblica()), restituito
         // al proprietario una sola volta, nella risposta di /join.
@@ -295,7 +296,7 @@ export class GameSession {
     // sola giocatoreId (pubblico, visibile a chiunque nella stanza via
     // /state) non basta piu'.
     if (url.pathname.endsWith("/join") && request.method === "POST") {
-      const { nome, ruolo, tokenCreazione, profiloId } = await request.json();
+      const { nome, ruolo, tokenCreazione, profiloToken } = await request.json();
       const session = await this.initState();
       // Limite fisso ai posti disponibili (vedi GAME_CONFIG.maxGiocatori):
       // controllato PRIMA di validare il ruolo, cosi' una stanza piena
@@ -321,6 +322,11 @@ export class GameSession {
         session.tokenCreazione = null; // consumato: un solo uso, vedi commento sopra
       }
       const token = crypto.randomUUID();
+      // profiloId MAI dichiarato direttamente dal client (Passo 2 del
+      // sistema di token, vedi verificaProfiloDaToken sotto): si ricava
+      // SOLO da un profiloToken valido, verificato contro sessioni_profilo.
+      // Nessun token o token non valido -> ospite, senza bloccare il join.
+      const profiloId = await this.verificaProfiloDaToken(profiloToken);
       session.giocatori.push({
         id: crypto.randomUUID(),
         nome,
@@ -328,7 +334,7 @@ export class GameSession {
         competenze,
         comandante,
         token,
-        profiloId: profiloId ?? null, // opzionale: assente/undefined dal client -> null
+        profiloId,
       });
       await this.state.storage.put("session", session);
       return Response.json({ ...this.sessionPubblica(session), token });
@@ -778,6 +784,24 @@ export class GameSession {
       return nodo.richieste.find((r) => r.id === session.richiestaAttivaId) ?? null;
     }
     return nodo.richieste[session.richiestaIndice] ?? null; // fallback legacy
+  }
+
+  // Verifica un profiloToken dichiarato al /join (Passo 2 del sistema di
+  // token di sessione): ricava il profiloId SOLO da un token valido
+  // (esistente in sessioni_profilo, non scaduto) -- MAI da un profiloId
+  // dichiarato a parte dal client, che non viene più letto/accettato.
+  // Nessun token, o nessun binding D1 in questo ambiente: null senza
+  // nemmeno provare la query. Un fallimento D1 e' isolato qui (stesso
+  // principio di calcolaBonusGrado sotto): il join non si blocca mai,
+  // il giocatore entra semplicemente come ospite (profiloId null).
+  async verificaProfiloDaToken(profiloToken) {
+    if (!profiloToken || !this.env.DB) return null;
+    try {
+      return await verificaTokenSessione(this.env.DB, profiloToken);
+    } catch (errore) {
+      console.error("Verifica profiloToken fallita:", errore);
+      return null;
+    }
   }
 
   // Bonus di grado sul tiro (Fase 4, profilo persistente): +1 al punteggio

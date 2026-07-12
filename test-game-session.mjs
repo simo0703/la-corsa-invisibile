@@ -143,34 +143,49 @@ console.log("\n--- /join ---");
   verifica("un ruolo sconosciuto risponde 400", ruoloIgnoto.status === 400);
 }
 
-console.log("\n--- /join: profiloId opzionale (Fase 2 del profilo persistente, nessun collegamento a login/autenticaGiocatore) ---");
+console.log("\n--- /join: profiloId MAI dichiarato direttamente dal client (Passo 2 del sistema di token: superato il comportamento della Fase 2) ---");
 {
   const { gs } = nuovaSessione();
 
-  const conProfilo = await chiamata(gs, "/join", "POST", {
-    nome: "ConProfilo",
+  // Un profiloId dichiarato senza un profiloToken valido viene IGNORATO --
+  // dal Passo 2 del sistema di token di sessione, il profiloId si ricava
+  // SOLO verificando un profiloToken (vedi test-join-profilo-token.mjs per
+  // la copertura completa di token valido/scaduto/inesistente, che richiede
+  // un fake D1 dedicato non presente in questo file).
+  const conProfiloDichiarato = await chiamata(gs, "/join", "POST", {
+    nome: "ConProfiloDichiarato",
     ruolo: "esploratore",
     profiloId: "profilo-abc-123",
   });
   verifica(
-    "con profiloId nel body, il record del giocatore lo mantiene",
-    conProfilo.json.giocatori[0].profiloId === "profilo-abc-123"
+    "un profiloId dichiarato SENZA profiloToken viene ignorato: il giocatore resta ospite",
+    conProfiloDichiarato.json.giocatori[0].profiloId === null
+  );
+
+  // Anche con un profiloToken, in questo file gs non ha un binding D1
+  // (nuovaSessione() passa env={}): verificaProfiloDaToken corto-circuita a
+  // null senza nemmeno provare la query, coerente con "nessun binding D1 ->
+  // nessun errore, ospite" già visto per calcolaBonusGrado/assegnaXpNodoCompletato.
+  const conTokenSenzaDB = await chiamata(gs, "/join", "POST", {
+    nome: "ConTokenSenzaDB",
+    ruolo: "custode",
+    profiloToken: "un-token-qualsiasi",
+  });
+  verifica(
+    "profiloToken fornito ma nessun binding D1 in questo ambiente: ospite, nessun errore",
+    conTokenSenzaDB.status === 200 && conTokenSenzaDB.json.giocatori[1].profiloId === null
   );
 
   const senzaProfilo = await chiamata(gs, "/join", "POST", { nome: "SenzaProfilo", ruolo: "custode" });
   verifica(
-    "senza profiloId nel body, il giocatore entra comunque (nessuna regressione)",
-    senzaProfilo.status === 200 && senzaProfilo.json.giocatori[1].comandante === false
+    "senza profiloId/profiloToken nel body, il giocatore entra comunque (nessuna regressione)",
+    senzaProfilo.status === 200 && senzaProfilo.json.giocatori[2].comandante === false
   );
   verifica(
-    "senza profiloId nel body, il campo è null (non assente, non undefined)",
-    senzaProfilo.json.giocatori[1].profiloId === null
+    "senza profiloToken nel body, il campo è null (non assente, non undefined)",
+    senzaProfilo.json.giocatori[2].profiloId === null
   );
 
-  verifica(
-    "GET /state espone profiloId quando presente",
-    (await chiamata(gs, "/state")).json.giocatori[0].profiloId === "profilo-abc-123"
-  );
   verifica(
     "GET /state non espone MAI il token del giocatore (invariato da prima di questa fase)",
     (await chiamata(gs, "/state")).json.giocatori.every((g) => g.token === undefined)

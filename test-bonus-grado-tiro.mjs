@@ -121,13 +121,23 @@ async function impostaCompetenza(storage, giocatoreId, competenzaId, valore) {
   await storage.put("session", session);
 }
 
-async function joinComandante(gs, { profiloId = null } = {}) {
+// Dal Passo 2 del sistema di token di sessione, /join non accetta più un
+// profiloId dichiarato direttamente (si ricava solo verificando un
+// profiloToken -- copertura dedicata in test-join-profilo-token.mjs).
+// Questo file testa SOLO calcolaBonusGrado: il profiloId qui è solo una
+// precondizione di setup, quindi lo impostiamo direttamente sullo storage
+// dopo un /join normale, bypassando la verifica del token.
+async function joinComandante(gs, storage, { profiloId = null } = {}) {
   const tokenCreazione = crypto.randomUUID();
   await chiamata(gs, "/crea", "POST", { tokenCreazione });
-  const body = { nome: "Prova", ruolo: "custode", tokenCreazione };
-  if (profiloId !== null) body.profiloId = profiloId;
-  const join = await chiamata(gs, "/join", "POST", body);
-  return { giocatoreId: join.json.giocatori[0].id, token: join.json.token };
+  const join = await chiamata(gs, "/join", "POST", { nome: "Prova", ruolo: "custode", tokenCreazione });
+  const giocatoreId = join.json.giocatori[0].id;
+  if (profiloId !== null) {
+    const session = await storage.get("session");
+    session.giocatori.find((g) => g.id === giocatoreId).profiloId = profiloId;
+    await storage.put("session", session);
+  }
+  return { giocatoreId, token: join.json.token };
 }
 
 // Nodo di prova: una sola risposta con tiro su "cadenza", senza
@@ -159,7 +169,7 @@ console.log("--- competenza bonificata: applica +1 al punteggio usato per il tir
   const nodoId = nuovoNodoDiProva();
 
   const { gs, storage } = nuovaSessione({ DB: db });
-  const { giocatoreId, token } = await joinComandante(gs, { profiloId: 1 });
+  const { giocatoreId, token } = await joinComandante(gs, storage, { profiloId: 1 });
   await impostaCompetenza(storage, giocatoreId, "cadenza", 3);
   await chiamata(gs, "/avvia-nodo", "POST", { nodoId, giocatoreId, token });
 
@@ -174,7 +184,7 @@ console.log("\n--- competenza NON bonificata: nessuna alterazione del tiro ---")
   const nodoId = nuovoNodoDiProva();
 
   const { gs, storage } = nuovaSessione({ DB: db });
-  const { giocatoreId, token } = await joinComandante(gs, { profiloId: 2 });
+  const { giocatoreId, token } = await joinComandante(gs, storage, { profiloId: 2 });
   await impostaCompetenza(storage, giocatoreId, "cadenza", 3);
   await chiamata(gs, "/avvia-nodo", "POST", { nodoId, giocatoreId, token });
 
@@ -191,7 +201,7 @@ console.log("\n--- giocatore senza profiloId: comportamento invariato, D1 non vi
   const nodoId = nuovoNodoDiProva();
 
   const { gs, storage } = nuovaSessione({ DB: db });
-  const { giocatoreId, token } = await joinComandante(gs); // nessun profiloId
+  const { giocatoreId, token } = await joinComandante(gs, storage); // nessun profiloId
   await impostaCompetenza(storage, giocatoreId, "cadenza", 3);
   await chiamata(gs, "/avvia-nodo", "POST", { nodoId, giocatoreId, token });
 
@@ -206,7 +216,7 @@ console.log("\n--- fallimento D1 durante la lettura del bonus: isolato, nessun b
   const nodoId = nuovoNodoDiProva();
 
   const { gs, storage } = nuovaSessione({ DB: dbGuasto });
-  const { giocatoreId, token } = await joinComandante(gs, { profiloId: 3 });
+  const { giocatoreId, token } = await joinComandante(gs, storage, { profiloId: 3 });
   await impostaCompetenza(storage, giocatoreId, "cadenza", 3);
   await chiamata(gs, "/avvia-nodo", "POST", { nodoId, giocatoreId, token });
 
@@ -220,7 +230,7 @@ console.log("\n--- binding D1 assente (env.DB non configurato): nessun bonus, ne
   const nodoId = nuovoNodoDiProva();
 
   const { gs, storage } = nuovaSessione(); // env = {}, nessun DB
-  const { giocatoreId, token } = await joinComandante(gs, { profiloId: 4 });
+  const { giocatoreId, token } = await joinComandante(gs, storage, { profiloId: 4 });
   await impostaCompetenza(storage, giocatoreId, "cadenza", 3);
   await chiamata(gs, "/avvia-nodo", "POST", { nodoId, giocatoreId, token });
 
