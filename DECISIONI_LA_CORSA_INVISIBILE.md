@@ -1,7 +1,7 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 12 luglio 2026 (fine sessione, dopo il Passo 22 — profilo
-giocatore persistente, Fase 2 di 4: /join accetta un profiloId opzionale;
+Aggiornato al: 12 luglio 2026 (fine sessione, dopo il Passo 23 — profilo
+giocatore persistente, Fase 3 di 4: XP al completamento di un nodo;
 lavoro sospeso qui su richiesta)
 
 Questo file serve a non perdersi tra una sessione di lavoro e l'altra: raccoglie cosa
@@ -15,7 +15,16 @@ ruolo) che non risultano loggate qui sotto come Passi numerati — la sessione c
 ha scritte non ha aggiornato questo file. Non ricostruito retroattivamente in questa
 sessione (fuori scope); se serve, va fatto a parte guardando `git log`.
 
-**Punto di ripresa**: con il Passo 22, `POST /join` accetta un `profiloId`
+**Punto di ripresa**: con il Passo 23, il completamento strutturale di un
+nodo (blocco `if (!prossimaRichiesta)` in `applicaRisposta()`) assegna 100
+XP a ogni giocatore della stanza con `profiloId` valorizzato, una sola
+volta per sempre per coppia profiloId+nodo (`nodi_completati` su D1). XP
+mai a discrezione del comandante, sempre automatico. Un fallimento D1 non
+blocca mai il completamento del nodo per la stanza (try/catch per
+giocatore, log e continua). **Migrazione `migrations/0001_nodi_completati.sql`
+NON ancora applicata né a locale né a remoto** — `schema.sql` da solo non
+basta perché la tabella `giocatori_persistenti` esiste già in produzione
+dalla Fase 1. Con il Passo 22, `POST /join` accetta un `profiloId`
 opzionale e lo salva sul record del giocatore in `session.giocatori` —
 login/registrazione (Fase 1) restano comunque due chiamate separate PRIMA di
 `/join` (schermata a parte), nessuna verifica qui che il `profiloId`
@@ -25,11 +34,12 @@ la logica dei token in-game (Passo 19/20) **non toccate**: il profilo
 persistente si aggancia accanto, non le sostituisce. Login resta facoltativo:
 un giocatore entra come sempre se non lo passa. Schema D1 (Fase 1) applicato
 sia in locale sia in produzione (verificato con query diretta su entrambi).
-Fase 2 di 4: le fasi successive (eventuale verifica di possesso, UI in
-`public/`, uso reale di XP/bonus nel gameplay) non sono ancora state
-discusse né pianificate in dettaglio. Vedi Passo 22 nel changelog per i
-dettagli, Passo 21 per le tre scelte di design della Fase 1 (dove va il D1,
-hashing del PIN, struttura di `bonusScelti`).
+Fase 3 di 4: la fase successiva (UI in `public/` per login/XP/bonus) non è
+ancora stata discussa né pianificata in dettaglio. Vedi Passo 23 nel
+changelog per i due punti di design chiariti con l'autore (migrazione su
+tabella già popolata, gestione errori D1), Passo 21 per le tre scelte di
+design della Fase 1 (dove va il D1, hashing del PIN, struttura di
+`bonusScelti`).
 Con il Passo 20, l'Esploratore ha un primo bilanciamento di classe: dado di
 risoluzione 1d6 (invece del default 1d4) quando tira con la propria
 competenza principale (Cadenza), e un meccanismo generico di bonus
@@ -613,6 +623,86 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**12/07/2026 — Passo 23: profilo giocatore persistente, Fase 3 di 4 (XP al completamento di un nodo)**
+Nuovi file: `migrations/0001_nodi_completati.sql`, `test-xp-completamento-nodo.mjs`.
+File modificati: `schema.sql`, `src/lib/profili-giocatore.js`,
+`src/durable-objects/GameSession.js`, `DECISIONI_LA_CORSA_INVISIBILE.md`.
+- Decisioni già prese dall'autore, implementate così com'erano (non
+  rimesse in discussione): XP assegnato SOLO al completamento strutturale
+  di un nodo (mai a discrezione del comandante); tutti i giocatori con
+  `profiloId` nella stanza ricevono XP, indipendentemente da ruolo o
+  quante scelte hanno fatto; 100 XP per nodo, una sola volta per sempre
+  per coppia profiloId+nodo (anche rigiocando lo stesso nodo in un'altra
+  stanza in futuro).
+- **Punto esatto del completamento nodo, cercato non inventato**:
+  `applicaRisposta()` in `GameSession.js`, blocco `if (!prossimaRichiesta)`
+  — già usato per `valutaEsitoNodo()` e per chiudere il `diario`. Stesso
+  identico blocco per `/scegli` e `/risolvi-interpretazione` (condividono
+  `applicaRisposta`): aggiungendo l'XP lì, entrambi i percorsi sono coperti
+  senza duplicare nulla.
+- **Verificato, non modificato**: `env.DB` è già accessibile da
+  `GameSession.js` senza toccare `wrangler.toml` — i Durable Object dello
+  stesso script Worker (`GameSession` è esportato da `src/index.js`)
+  ricevono lo stesso oggetto `env` di tutto il resto del Worker, binding D1
+  incluso. Prima volta che un Durable Object di questo progetto scrive su
+  D1 (finora gestiva solo lo stato isolato della propria stanza).
+- Due punti di design non ovvi, proposti e confermati con l'autore prima
+  di implementare (**non decisi unilateralmente**):
+  1. **Migrazione dello schema su una tabella già popolata in
+     produzione**: `schema.sql` da solo non basta (`CREATE TABLE IF NOT
+     EXISTS` non tocca una tabella che esiste già) — aggiunta la colonna
+     al `CREATE TABLE` in `schema.sql` (per chi parte da un DB nuovo) E un
+     nuovo file separato `migrations/0001_nodi_completati.sql` con il solo
+     `ALTER TABLE ... ADD COLUMN`, da eseguire una tantum su locale e poi
+     (a parte, con conferma esplicita) su remoto. **Prima migrazione
+     incrementale del progetto**: introdotta la cartella `migrations/`,
+     che finora non esisteva.
+  2. **Fallimento D1 durante l'assegnazione XP**: try/catch INDIVIDUALE
+     per ogni giocatore (non uno unico attorno a tutto il ciclo) — se D1
+     fallisce per un giocatore, l'errore finisce in `console.error` (log
+     di Cloudflare) ma gli altri giocatori della stanza vengono comunque
+     processati, e il completamento del nodo (esito, chiusura diario,
+     risposta HTTP) non dipende MAI dalla riuscita dell'assegnazione XP.
+     Se il binding `env.DB` manca del tutto (es. nei test che non lo
+     configurano), un solo log generico invece di uno per giocatore.
+- `src/lib/profili-giocatore.js`: nuova `assegnaXpCompletamentoNodo(db,
+  profiloId, nodoId)` — UNA query di lettura (`nodi_completati` per
+  quell'id) per decidere se assegnare, UNA query di scrittura (`UPDATE`
+  che aggiorna `nodi_completati` E `xp_totale` insieme) se non già
+  presente. Nuova costante esportata `XP_PER_NODO = 100`. Ritorna esiti
+  normali (`{ assegnato: true|false, motivo }`), mai un'eccezione per
+  "profilo non trovato" o "già completato" — sono casi attesi, non errori.
+- `src/durable-objects/GameSession.js`: nuovo metodo
+  `assegnaXpNodoCompletato(session)`, chiamato una volta sola dentro il
+  blocco di chiusura nodo. Filtra `session.giocatori` per `profiloId !=
+  null`, poi un `try/catch` per giocatore attorno alla chiamata al modulo
+  di dominio.
+- `schema.sql`: colonna `nodi_completati TEXT NOT NULL DEFAULT '[]'` su
+  `giocatori_persistenti`, stesso pattern JSON di `bonus_scelti`.
+  **Migrazione non ancora applicata né a locale né a remoto in questa
+  sessione** — da fare a parte, con conferma esplicita per il remoto come
+  di consueto.
+- `test-xp-completamento-nodo.mjs` (16 verifiche, tutte passate): nodo di
+  prova sintetico a una sola richiesta/risposta (si chiude al primo
+  `/scegli`), fake D1 dedicato con righe pre-seminabili e una modalità
+  "guasto" che fa lanciare ogni query. Copre le 4 richieste esplicite
+  (XP assegnato + nodo registrato, giocatore senza profiloId non tocca
+  nulla, nodo già completato non assegna due volte, fallimento D1 non
+  blocca il completamento) più un caso di binding D1 del tutto assente, e
+  un caso con 3 giocatori nella stessa stanza (uno nuovo, uno già
+  completato, uno anonimo) per verificare che vengano processati in modo
+  indipendente.
+- Rilanciata l'intera suite (20 file) prima e dopo la modifica: nessuna
+  regressione. I due `console.error` attesi (fallimento D1 simulato,
+  binding assente) compaiono SOLO nei test dedicati a quegli scenari, mai
+  nei test pre-esistenti (nessuno di essi usa `profiloId`, quindi il nuovo
+  codice non si attiva per loro).
+- Non toccato, come richiesto: `/join` e il collegamento `profiloId`
+  (Fase 2), `autenticaGiocatore()`/`autenticaComandante()`.
+- **Resta da fare (fase successiva, non ancora discussa)**: applicare la
+  migrazione a locale e remoto; UI in `public/` che mostri XP/nodi
+  completati al giocatore; uso reale di `bonusScelti` nel gameplay.
 
 **12/07/2026 — Passo 22: profilo giocatore persistente, Fase 2 di 4 (collegato opzionalmente a /join)**
 File modificati: `src/durable-objects/GameSession.js`, `test-game-session.mjs`,

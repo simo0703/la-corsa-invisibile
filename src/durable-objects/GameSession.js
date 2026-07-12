@@ -4,6 +4,7 @@ import { componiNarrazione } from "../lib/narratore-simulato.js";
 import { trovaPoolPerNodo } from "../lib/narratore-registro-pool.js";
 import { interpreta } from "simulatore-interprete/src/interprete.js";
 import { trovaLibreriaPerRichiesta } from "../lib/interprete-registro-librerie.js";
+import { assegnaXpCompletamentoNodo } from "../lib/profili-giocatore.js";
 
 // Un Durable Object per stanza/sessione: isolamento totale tra sessioni diverse.
 // Le risorse sono a livello di SQUADRA (party-level), non per singolo personaggio:
@@ -750,6 +751,7 @@ export class GameSession {
         diario.concluso_il = new Date().toISOString();
         diario.esitoFinale = esitoNodo;
       }
+      await this.assegnaXpNodoCompletato(session);
     }
 
     // competenzaId: quale competenza ha deciso il tiro (null se nessun
@@ -775,6 +777,40 @@ export class GameSession {
       return nodo.richieste.find((r) => r.id === session.richiestaAttivaId) ?? null;
     }
     return nodo.richieste[session.richiestaIndice] ?? null; // fallback legacy
+  }
+
+  // XP al profilo persistente (Fase 3): chiamata SOLO da applicaRisposta()
+  // quando un nodo si e' appena chiuso strutturalmente -- evento sempre
+  // automatico, mai a discrezione del comandante. Un giocatore alla volta,
+  // ciascuno nel proprio try/catch: un fallimento D1 per un giocatore
+  // (rete, tabella non ancora migrata, qualunque errore) NON deve
+  // impedire agli altri di ricevere il proprio XP, e non deve MAI far
+  // fallire il completamento del nodo per la stanza -- l'errore finisce
+  // solo nei log (console.error, raccolto da Cloudflare), il gameplay
+  // prosegue comunque. Giocatori senza profiloId (anonimi) ignorati.
+  async assegnaXpNodoCompletato(session) {
+    const giocatoriConProfilo = session.giocatori.filter((g) => g.profiloId != null);
+    if (giocatoriConProfilo.length === 0) return;
+
+    if (!this.env.DB) {
+      // Binding D1 assente in questo ambiente (es. test che non lo
+      // configurano): un solo log generico invece di uno per giocatore.
+      console.error(
+        `XP non assegnato per il nodo "${session.nodoAttivo}": binding D1 (env.DB) non disponibile in questo ambiente.`
+      );
+      return;
+    }
+
+    for (const giocatore of giocatoriConProfilo) {
+      try {
+        await assegnaXpCompletamentoNodo(this.env.DB, giocatore.profiloId, session.nodoAttivo);
+      } catch (errore) {
+        console.error(
+          `Assegnazione XP fallita per profiloId=${giocatore.profiloId}, nodo="${session.nodoAttivo}":`,
+          errore
+        );
+      }
+    }
   }
 
   // Valutazione generica delle soglie di un nodo, a prescindere dal nodo:

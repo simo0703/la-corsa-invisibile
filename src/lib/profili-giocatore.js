@@ -1,9 +1,12 @@
 // Profilo giocatore persistente, condiviso tra tutte le stanze (tabella
 // giocatori_persistenti in schema.sql -- vedi lì per il perché dello stesso
-// D1 già esistente invece di uno nuovo, e per bonus_scelti come colonna
-// JSON). Fase 1: solo schema + registrazione/accesso, NESSUN collegamento
-// al gameplay esistente -- questo modulo non importa né viene importato da
-// GameSession.js in questa fase.
+// D1 già esistente invece di uno nuovo, e per bonus_scelti/nodi_completati
+// come colonne JSON). Fase 1: solo schema + registrazione/accesso. Fase 2
+// (GameSession.js): profiloId opzionale salvato su /join, nessuna verifica
+// di possesso. Fase 3 (questo modulo, sotto): assegnaXpCompletamentoNodo,
+// chiamata da GameSession.js al completamento strutturale di un nodo --
+// prima volta che GameSession.js scrive su D1, non solo sullo storage
+// isolato della propria stanza.
 //
 // Query sempre parametrizzate: mai concatenare l'input dell'utente nella
 // query (rischio injection), stesso principio di access-codes.js.
@@ -133,4 +136,41 @@ export async function accediGiocatore(db, nome, pin) {
   if (pinHashCalcolato !== riga.pin_hash) return { successo: false, errore: "credenziali_non_valide" };
 
   return { successo: true, profilo: rigaAProfilo(riga) };
+}
+
+// XP fisso per nodo completato (Fase 3): stesso valore per qualunque nodo,
+// nessuna variazione per ruolo/difficoltà -- decisione già presa a monte,
+// non riaperta qui.
+export const XP_PER_NODO = 100;
+
+// Assegna XP per il completamento STRUTTURALE di un nodo (tutte le
+// richieste previste risolte -- l'evento e' sempre automatico, mai a
+// discrezione del comandante: chi chiama decide QUANDO, questa funzione non
+// lo rivaluta). Una sola volta per sempre per coppia profiloId+nodoId,
+// anche rigiocando lo stesso nodo in una stanza diversa in futuro --
+// verificato leggendo nodi_completati prima di scrivere.
+//
+// UNA query di lettura (per decidere se assegnare) + UNA query di
+// scrittura (che aggiorna nodi_completati E xp_totale insieme) per
+// giocatore: chi chiama e' responsabile di isolare gli errori per singolo
+// giocatore (vedi commento in GameSession.js) cosi' un fallimento D1 per un
+// giocatore non impedisce agli altri di ricevere il proprio XP.
+//
+// Ritorna { assegnato: true } se l'XP e' stato dato ora, { assegnato:
+// false, motivo } altrimenti ("profilo_non_trovato" | "gia_completato") --
+// nessuno dei due e' un errore: sono esiti normali attesi dal chiamante.
+export async function assegnaXpCompletamentoNodo(db, profiloId, nodoId) {
+  const riga = await db.prepare("SELECT nodi_completati FROM giocatori_persistenti WHERE id = ?").bind(profiloId).first();
+  if (!riga) return { assegnato: false, motivo: "profilo_non_trovato" };
+
+  const completati = JSON.parse(riga.nodi_completati);
+  if (completati.includes(nodoId)) return { assegnato: false, motivo: "gia_completato" };
+
+  completati.push(nodoId);
+  await db
+    .prepare("UPDATE giocatori_persistenti SET nodi_completati = ?, xp_totale = xp_totale + ? WHERE id = ?")
+    .bind(JSON.stringify(completati), XP_PER_NODO, profiloId)
+    .run();
+
+  return { assegnato: true };
 }

@@ -39,6 +39,15 @@ CREATE TABLE IF NOT EXISTS giocatori_persistenti (
   -- ancora progettato (dipende da un game design che arriva in una fase
   -- successiva) -- decisione presa insieme all'autore, non unilaterale.
   bonus_scelti TEXT NOT NULL DEFAULT '[]',
+  -- Elenco id di nodo temporale già completati (JSON, stesso pattern di
+  -- bonus_scelti sopra, es. '["1836-torino"]') -- serve a garantire che
+  -- l'XP per un nodo sia assegnato una sola volta per sempre a ciascun
+  -- profilo, anche rigiocando lo stesso nodo in una stanza diversa in
+  -- futuro. Fase 3 (vedi DECISIONI_LA_CORSA_INVISIBILE.md). Colonna
+  -- aggiunta con ALTER TABLE su una tabella già popolata in produzione --
+  -- vedi migrations/0001_nodi_completati.sql, non basta questo file da
+  -- solo (CREATE TABLE IF NOT EXISTS non tocca una tabella già esistente).
+  nodi_completati TEXT NOT NULL DEFAULT '[]',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

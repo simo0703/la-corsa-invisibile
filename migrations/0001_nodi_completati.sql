@@ -1,0 +1,13 @@
+-- Migrazione una tantum: aggiunge nodi_completati a giocatori_persistenti,
+-- già popolata in produzione dalla Fase 1 del profilo giocatore persistente.
+-- schema.sql da solo NON basta qui: CREATE TABLE IF NOT EXISTS non tocca
+-- una tabella che esiste già, quindi la colonna nuova va aggiunta a parte.
+--
+-- Da eseguire una sola volta, con:
+--   npx wrangler d1 execute la-corsa-invisibile-db --file=./migrations/0001_nodi_completati.sql
+--   npx wrangler d1 execute la-corsa-invisibile-db --remote --file=./migrations/0001_nodi_completati.sql
+--
+-- Dopo questa migrazione, schema.sql (CREATE TABLE) include già la colonna
+-- per chiunque parta da un database nuovo/vuoto -- questo file serve SOLO
+-- a portare al passo un database che esisteva già prima di questa fase.
+ALTER TABLE giocatori_persistenti ADD COLUMN nodi_completati TEXT NOT NULL DEFAULT '[]';
