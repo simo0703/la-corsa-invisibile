@@ -544,6 +544,29 @@
     margin: 14px 0 20px;
   }
 
+  /* Invito post-sessione a creare un profilo (Passo 4, solo per ospiti
+     senza profiloId collegato): discreto, non un blocco modale -- una riga
+     dentro la stessa scheda di fine nodo, non un pop-up a parte. */
+  .invito-profilo {
+    margin-top: 18px;
+    padding: 12px 16px;
+    background: var(--bg-panel);
+    border-left: 3px solid var(--brass);
+    border-radius: 0 4px 4px 0;
+    text-align: left;
+  }
+  .invito-profilo p {
+    margin: 0;
+    font-size: 0.88rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+  .invito-profilo a {
+    color: var(--brass);
+    text-decoration: underline;
+  }
+  .invito-profilo a:hover { color: var(--crimson-bright); }
+
   button.secondario {
     font-family: var(--font-display);
     font-weight: 600;
@@ -1242,11 +1265,21 @@ function mostraEsito(testoEsito, prossimaRichiesta, esitoNodo, nodoAttivo, tiro,
   `;
   const prosegui = document.getElementById("prosegui");
   if (esitoNodo) {
+    // Invito post-sessione (Passo 4): solo per chi NON ha un profilo
+    // collegato (PROFILO_COLLEGATO, vedi Passo 3) -- chi ha già fatto
+    // login non deve vederlo. Nome scelto in partita passato come
+    // suggerimento in query string (mai dati sensibili: solo il nome).
+    const invitoProfilo = PROFILO_COLLEGATO ? "" : `
+      <div class="invito-profilo">
+        <p>Vuoi conservare questo grado? <a href="/arruolati.html?nome=${encodeURIComponent(STATO.nome || "")}">Arruolati</a> per portarlo alla prossima sessione.</p>
+      </div>
+    `;
     prosegui.innerHTML = `
       <div class="esito-finale-box">
         <div class="etichetta">Fine del nodo</div>
         <p class="testo-esito">${esitoNodo}</p>
         <button class="secondario" id="btn-altro-nodo">Scegli un altro Nodo Temporale</button>
+        ${invitoProfilo}
       </div>
     `;
     document.getElementById("btn-altro-nodo").addEventListener("click", renderSelezioneNodo);

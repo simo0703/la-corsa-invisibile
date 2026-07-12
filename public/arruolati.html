@@ -388,6 +388,20 @@ document.getElementById("btn-registrati").addEventListener("click", async () => 
     btn.textContent = "Registrati";
   }
 });
+
+// Passo 4: se si arriva dall'invito post-sessione (index.html, fine nodo,
+// link con ?nome=...), precompila il nome scelto in partita come
+// suggerimento nel form di registrazione -- solo il nome, mai dati
+// sensibili, quindi va bene in query string. Chi arriva così è quasi
+// certamente un ospite senza profilo: parte direttamente sul tab
+// "Registrati" invece del default "Accedi".
+{
+  const nomeSuggerito = new URLSearchParams(window.location.search).get("nome");
+  if (nomeSuggerito) {
+    document.getElementById("registrati-nome").value = nomeSuggerito;
+    mostraSchermo("registrati");
+  }
+}
 </script>
 </body>
 </html>
