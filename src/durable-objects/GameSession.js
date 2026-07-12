@@ -4,7 +4,7 @@ import { componiNarrazione } from "../lib/narratore-simulato.js";
 import { trovaPoolPerNodo } from "../lib/narratore-registro-pool.js";
 import { interpreta } from "simulatore-interprete/src/interprete.js";
 import { trovaLibreriaPerRichiesta } from "../lib/interprete-registro-librerie.js";
-import { assegnaXpCompletamentoNodo } from "../lib/profili-giocatore.js";
+import { assegnaXpCompletamentoNodo, otteniCompetenzeBonificate } from "../lib/profili-giocatore.js";
 
 // Un Durable Object per stanza/sessione: isolamento totale tra sessioni diverse.
 // Le risorse sono a livello di SQUADRA (party-level), non per singolo personaggio:
@@ -666,6 +666,7 @@ export class GameSession {
       if (risposta.bonusContesto && risposta.bonusContesto.competenza === risposta.competenzaRichiesta) {
         punteggio += risposta.bonusContesto.valore;
       }
+      punteggio += await this.calcolaBonusGrado(giocatore, risposta.competenzaRichiesta);
       const facce =
         ruoloGiocatore?.dadoFacce && risposta.competenzaRichiesta === ruoloGiocatore.competenzaPrincipale
           ? ruoloGiocatore.dadoFacce
@@ -777,6 +778,28 @@ export class GameSession {
       return nodo.richieste.find((r) => r.id === session.richiestaAttivaId) ?? null;
     }
     return nodo.richieste[session.richiestaIndice] ?? null; // fallback legacy
+  }
+
+  // Bonus di grado sul tiro (Fase 4, profilo persistente): +1 al punteggio
+  // se il giocatore ha un profiloId E quella specifica competenza è tra
+  // quelle bonificate nel suo bonus_scelti.assegnati -- letto da D1 a ogni
+  // tiro (nessuna cache), trasversale al RUOLO scelto in QUESTA stanza: il
+  // bonus si applica per la competenza guadagnata, non per il ruolo che il
+  // giocatore aveva quando l'ha ottenuto (nessun collegamento al ruolo,
+  // deciso esplicitamente). Nessun profiloId o nessun binding D1 in questo
+  // ambiente (es. test che non lo configurano): 0 senza nemmeno provare la
+  // query. Un fallimento D1 (rete, tabella, qualunque errore) e' isolato
+  // qui: nessun bonus per QUESTO tiro, ma il tiro e il gameplay procedono
+  // comunque -- stesso principio gia' seguito in assegnaXpNodoCompletato.
+  async calcolaBonusGrado(giocatore, competenzaId) {
+    if (giocatore.profiloId == null || !this.env.DB) return 0;
+    try {
+      const competenzeBonificate = await otteniCompetenzeBonificate(this.env.DB, giocatore.profiloId);
+      return competenzeBonificate.has(competenzaId) ? 1 : 0;
+    } catch (errore) {
+      console.error(`Lettura bonus di grado fallita per profiloId=${giocatore.profiloId}:`, errore);
+      return 0;
+    }
   }
 
   // XP al profilo persistente (Fase 3): chiamata SOLO da applicaRisposta()

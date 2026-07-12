@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Profilo — La Corsa Invisibile</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  /* Stesse variabili/stile di base di index.html, per coerenza visiva. Pagina
+     autonoma (non condivide STATO/script con index.html): schermata di SOLO
+     TEST per grado/XP/bonus (Fase 4). Login/registrazione (Fase 1) e il loro
+     collegamento a /join restano fuori da qui, pianificati a parte. */
+  :root {
+    --bg: #15120f;
+    --bg-rgb: 21, 18, 15;
+    --bg-panel: #1f1a16;
+    --bg-panel-raised: #2a231d;
+    --line: #3a3128;
+    --crimson: #a6332b;
+    --crimson-bright: #c94538;
+    --brass: #b08d57;
+    --text: #ece4d6;
+    --text-muted: #a89a87;
+    --text-faint: #6b5f51;
+    --font-display: 'Oswald', sans-serif;
+    --font-body: 'Source Serif 4', serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+  }
+  body {
+    background-image:
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0px, transparent 1px, transparent 2px),
+      radial-gradient(ellipse at top, rgba(166,51,43,0.08), transparent 60%);
+  }
+  .wrap {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 0 20px 80px;
+    min-height: 100vh;
+  }
+  header.masthead {
+    padding: 28px 0 20px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 28px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  header.masthead .titolo {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.5rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+  header.masthead .titolo .lampeggio { color: var(--crimson-bright); }
+  header.masthead .romanzo {
+    font-size: 0.75rem;
+    color: var(--text-faint);
+    font-style: italic;
+    letter-spacing: 0.02em;
+  }
+  .schermo { display: none; }
+  .schermo.attivo { display: block; animation: entra 0.35s ease; }
+  @keyframes entra { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+  .etichetta {
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--brass);
+    margin-bottom: 8px;
+  }
+  h1.grande {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.6rem;
+    letter-spacing: 0.01em;
+    line-height: 1.25;
+    margin: 0 0 14px;
+  }
+  p.spiega {
+    color: var(--text-muted);
+    line-height: 1.6;
+    margin: 0 0 24px;
+    font-size: 0.98rem;
+  }
+  .campo { margin-bottom: 18px; }
+  .campo label {
+    display: block;
+    font-family: var(--font-display);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 7px;
+  }
+  input[type=text], input[type=number], input[type=password], select {
+    width: 100%;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 1.05rem;
+    padding: 13px 14px;
+    border-radius: 3px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input[type=text]:focus, input[type=number]:focus, input[type=password]:focus, select:focus { border-color: var(--crimson); }
+
+  button.principale {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.85rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: var(--crimson);
+    color: #fff;
+    border: none;
+    padding: 14px 22px;
+    border-radius: 3px;
+    cursor: pointer;
+    width: 100%;
+    transition: background 0.15s, transform 0.1s;
+  }
+  button.principale:hover:not(:disabled) { background: var(--crimson-bright); }
+  button.principale:active:not(:disabled) { transform: scale(0.99); }
+  button.principale:disabled { background: var(--line); color: var(--text-faint); cursor: default; }
+
+  button.secondario {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.78rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    background: none;
+    border: 1px solid var(--brass);
+    color: var(--brass);
+    padding: 11px 18px;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  button.secondario:hover:not(:disabled) { background: rgba(176,141,87,0.1); }
+  button.secondario:disabled { border-color: var(--line); color: var(--text-faint); cursor: default; }
+
+  .errore {
+    color: var(--crimson-bright);
+    font-size: 0.88rem;
+    margin-top: 10px;
+    display: none;
+  }
+  .errore.mostra { display: block; }
+
+  /* --- Schermata profilo --- */
+  .grado-box {
+    background: var(--bg-panel);
+    border: 1px solid var(--brass);
+    border-radius: 4px;
+    padding: 16px 18px;
+    margin-bottom: 26px;
+  }
+  .grado-nome {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.05rem;
+    color: var(--brass);
+    margin-bottom: 10px;
+  }
+  .grado-barra {
+    background: var(--bg-panel-raised);
+    border-radius: 6px;
+    height: 10px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+  .grado-riempimento {
+    background: var(--crimson);
+    height: 100%;
+    transition: width 0.3s ease;
+  }
+  .grado-xp-testo {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+
+  .bonus-sezione { margin-bottom: 26px; }
+  .bonus-riga {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    font-size: 0.9rem;
+  }
+  .bonus-riga .bonus-grado {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+  }
+  .bonus-riga .bonus-competenza { color: var(--text); font-weight: 600; }
+
+  .caricamento {
+    text-align: center;
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    padding: 40px 0;
+    letter-spacing: 0.05em;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="masthead">
+    <div>
+      <div class="titolo">La Corsa <span class="lampeggio">Invisibile</span></div>
+      <div class="romanzo">Profilo persistente — schermata di test</div>
+    </div>
+  </header>
+
+  <!-- SCHERMATA 1: carica un profilo esistente (ID + PIN). Nessun login/
+       registrazione qui: pianificati a parte (Fase 1, non ancora collegata
+       a questa pagina). -->
+  <section id="schermo-accesso" class="schermo">
+    <div class="etichetta">Profilo persistente</div>
+    <h1 class="grande">Carica il tuo profilo</h1>
+    <p class="spiega">
+      Schermata di test per grado ed esperienza. Inserisci l'ID e il PIN di
+      un profilo già registrato (login e registrazione arrivano in un passo
+      separato).
+    </p>
+    <div class="campo">
+      <label for="input-profilo-id">ID profilo</label>
+      <input type="number" id="input-profilo-id" placeholder="es. 1" min="1" />
+    </div>
+    <div class="campo">
+      <label for="input-profilo-pin">PIN (6 cifre)</label>
+      <input type="password" id="input-profilo-pin" maxlength="6" inputmode="numeric" placeholder="••••••" autocomplete="off" />
+    </div>
+    <button class="principale" id="btn-carica-profilo">Carica profilo</button>
+    <div class="errore" id="errore-accesso"></div>
+  </section>
+
+  <!-- SCHERMATA 2: grado, XP, bonus assegnati, assegnazione di un nuovo bonus -->
+  <section id="schermo-profilo" class="schermo">
+    <div class="etichetta">Profilo persistente</div>
+    <h1 class="grande" id="titolo-profilo"></h1>
+
+    <div class="grado-box">
+      <div class="grado-nome" id="testo-grado-nome"></div>
+      <div class="grado-barra"><div class="grado-riempimento" id="grado-riempimento"></div></div>
+      <div class="grado-xp-testo" id="testo-grado-xp"></div>
+    </div>
+
+    <div class="bonus-sezione">
+      <div class="etichetta">Bonus assegnati</div>
+      <div id="lista-bonus-assegnati"></div>
+    </div>
+
+    <div class="bonus-sezione" id="box-assegna-bonus" style="display:none;">
+      <div class="etichetta">Nuovo bonus disponibile</div>
+      <p class="spiega" style="margin-bottom:14px;">
+        Hai raggiunto un nuovo traguardo di grado: scegli a quale competenza
+        assegnare +1.
+      </p>
+      <div class="campo">
+        <label for="select-competenza-bonus">Competenza</label>
+        <select id="select-competenza-bonus"></select>
+      </div>
+      <button class="principale" id="btn-conferma-bonus">Conferma</button>
+      <div class="errore" id="errore-bonus"></div>
+    </div>
+
+    <button class="secondario" id="btn-cambia-profilo">Cambia profilo</button>
+  </section>
+
+  <div class="caricamento" id="caricamento">un momento…</div>
+</div>
+
+<script>
+async function chiamaAPI(path, opzioni) {
+  const risposta = await fetch(path, opzioni);
+  const corpo = await risposta.json().catch(() => ({}));
+  if (!risposta.ok) {
+    const err = new Error(corpo.errore || "Richiesta non riuscita");
+    err.corpo = corpo;
+    err.status = risposta.status;
+    throw err;
+  }
+  return corpo;
+}
+
+function mostraSchermo(id) {
+  document.querySelectorAll(".schermo").forEach(s => s.classList.remove("attivo"));
+  document.getElementById("caricamento").style.display = "none";
+  document.getElementById(id).classList.add("attivo");
+}
+
+let CONFIG = null;
+// Credenziali del profilo caricato, SOLO in memoria (mai in localStorage):
+// pagina di test, non c'è motivo di persistere un PIN sul disco del browser.
+let PROFILO = null;
+
+async function caricaConfig() {
+  CONFIG = await chiamaAPI("/api/config");
+}
+
+function nomeCompetenza(id) {
+  const info = CONFIG.competenze[id];
+  return info ? info.nome : id;
+}
+
+function renderGrado(stato) {
+  document.getElementById("titolo-profilo").textContent = stato.nome;
+  document.getElementById("testo-grado-nome").textContent = `Grado ${stato.grado.numero} — ${stato.grado.nome}`;
+
+  const barra = document.getElementById("grado-riempimento");
+  const testoXp = document.getElementById("testo-grado-xp");
+  const soglia = stato.grado.sogliaGradoAttuale;
+  const prossima = stato.grado.sogliaProssimoGrado;
+  if (prossima === null) {
+    barra.style.width = "100%";
+    testoXp.textContent = `${stato.xpTotale} XP — grado massimo raggiunto`;
+  } else {
+    const frazione = Math.max(0, Math.min(1, (stato.xpTotale - soglia) / (prossima - soglia)));
+    barra.style.width = (frazione * 100) + "%";
+    testoXp.textContent = `${stato.xpTotale} / ${prossima} XP per il prossimo grado`;
+  }
+}
+
+function renderBonusAssegnati(bonusAssegnati) {
+  const box = document.getElementById("lista-bonus-assegnati");
+  if (!bonusAssegnati.length) {
+    box.innerHTML = `<p class="spiega" style="margin:0;">Nessun bonus ancora assegnato.</p>`;
+    return;
+  }
+  box.innerHTML = bonusAssegnati.map(b => `
+    <div class="bonus-riga">
+      <span class="bonus-grado">Grado ${b.grado}</span>
+      <span class="bonus-competenza">${nomeCompetenza(b.competenza)}</span>
+    </div>
+  `).join("");
+}
+
+function renderAssegnaBonus(stato) {
+  const box = document.getElementById("box-assegna-bonus");
+  if (stato.bonusDisponibili <= 0) {
+    box.style.display = "none";
+    return;
+  }
+  box.style.display = "block";
+  const select = document.getElementById("select-competenza-bonus");
+  select.innerHTML = Object.keys(CONFIG.competenze).map(id =>
+    `<option value="${id}">${CONFIG.competenze[id].nome}</option>`
+  ).join("");
+}
+
+function renderStatoProfilo(stato) {
+  renderGrado(stato);
+  renderBonusAssegnati(stato.bonusAssegnati);
+  renderAssegnaBonus(stato);
+}
+
+async function caricaEMostraStato() {
+  const { stato } = await chiamaAPI("/profilo/stato", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ profiloId: PROFILO.profiloId, pin: PROFILO.pin }),
+  });
+  renderStatoProfilo(stato);
+}
+
+document.getElementById("btn-carica-profilo").addEventListener("click", async () => {
+  const erroreBox = document.getElementById("errore-accesso");
+  erroreBox.classList.remove("mostra");
+
+  const profiloIdTesto = document.getElementById("input-profilo-id").value.trim();
+  const pin = document.getElementById("input-profilo-pin").value.trim();
+  const profiloId = Number(profiloIdTesto);
+  if (!profiloIdTesto || !Number.isFinite(profiloId)) {
+    erroreBox.textContent = "Inserisci un ID profilo valido.";
+    erroreBox.classList.add("mostra");
+    return;
+  }
+
+  const btn = document.getElementById("btn-carica-profilo");
+  btn.disabled = true;
+  btn.textContent = "Un momento…";
+  try {
+    PROFILO = { profiloId, pin };
+    await caricaEMostraStato();
+    mostraSchermo("schermo-profilo");
+  } catch (e) {
+    PROFILO = null;
+    erroreBox.textContent = e.status === 401
+      ? "ID profilo o PIN non corretti."
+      : "Qualcosa è andato storto. Riprova.";
+    erroreBox.classList.add("mostra");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Carica profilo";
+  }
+});
+
+document.getElementById("btn-cambia-profilo").addEventListener("click", () => {
+  PROFILO = null;
+  document.getElementById("input-profilo-pin").value = "";
+  document.getElementById("errore-bonus").classList.remove("mostra");
+  mostraSchermo("schermo-accesso");
+});
+
+// Mitigazione della corsa concorrente (doppio click/tap) concordata: il
+// pulsante si disabilita SUBITO al click, si riabilita solo dopo la
+// risposta del server -- successo o errore, mai prima.
+document.getElementById("btn-conferma-bonus").addEventListener("click", async () => {
+  const erroreBox = document.getElementById("errore-bonus");
+  erroreBox.classList.remove("mostra");
+  const competenza = document.getElementById("select-competenza-bonus").value;
+
+  const btn = document.getElementById("btn-conferma-bonus");
+  btn.disabled = true;
+  btn.textContent = "Un momento…";
+  try {
+    await chiamaAPI("/profilo/assegna-bonus", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profiloId: PROFILO.profiloId, pin: PROFILO.pin, competenza }),
+    });
+    await caricaEMostraStato();
+  } catch (e) {
+    // 401 (credenziali) e 409 (competenza_non_valida / nessun_bonus_disponibile)
+    // arrivano già come frase in italiano non tecnica dal server
+    // (MESSAGGI_ERRORE_PROFILO in src/index.js): la mostriamo direttamente
+    // per il 409, con un messaggio dedicato solo per il 401 (più chiaro di
+    // "credenziali non valide" in questo contesto specifico).
+    let messaggio = "Qualcosa è andato storto. Riprova.";
+    if (e.status === 401) {
+      messaggio = "La sessione non è più valida: ricarica la pagina e reinserisci ID profilo e PIN.";
+    } else if (e.status === 409 && e.corpo && e.corpo.errore) {
+      messaggio = e.corpo.errore;
+    }
+    erroreBox.textContent = messaggio;
+    erroreBox.classList.add("mostra");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Conferma";
+  }
+});
+
+(async function avvia() {
+  await caricaConfig();
+  mostraSchermo("schermo-accesso");
+})();
+</script>
+</body>
+</html>

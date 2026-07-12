@@ -1,6 +1,6 @@
 import { GameSession } from "./durable-objects/GameSession.js";
 import { GAME_CONFIG } from "./game-config.js";
-import { registraGiocatore, accediGiocatore } from "./lib/profili-giocatore.js";
+import { registraGiocatore, accediGiocatore, otteniStatoProfilo, assegnaBonusProfilo } from "./lib/profili-giocatore.js";
 
 export { GameSession };
 
@@ -15,6 +15,8 @@ const MESSAGGI_ERRORE_PROFILO = {
   pin_formato_non_valido: "Il PIN deve essere di 6 cifre numeriche",
   nome_gia_in_uso: "Nome già in uso",
   credenziali_non_valide: "Credenziali non valide",
+  competenza_non_valida: "Competenza non valida",
+  nessun_bonus_disponibile: "Nessun bonus disponibile da assegnare",
 };
 
 export default {
@@ -74,6 +76,35 @@ export default {
         return Response.json({ errore: MESSAGGI_ERRORE_PROFILO.credenziali_non_valide }, { status: 401 });
       }
       return Response.json({ profilo: risultato.profilo }, { status: 200 });
+    }
+
+    // Fase 4: legge grado/XP/bonus/nodi completati di un profilo esistente.
+    // Richiede profiloId + pin (nessun token di sessione per i profili, si
+    // riverificano le credenziali a ogni lettura, come /profilo/accedi).
+    if (url.pathname === "/profilo/stato" && request.method === "POST") {
+      const { profiloId, pin } = await request.json();
+      const risultato = await otteniStatoProfilo(env.DB, profiloId, pin);
+      if (!risultato.successo) {
+        return Response.json({ errore: MESSAGGI_ERRORE_PROFILO.credenziali_non_valide }, { status: 401 });
+      }
+      return Response.json({ stato: risultato.stato }, { status: 200 });
+    }
+
+    // Fase 4: assegna UN bonus di grado a una competenza scelta dal
+    // giocatore, solo dalla schermata profilo (mai da dentro una stanza di
+    // gioco). Il server ricalcola sempre se un bonus è davvero disponibile
+    // prima di scrivere -- non si fida di quanto dichiarato dal client.
+    if (url.pathname === "/profilo/assegna-bonus" && request.method === "POST") {
+      const { profiloId, pin, competenza } = await request.json();
+      const risultato = await assegnaBonusProfilo(env.DB, profiloId, pin, competenza);
+      if (!risultato.successo) {
+        const status = risultato.errore === "credenziali_non_valide" ? 401 : 409;
+        return Response.json({ errore: MESSAGGI_ERRORE_PROFILO[risultato.errore] }, { status });
+      }
+      return Response.json(
+        { bonusAssegnato: risultato.bonusAssegnato, bonusDisponibili: risultato.bonusDisponibili },
+        { status: 200 }
+      );
     }
 
     // Proxy verso una sessione esistente: /api/stanza/{roomId}/...

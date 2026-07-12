@@ -6,7 +6,16 @@
 // usato per GameSession, ma per db.prepare().bind().first()/.run()) copre
 // esattamente le due query emesse da src/lib/profili-giocatore.js.
 
-import { registraGiocatore, accediGiocatore, validaNome, validaPin } from "./src/lib/profili-giocatore.js";
+import {
+  registraGiocatore,
+  accediGiocatore,
+  validaNome,
+  validaPin,
+  calcolaGrado,
+  normalizzaBonusScelti,
+  otteniStatoProfilo,
+  assegnaBonusProfilo,
+} from "./src/lib/profili-giocatore.js";
 
 let falliti = 0;
 function verifica(descrizione, condizione) {
@@ -30,6 +39,11 @@ function creaDbFinto() {
       bind(...args) {
         return {
           async first() {
+            if (normalizzata.includes("WHERE id = ?")) {
+              const [id] = args;
+              const riga = righe.find((r) => r.id === id);
+              return riga ? { ...riga } : null;
+            }
             if (normalizzata.startsWith("SELECT")) {
               const [nome] = args;
               const riga = righe.find((r) => r.nome === nome);
@@ -47,8 +61,15 @@ function creaDbFinto() {
                 pin_salt: salt,
                 xp_totale: 0,
                 bonus_scelti: "[]",
+                nodi_completati: "[]",
                 created_at: new Date().toISOString(),
               });
+              return { success: true };
+            }
+            if (normalizzata.startsWith("UPDATE giocatori_persistenti SET bonus_scelti = ? WHERE id = ?")) {
+              const [bonusSceltiJson, id] = args;
+              const riga = righe.find((r) => r.id === id);
+              if (riga) riga.bonus_scelti = bonusSceltiJson;
               return { success: true };
             }
             throw new Error(`Query .run() non gestita dal fake DB: ${normalizzata}`);
@@ -58,7 +79,15 @@ function creaDbFinto() {
     };
   }
 
-  return { prepare };
+  // Solo per test: imposta xp_totale direttamente su una riga già creata,
+  // per simulare un profilo che ha già accumulato XP (registraGiocatore
+  // parte sempre da 0, nessun endpoint reale lo permette diversamente).
+  function impostaXpTotale(id, xp) {
+    const riga = righe.find((r) => r.id === id);
+    riga.xp_totale = xp;
+  }
+
+  return { prepare, impostaXpTotale };
 }
 
 console.log("--- validazione formato ---");
@@ -168,6 +197,129 @@ console.log("\n--- l'hash del PIN non è mai il PIN in chiaro ---");
   const loginB = await accediGiocatore(db, "GiocatoreB", "424242");
   verifica("due giocatori con lo stesso PIN si autenticano entrambi correttamente", loginA.successo && loginB.successo);
   verifica("i profili restituiti sono distinti", loginA.profilo.id !== loginB.profilo.id);
+}
+
+console.log("\n--- normalizzaBonusScelti ---");
+{
+  verifica(
+    "array bare '[]' (formato pre-Fase 4) normalizza a { assegnati: [] }",
+    JSON.stringify(normalizzaBonusScelti("[]")) === JSON.stringify({ assegnati: [] })
+  );
+  const conAssegnati = normalizzaBonusScelti('{"assegnati":[{"grado":2,"competenza":"cadenza"}]}');
+  verifica("oggetto già strutturato passa invariato", conAssegnati.assegnati.length === 1 && conAssegnati.assegnati[0].competenza === "cadenza");
+  verifica(
+    "oggetto senza chiave assegnati normalizza comunque ad array vuoto",
+    JSON.stringify(normalizzaBonusScelti("{}")) === JSON.stringify({ assegnati: [] })
+  );
+}
+
+console.log("\n--- calcolaGrado ---");
+{
+  const nessunBonus = { assegnati: [] };
+  verifica("0 XP: grado 1 Bersagliere, nessun bonus disponibile", (() => {
+    const g = calcolaGrado(0, nessunBonus);
+    return g.gradoNumero === 1 && g.gradoNome === "Bersagliere" && g.bonusDisponibili === 0 && g.sogliaGradoAttuale === 0 && g.sogliaProssimoGrado === 200;
+  })());
+  verifica("199 XP: resta grado 1 (soglia non ancora raggiunta)", calcolaGrado(199, nessunBonus).gradoNumero === 1);
+  verifica("200 XP: sale a grado 2 Bersagliere Scelto, 1 bonus disponibile", (() => {
+    const g = calcolaGrado(200, nessunBonus);
+    return g.gradoNumero === 2 && g.gradoNome === "Bersagliere Scelto" && g.bonusDisponibili === 1;
+  })());
+  verifica("399 XP: resta grado 2", calcolaGrado(399, nessunBonus).gradoNumero === 2);
+  verifica("1800 XP: grado 10 Capitano, soglia prossimo grado null (grado massimo)", (() => {
+    const g = calcolaGrado(1800, nessunBonus);
+    return g.gradoNumero === 10 && g.gradoNome === "Capitano" && g.sogliaProssimoGrado === null;
+  })());
+  verifica("XP oltre il grado massimo resta comunque a grado 10 (capped)", calcolaGrado(50_000, nessunBonus).gradoNumero === 10);
+  verifica(
+    "1800 XP senza bonus assegnati: 5 bonus disponibili (gradi 2,4,6,8,10)",
+    calcolaGrado(1800, nessunBonus).bonusDisponibili === 5
+  );
+  verifica(
+    "1800 XP con 2 bonus già assegnati: 3 bonus ancora disponibili",
+    calcolaGrado(1800, { assegnati: [{ grado: 2, competenza: "cadenza" }, { grado: 4, competenza: "precisione" }] }).bonusDisponibili === 3
+  );
+  verifica(
+    "1800 XP con tutti e 5 i bonus già assegnati: 0 disponibili",
+    calcolaGrado(1800, {
+      assegnati: [2, 4, 6, 8, 10].map((grado) => ({ grado, competenza: "cadenza" })),
+    }).bonusDisponibili === 0
+  );
+  verifica("bonusScelti assente (undefined): trattato come nessun bonus assegnato", calcolaGrado(200, undefined).bonusDisponibili === 1);
+}
+
+console.log("\n--- otteniStatoProfilo ---");
+{
+  const db = creaDbFinto();
+  const registrazione = await registraGiocatore(db, "Marta", "135790");
+  const profiloId = registrazione.profilo.id;
+
+  const credenzialiSbagliate = await otteniStatoProfilo(db, profiloId, "000000");
+  verifica("pin sbagliato: fallisce con errore generico", credenzialiSbagliate.successo === false && credenzialiSbagliate.errore === "credenziali_non_valide");
+
+  const idInesistente = await otteniStatoProfilo(db, 99999, "135790");
+  verifica(
+    "id inesistente: stesso errore generico (non distinguibile dal pin sbagliato)",
+    idInesistente.successo === false && idInesistente.errore === "credenziali_non_valide"
+  );
+
+  const formatoPinInvalido = await otteniStatoProfilo(db, profiloId, "abc");
+  verifica("formato pin invalido: stesso errore generico", formatoPinInvalido.successo === false && formatoPinInvalido.errore === "credenziali_non_valide");
+
+  const risultato = await otteniStatoProfilo(db, profiloId, "135790");
+  verifica("credenziali corrette: successo", risultato.successo === true);
+  verifica("xpTotale a 0 per un profilo appena creato", risultato.stato.xpTotale === 0);
+  verifica("grado iniziale Bersagliere (numero 1)", risultato.stato.grado.numero === 1 && risultato.stato.grado.nome === "Bersagliere");
+  verifica("nessun bonus disponibile a XP 0", risultato.stato.bonusDisponibili === 0);
+  verifica("bonusAssegnati vuoto per un profilo appena creato", Array.isArray(risultato.stato.bonusAssegnati) && risultato.stato.bonusAssegnati.length === 0);
+  verifica("nodiCompletati vuoto per un profilo appena creato", Array.isArray(risultato.stato.nodiCompletati) && risultato.stato.nodiCompletati.length === 0);
+  verifica("lo stato NON espone pin_hash/pin_salt", risultato.stato.pin_hash === undefined && risultato.stato.pin_salt === undefined);
+}
+
+console.log("\n--- assegnaBonusProfilo ---");
+{
+  const db = creaDbFinto();
+  const registrazione = await registraGiocatore(db, "Elena", "246810");
+  const profiloId = registrazione.profilo.id;
+
+  const senzaXp = await assegnaBonusProfilo(db, profiloId, "246810", "cadenza");
+  verifica(
+    "0 XP (grado 1, nessun bonus disponibile): rifiutato con errore chiaro",
+    senzaXp.successo === false && senzaXp.errore === "nessun_bonus_disponibile"
+  );
+
+  db.impostaXpTotale(profiloId, 200); // grado 2: 1 bonus disponibile
+
+  const pinSbagliato = await assegnaBonusProfilo(db, profiloId, "000000", "cadenza");
+  verifica("pin sbagliato: rifiutato con errore generico, nessuna scrittura", pinSbagliato.successo === false && pinSbagliato.errore === "credenziali_non_valide");
+
+  const competenzaInvalida = await assegnaBonusProfilo(db, profiloId, "246810", "furtivita_inesistente");
+  verifica(
+    "competenza inesistente: rifiutata con errore specifico, nessuna scrittura",
+    competenzaInvalida.successo === false && competenzaInvalida.errore === "competenza_non_valida"
+  );
+
+  const primoBonus = await assegnaBonusProfilo(db, profiloId, "246810", "cadenza");
+  verifica("bonus disponibile: assegnazione riuscita", primoBonus.successo === true);
+  verifica("il bonus assegnato registra grado 2 e la competenza scelta", primoBonus.bonusAssegnato.grado === 2 && primoBonus.bonusAssegnato.competenza === "cadenza");
+  verifica("bonusDisponibili scende a 0 dopo l'assegnazione", primoBonus.bonusDisponibili === 0);
+
+  const secondoTentativoStessoGrado = await assegnaBonusProfilo(db, profiloId, "246810", "precisione");
+  verifica(
+    "nessun altro bonus disponibile allo stesso grado: rifiutato, non sovrascrive quello già assegnato",
+    secondoTentativoStessoGrado.successo === false && secondoTentativoStessoGrado.errore === "nessun_bonus_disponibile"
+  );
+
+  const statoDopo = await otteniStatoProfilo(db, profiloId, "246810");
+  verifica(
+    "lo stato profilo riflette il bonus assegnato (un solo elemento, competenza cadenza)",
+    statoDopo.stato.bonusAssegnati.length === 1 && statoDopo.stato.bonusAssegnati[0].competenza === "cadenza"
+  );
+
+  db.impostaXpTotale(profiloId, 1800); // grado 10: 5 traguardi raggiunti, 1 già assegnato -> 4 disponibili
+  const secondoBonus = await assegnaBonusProfilo(db, profiloId, "246810", "ancoraggio");
+  verifica("al grado 10, con un bonus già assegnato a grado 2: il prossimo assegnato è per il grado 4", secondoBonus.bonusAssegnato.grado === 4);
+  verifica("bonusDisponibili scende da 4 a 3", secondoBonus.bonusDisponibili === 3);
 }
 
 console.log(`\n${falliti === 0 ? "Tutti i test passati." : `${falliti} test falliti.`}`);

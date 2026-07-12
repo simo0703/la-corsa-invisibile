@@ -10,6 +10,14 @@
 //
 // Query sempre parametrizzate: mai concatenare l'input dell'utente nella
 // query (rischio injection), stesso principio di access-codes.js.
+//
+// Import da game-config.js: questo modulo non è tra i file "neutri"
+// (index.js, GameSession.js, narratore-simulato.js) su cui vige il divieto
+// di stringhe specifiche del gioco -- contiene già XP_PER_NODO, i nomi dei
+// gradi Bersaglieri, ecc. Qui serve solo per leggere l'elenco delle
+// competenze valide (assegnaBonusProfilo, Fase 4), stessa fonte unica di
+// verità usata dal resto del motore per le stesse competenze.
+import { GAME_CONFIG } from "../game-config.js";
 
 const NOME_LUNGHEZZA_MINIMA = 3;
 const NOME_LUNGHEZZA_MASSIMA = 30; // limite difensivo, non richiesto esplicitamente: evita input abnormi sull'endpoint pubblico
@@ -81,6 +89,23 @@ async function trovaGiocatorePerNome(db, nome) {
     .first();
 }
 
+async function trovaGiocatorePerId(db, id) {
+  return db
+    .prepare(
+      "SELECT id, nome, pin_hash, pin_salt, xp_totale, bonus_scelti, nodi_completati, created_at FROM giocatori_persistenti WHERE id = ?"
+    )
+    .bind(id)
+    .first();
+}
+
+// Verifica il PIN contro una riga già letta -- estratto da accediGiocatore
+// per essere riusato anche da otteniStatoProfilo (Fase 4), che autentica per
+// id invece che per nome ma con la stessa identica logica di confronto.
+async function pinCorrisponde(riga, pin) {
+  const pinHashCalcolato = await derivaPin(pin, riga.pin_salt);
+  return pinHashCalcolato === riga.pin_hash;
+}
+
 function rigaAProfilo(riga) {
   // pin_hash/pin_salt intenzionalmente esclusi: mai restituiti al client.
   return {
@@ -89,6 +114,74 @@ function rigaAProfilo(riga) {
     xpTotale: riga.xp_totale,
     bonusScelti: JSON.parse(riga.bonus_scelti),
     creatoIl: riga.created_at,
+  };
+}
+
+// bonus_scelti nasce (Fase 1) come array bare '[]', mai scritto con
+// contenuto reale finora -- il sistema di bonus non esisteva ancora. Fase 4
+// lo struttura come oggetto { assegnati: [...] } (vedi
+// DECISIONI_LA_CORSA_INVISIBILE.md). Nessuna riga reale rischia di perdere
+// dati normalizzando qui: l'unico valore bare mai scritto è '[]', equivalente
+// a "nessun bonus assegnato" in entrambe le forme. La migrazione che aggiorna
+// le righe esistenti al nuovo formato arriva quando si introduce la
+// scrittura (assegnazione di un bonus), non prima.
+export function normalizzaBonusScelti(bonusSceltiJson) {
+  const valore = JSON.parse(bonusSceltiJson);
+  const assegnati = Array.isArray(valore) ? [] : valore.assegnati;
+  return { assegnati: Array.isArray(assegnati) ? assegnati : [] };
+}
+
+// Scala gradi (Fase 4): 10 gradi, gerarchia reale dei Bersaglieri (confermata
+// con l'autore). Grado 1 (Bersagliere) è il punto di partenza a 0 XP --
+// nessuna soglia da superare per averlo. Interpretazione della soglia
+// "N × 200 XP cumulativi" scelta qui: sono gli XP cumulativi necessari per
+// salire DAL grado N AL grado N+1 (grado 2 a 200 XP, grado 3 a 400, ...,
+// grado 10 a 1800) -- da confermare con l'autore se non è quanto intendeva.
+export const NOMI_GRADO = [
+  "Bersagliere",
+  "Bersagliere Scelto",
+  "Caporale",
+  "Caporal Maggiore",
+  "Sergente",
+  "Sergente Maggiore",
+  "Maresciallo",
+  "Sottotenente",
+  "Tenente",
+  "Capitano",
+];
+
+const XP_PER_SALITA_GRADO = 200;
+const GRADO_MASSIMO = NOMI_GRADO.length;
+
+// Gradi ai quali si sblocca un bonus di competenza a scelta: ogni 2 gradi,
+// 5 bonus massimi (grado 10 incluso) -- deciso a monte, non riaperto qui.
+const GRADI_CON_BONUS = [2, 4, 6, 8, 10];
+
+// Calcola il grado corrente da xpTotale e quanti bonus sono disponibili ma
+// non ancora assegnati, confrontando i traguardi di grado raggiunti con
+// bonusScelti.assegnati (già normalizzato, vedi normalizzaBonusScelti sopra).
+// Pura funzione di dominio, riusabile sia dall'endpoint di lettura sia da
+// GameSession.js (Fase 4, punto 5) per applicare i bonus al tiro.
+export function calcolaGrado(xpTotale, bonusScelti) {
+  const xp = Math.max(0, xpTotale || 0);
+  const gradoNumero = Math.min(GRADO_MASSIMO, 1 + Math.floor(xp / XP_PER_SALITA_GRADO));
+
+  const assegnati = bonusScelti && Array.isArray(bonusScelti.assegnati) ? bonusScelti.assegnati : [];
+  const traguardiRaggiunti = GRADI_CON_BONUS.filter((grado) => grado <= gradoNumero);
+  const bonusDisponibili = Math.max(0, traguardiRaggiunti.length - assegnati.length);
+
+  return {
+    gradoNumero,
+    gradoNome: NOMI_GRADO[gradoNumero - 1],
+    sogliaGradoAttuale: (gradoNumero - 1) * XP_PER_SALITA_GRADO,
+    sogliaProssimoGrado: gradoNumero < GRADO_MASSIMO ? gradoNumero * XP_PER_SALITA_GRADO : null,
+    bonusDisponibili,
+    // Traguardo (2/4/6/8/10) a cui appartiene il PROSSIMO bonus da
+    // assegnare -- gli `assegnati` sono sempre consumati in ordine di
+    // traguardo raggiunto (si assegna sempre "il prossimo disponibile", mai
+    // uno a scelta tra più traguardi aperti), quindi l'indice nell'array
+    // ordinato basta. `null` se non c'è nessun bonus disponibile.
+    prossimoTraguardoBonus: bonusDisponibili > 0 ? traguardiRaggiunti[assegnati.length] : null,
   };
 }
 
@@ -132,10 +225,104 @@ export async function accediGiocatore(db, nome, pin) {
   const riga = await trovaGiocatorePerNome(db, nome.trim());
   if (!riga) return { successo: false, errore: "credenziali_non_valide" };
 
-  const pinHashCalcolato = await derivaPin(pin, riga.pin_salt);
-  if (pinHashCalcolato !== riga.pin_hash) return { successo: false, errore: "credenziali_non_valide" };
+  if (!(await pinCorrisponde(riga, pin))) return { successo: false, errore: "credenziali_non_valide" };
 
   return { successo: true, profilo: rigaAProfilo(riga) };
+}
+
+// Legge lo stato completo del profilo (grado, XP, bonus, nodi completati) --
+// Fase 4, richiede profiloId + PIN (nessun sistema di token per i profili
+// finora, a differenza dei token in-game di GameSession.js): ogni lettura
+// riverifica le credenziali, stessa logica di accediGiocatore ma per id
+// invece che per nome (il client conosce già il profiloId dopo un login
+// avvenuto altrove). Stesso errore generico "credenziali_non_valide" per id
+// inesistente o PIN sbagliato -- stessa scelta di non distinguerli presa per
+// accediGiocatore (Fase 1).
+export async function otteniStatoProfilo(db, profiloId, pin) {
+  if (validaPin(pin)) return { successo: false, errore: "credenziali_non_valide" };
+
+  const riga = await trovaGiocatorePerId(db, profiloId);
+  if (!riga) return { successo: false, errore: "credenziali_non_valide" };
+
+  if (!(await pinCorrisponde(riga, pin))) return { successo: false, errore: "credenziali_non_valide" };
+
+  const bonusScelti = normalizzaBonusScelti(riga.bonus_scelti);
+  const grado = calcolaGrado(riga.xp_totale, bonusScelti);
+
+  return {
+    successo: true,
+    stato: {
+      id: riga.id,
+      nome: riga.nome,
+      xpTotale: riga.xp_totale,
+      grado: {
+        numero: grado.gradoNumero,
+        nome: grado.gradoNome,
+        sogliaGradoAttuale: grado.sogliaGradoAttuale,
+        sogliaProssimoGrado: grado.sogliaProssimoGrado,
+      },
+      bonusDisponibili: grado.bonusDisponibili,
+      bonusAssegnati: bonusScelti.assegnati,
+      nodiCompletati: JSON.parse(riga.nodi_completati),
+    },
+  };
+}
+
+// Competenze valide su cui si può assegnare un bonus di grado: stesse
+// competenze del motore di gioco (game-config.js), niente elenco separato da
+// tenere sincronizzato a mano.
+const COMPETENZE_VALIDE = new Set(Object.keys(GAME_CONFIG.competenze));
+
+// Assegna UN bonus di grado a una competenza scelta dal giocatore (Fase 4,
+// schermata profilo -- mai durante una sessione di gioco live, decisione già
+// presa a monte). Stessa autenticazione di otteniStatoProfilo (profiloId +
+// pin, errore generico per credenziali). Non fidarsi MAI del client sul
+// "c'è un bonus disponibile": ricalcolato qui da xp_totale/bonus_scelti
+// appena letti da D1, prima di scrivere qualunque cosa -- se il client ha
+// uno stato profilo stantio (es. un'altra scheda ha già assegnato il bonus
+// nel frattempo), la richiesta viene comunque rifiutata.
+// Ritorna { successo: false, errore } con errore in "credenziali_non_valide"
+// | "competenza_non_valida" | "nessun_bonus_disponibile", oppure
+// { successo: true, bonusAssegnato, bonusDisponibili } (bonusDisponibili
+// già decrementato, per evitare che il chiamante debba ricalcolare).
+export async function assegnaBonusProfilo(db, profiloId, pin, competenza) {
+  if (validaPin(pin)) return { successo: false, errore: "credenziali_non_valide" };
+
+  const riga = await trovaGiocatorePerId(db, profiloId);
+  if (!riga) return { successo: false, errore: "credenziali_non_valide" };
+
+  if (!(await pinCorrisponde(riga, pin))) return { successo: false, errore: "credenziali_non_valide" };
+
+  if (!COMPETENZE_VALIDE.has(competenza)) return { successo: false, errore: "competenza_non_valida" };
+
+  const bonusScelti = normalizzaBonusScelti(riga.bonus_scelti);
+  const grado = calcolaGrado(riga.xp_totale, bonusScelti);
+  if (grado.bonusDisponibili <= 0) return { successo: false, errore: "nessun_bonus_disponibile" };
+
+  const bonusAssegnato = { grado: grado.prossimoTraguardoBonus, competenza };
+  const assegnatiAggiornati = [...bonusScelti.assegnati, bonusAssegnato];
+
+  await db
+    .prepare("UPDATE giocatori_persistenti SET bonus_scelti = ? WHERE id = ?")
+    .bind(JSON.stringify({ assegnati: assegnatiAggiornati }), profiloId)
+    .run();
+
+  return { successo: true, bonusAssegnato, bonusDisponibili: grado.bonusDisponibili - 1 };
+}
+
+// Legge le competenze bonificate (bonus_scelti.assegnati) di un profilo --
+// chiamata da GameSession.js al momento del tiro, NON da un endpoint HTTP:
+// nessuna verifica di PIN qui (non è un'azione dell'utente, è un dettaglio
+// interno del calcolo del punteggio). Ritorna un Set di id competenza, vuoto
+// se il profilo non esiste o non ha bonus -- MAI un'eccezione per "profilo
+// non trovato", solo per un vero fallimento D1 (rete, tabella mancante):
+// isolarlo è responsabilità del chiamante (stesso principio già seguito da
+// assegnaXpCompletamentoNodo/assegnaXpNodoCompletato in GameSession.js).
+export async function otteniCompetenzeBonificate(db, profiloId) {
+  const riga = await db.prepare("SELECT bonus_scelti FROM giocatori_persistenti WHERE id = ?").bind(profiloId).first();
+  if (!riga) return new Set();
+  const bonusScelti = normalizzaBonusScelti(riga.bonus_scelti);
+  return new Set(bonusScelti.assegnati.map((b) => b.competenza));
 }
 
 // XP fisso per nodo completato (Fase 3): stesso valore per qualunque nodo,
