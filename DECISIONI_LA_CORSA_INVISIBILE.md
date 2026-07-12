@@ -1,8 +1,9 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 12 luglio 2026 (fine sessione, dopo il Passo 23 — profilo
-giocatore persistente, Fase 3 di 4: XP al completamento di un nodo;
-lavoro sospeso qui su richiesta)
+Aggiornato al: 12 luglio 2026 (fine sessione, dopo il Passo 24 — profilo
+giocatore persistente, Fase 4 di 4 COMPLETA: grado, bonus di competenza,
+schermata di test e applicazione del bonus al tiro; commit 09d6140
+pushato su main, deploy automatico Cloudflare avviato)
 
 Questo file serve a non perdersi tra una sessione di lavoro e l'altra: raccoglie cosa
 è stato deciso, cosa è ancora un'ipotesi da confermare, e cosa manca. Va aggiornato
@@ -15,31 +16,66 @@ ruolo) che non risultano loggate qui sotto come Passi numerati — la sessione c
 ha scritte non ha aggiornato questo file. Non ricostruito retroattivamente in questa
 sessione (fuori scope); se serve, va fatto a parte guardando `git log`.
 
-**Punto di ripresa**: con il Passo 23, il completamento strutturale di un
-nodo (blocco `if (!prossimaRichiesta)` in `applicaRisposta()`) assegna 100
-XP a ogni giocatore della stanza con `profiloId` valorizzato, una sola
-volta per sempre per coppia profiloId+nodo (`nodi_completati` su D1). XP
-mai a discrezione del comandante, sempre automatico. Un fallimento D1 non
-blocca mai il completamento del nodo per la stanza (try/catch per
-giocatore, log e continua). **Migrazione `migrations/0001_nodi_completati.sql`
-NON ancora applicata né a locale né a remoto** — `schema.sql` da solo non
-basta perché la tabella `giocatori_persistenti` esiste già in produzione
-dalla Fase 1. Con il Passo 22, `POST /join` accetta un `profiloId`
-opzionale e lo salva sul record del giocatore in `session.giocatori` —
-login/registrazione (Fase 1) restano comunque due chiamate separate PRIMA di
-`/join` (schermata a parte), nessuna verifica qui che il `profiloId`
-dichiarato corrisponda a un login realmente avvenuto (rimandata a una fase
-successiva se necessaria). `autenticaGiocatore()`/`autenticaComandante()` e
-la logica dei token in-game (Passo 19/20) **non toccate**: il profilo
-persistente si aggancia accanto, non le sostituisce. Login resta facoltativo:
-un giocatore entra come sempre se non lo passa. Schema D1 (Fase 1) applicato
-sia in locale sia in produzione (verificato con query diretta su entrambi).
-Fase 3 di 4: la fase successiva (UI in `public/` per login/XP/bonus) non è
-ancora stata discussa né pianificata in dettaglio. Vedi Passo 23 nel
-changelog per i due punti di design chiariti con l'autore (migrazione su
-tabella già popolata, gestione errori D1), Passo 21 per le tre scelte di
-design della Fase 1 (dove va il D1, hashing del PIN, struttura di
-`bonusScelti`).
+**Punto di ripresa**: con il Passo 24 si chiude la Fase 4 di 4 (ultima) del
+profilo giocatore persistente — **pushato su main (commit `09d6140`), deploy
+automatico Cloudflare avviato**. Quattro pezzi fatti uno alla volta, con
+conferma esplicita dell'autore tra un passo e l'altro (nessun commit
+intermedio, un solo commit a fine fase):
+
+1. **Calcolo del grado** (`calcolaGrado(xpTotale, bonusScelti)` in
+   `profili-giocatore.js`): 10 gradi, gerarchia reale dei Bersaglieri
+   (Bersagliere → Bersagliere Scelto → Caporale → Caporal Maggiore →
+   Sergente → Sergente Maggiore → Maresciallo → Sottotenente → Tenente →
+   Capitano). Soglia **confermata dall'autore**: N×200 XP cumulativi per
+   salire dal grado N al grado N+1 (grado 1/Bersagliere a 0 XP, grado
+   10/Capitano a 1800 XP). Bonus di competenza ogni 2 gradi (2,4,6,8,10 →
+   5 bonus massimi), calcolato SEMPRE al volo confrontando i traguardi
+   raggiunti con `bonusScelti.assegnati` — mai un contatore ridondante.
+   Endpoint `POST /profilo/stato`: **confermato** che resta senza token di
+   sessione, si riautentica con profiloId+PIN a ogni lettura (stesso
+   trattamento di `/profilo/accedi`).
+2. **`POST /profilo/assegna-bonus`**: ricalcola SEMPRE server-side, da
+   xp_totale/bonus_scelti appena letti da D1, se c'è davvero un bonus
+   disponibile prima di scrivere — non si fida mai del client. `bonus_scelti`
+   passa dal bare array `'[]'` (Fase 1, mai popolato con contenuto reale
+   finora) all'oggetto `{"assegnati":[...]}`: nessuna migrazione D1
+   necessaria, `normalizzaBonusScelti()` interpreta correttamente entrambe le
+   forme in lettura. Nessuna protezione lato server contro una corsa
+   concorrente vera (due richieste quasi simultanee) — **accettato
+   esplicitamente dall'autore**, stesso livello di robustezza già presente in
+   `assegnaXpCompletamentoNodo` (Fase 3); il rischio pratico (doppio
+   click/tap) è mitigato lato UI (punto 3).
+3. **`public/profilo.html`**: schermata **di SOLO TEST**, non collegata a
+   `index.html` — richiede un profiloId+PIN già esistenti inseriti a mano
+   (nessun login/registrazione reale qui, quello resta un passo a parte,
+   **non ancora pianificato**, vedi "Cosa manca"). Mostra grado (nome +
+   barra XP verso il prossimo), bonus già assegnati, e — se disponibile —
+   un selettore di competenza con conferma che chiama
+   `/profilo/assegna-bonus`. Mitigazione della corsa concorrente: il
+   pulsante si disabilita SUBITO al click, si riabilita solo dopo la
+   risposta del server (verificato dal vivo esaurendo i bonus via API
+   mentre la UI restava aperta con lo stato stantio: errore chiaro, nessuna
+   doppia scrittura).
+4. **Applicazione del bonus al tiro** (`GameSession.calcolaBonusGrado()`):
+   +1 al punteggio se il giocatore ha `profiloId` E la competenza richiesta
+   è tra quelle bonificate, sommato PRIMA del calcolo delle facce del dado
+   di ruolo — **trasversale al ruolo** scelto in QUESTA stanza (nessun
+   collegamento al ruolo, deciso esplicitamente). Corto circuito a 0 senza
+   query se `profiloId` è `null` o `env.DB` manca; un fallimento D1 è
+   isolato in un try/catch (log + 0), stesso principio già seguito
+   nell'assegnazione XP di Fase 3. **Verificato dal vivo** con
+   `wrangler dev` confrontando due tiri reali sulla stessa risposta a tiro
+   di `1836-torino`: `tiro.competenza = 1` senza bonus, `= 2` con un bonus
+   assegnato su quella competenza — differenza di esattamente 1.
+
+Restano dalla Fase 1-3 (invariati, non toccati in questo passo):
+`autenticaGiocatore()`/`autenticaComandante()` e i token in-game (Passo
+19/20), verifica di possesso del `profiloId` dichiarato a `/join` (mai
+implementata, rimandata "se necessaria" dalla Fase 2), schema D1 (Fase 1)
+applicato sia in locale sia in produzione.
+Vedi Passo 24 nel changelog per i dettagli tecnici di ogni pezzo, Passo 23
+per i due punti di design della Fase 3 (migrazione su tabella già popolata,
+gestione errori D1), Passo 21 per le tre scelte di design della Fase 1.
 Con il Passo 20, l'Esploratore ha un primo bilanciamento di classe: dado di
 risoluzione 1d6 (invece del default 1d4) quando tira con la propria
 competenza principale (Cadenza), e un meccanismo generico di bonus
@@ -619,10 +655,141 @@ oggi contiene un `index.html` minimo).
       a `index.js` — il README diceva "fatto" ma la rotta non esiste nel
       codice; corretto in `README.md` il 10/07/2026, segnato qui per non
       perderlo di vista
+- [x] Profilo giocatore persistente, Fase 1 di 4 (schema + registra/accedi) —
+      fatto nel Passo 21
+- [x] Profilo giocatore persistente, Fase 2 di 4 (`profiloId` opzionale
+      collegato a `/join`) — fatto nel Passo 22
+- [x] Profilo giocatore persistente, Fase 3 di 4 (XP automatico al
+      completamento di un nodo) — fatto nel Passo 23
+- [x] Profilo giocatore persistente, Fase 4 di 4 (grado, bonus di
+      competenza, applicazione al tiro) — fatto nel Passo 24, **tutte e 4 le
+      fasi ora complete e pushate su main**
+- [ ] UI reale di login/registrazione in `public/`, collegata al flusso di
+      `/join` — oggi esiste solo `public/profilo.html`, una schermata **di
+      solo test** che assume un profiloId+PIN già noti inseriti a mano,
+      senza login/registrazione vera né collegamento alla schermata di
+      ingresso in stanza. Da pianificare in una sessione dedicata (vedi
+      Passo 24 nel changelog)
+- [ ] Verifica che il `profiloId` dichiarato a `/join` corrisponda a un
+      login realmente avvenuto (rimandata dalla Fase 2, mai implementata)
+- [ ] Uso reale di `bonusScelti`/dei bonus assegnati nel gameplay oltre al
+      +1 al tiro già collegato (es. comunicarlo più chiaramente al
+      giocatore durante la partita, non solo sulla schermata profilo)
 
 ---
 
 ## Changelog tecnico
+
+**12/07/2026 — Passo 24: profilo giocatore persistente, Fase 4 di 4 (grado, bonus, applicazione al tiro) — COMPLETA, pushato su main**
+Nuovi file: `public/profilo.html`, `test-bonus-grado-tiro.mjs`.
+File modificati: `src/lib/profili-giocatore.js`, `src/durable-objects/GameSession.js`,
+`src/index.js`, `test-profili-giocatore.mjs`, `DECISIONI_LA_CORSA_INVISIBILE.md`.
+Commit `09d6140`, pushato su `main` con conferma esplicita dell'autore
+(deploy automatico Cloudflare avviato). Lavoro fatto in 4 passi separati,
+ognuno mostrato in diff/comportamento dal vivo e confermato dall'autore
+prima di passare al successivo (metodo concordato per questo repo).
+
+- **Passo 1 (calcolo grado + lettura stato)**: prima di scrivere codice,
+  chiesta e ottenuta la lista dei 10 nomi di grado (non presente né in
+  `game-config.js` né nel log) — gerarchia reale dei Bersaglieri
+  (Bersagliere → Bersagliere Scelto → Caporale → Caporal Maggiore →
+  Sergente → Sergente Maggiore → Maresciallo → Sottotenente → Tenente →
+  Capitano), scelta esplicitamente dall'autore invece di una inventata.
+  `calcolaGrado(xpTotale, bonusScelti)` in `profili-giocatore.js`:
+  interpretazione della soglia "N×200 XP cumulativi" proposta (salire dal
+  grado N al grado N+1) **poi confermata dall'autore** in un passaggio
+  successivo, non decisa unilateralmente. Bonus disponibili calcolati
+  SEMPRE al volo (traguardi di grado raggiunti − lunghezza di
+  `bonusScelti.assegnati`), mai un contatore ridondante. Nuova
+  `otteniStatoProfilo(db, profiloId, pin)` + endpoint `POST /profilo/stato`:
+  stessa autenticazione profiloId+PIN di `/profilo/accedi` (nessun token di
+  sessione per i profili) — scelta **confermata** dall'autore, resta così.
+  `normalizzaBonusScelti()`: gestisce sia il vecchio `bonus_scelti` bare
+  array `'[]'` (Fase 1, mai popolato con contenuto reale) sia il nuovo
+  `{"assegnati":[...]}`, senza bisogno di nessuna migrazione D1 per questo
+  passo.
+- **Passo 2 (`POST /profilo/assegna-bonus`)**: `assegnaBonusProfilo()`
+  ricalcola SEMPRE da xp_totale/bonus_scelti appena letti da D1, prima di
+  scrivere, se c'è davvero un bonus disponibile — non si fida mai di quanto
+  dichiarato dal client. Competenza validata contro `GAME_CONFIG.competenze`
+  (import in `profili-giocatore.js`, non uno dei 3 file "neutri" del motore
+  — legittimo, stessa fonte unica di verità del resto del gioco). **Punto
+  di design segnalato e accettato esplicitamente dall'autore**: nessuna
+  protezione server-side contro una corsa concorrente vera (due richieste
+  quasi simultanee che leggono entrambe "1 disponibile" e scrivono
+  entrambe) — stesso livello di robustezza già presente in
+  `assegnaXpCompletamentoNodo` (Fase 3); il rischio pratico (doppio
+  click/tap) viene mitigato lato UI nel Passo 3, non lato server.
+- **Passo 3 (`public/profilo.html`)**: prima di costruire la UI, verificato
+  che la premessa "schermata profilo già esistente" (dal riepilogo di
+  inizio sessione) **non corrispondeva allo stato reale del repo** — nessun
+  riferimento a profilo/login/XP in `public/index.html`, né in git log,
+  branch o stash. Segnalato esplicitamente invece di costruire silenziosamente
+  sopra una premessa sbagliata; l'autore ha confermato di voler procedere
+  con una schermata **di solo test** (`public/profilo.html`, pagina
+  standalone, stesso stile visivo di `index.html` ma script/stato separati),
+  che assume un profiloId+PIN già noti inseriti a mano — login/registrazione
+  vera restano esplicitamente FUORI da questo passo, da pianificare a parte.
+  Mostra grado (nome + barra XP verso il prossimo grado, o "grado massimo
+  raggiunto" per il Capitano), bonus già assegnati, e — se disponibile — un
+  selettore di competenza (da `GAME_CONFIG.competenze`) con un bottone
+  "Conferma" dedicato. Mitigazione della corsa concorrente richiesta
+  dall'autore: il bottone si disabilita SUBITO al click (prima della
+  chiamata di rete), si riabilita solo nel `finally` dopo la risposta del
+  server (successo o errore) — **verificato dal vivo con `wrangler dev`**:
+  esaurito un profilo di tutti i bonus disponibili via API mentre la
+  schermata restava aperta con lo stato precedente (stantio), poi cliccato
+  "Conferma": il server ha rifiutato con l'errore già in italiano non
+  tecnico (`"Nessun bonus disponibile da assegnare"`), il bottone si è
+  riabilitato, nessuna doppia scrittura.
+- **Passo 4 (applicazione del bonus al tiro in `GameSession.js`)**: nuova
+  `otteniCompetenzeBonificate(db, profiloId)` in `profili-giocatore.js`
+  (legge `bonus_scelti.assegnati`, nessuna verifica PIN — non è un'azione
+  utente, è un dettaglio interno del calcolo del punteggio). Nuovo metodo
+  `GameSession.calcolaBonusGrado(giocatore, competenzaId)`: corto circuito a
+  0 se `profiloId` è `null` o `env.DB` manca (nessuna query inutile), +1 se
+  la competenza è bonificata, try/catch che isola un vero fallimento D1
+  (log + 0, il tiro procede comunque) — stesso principio già seguito in
+  `assegnaXpNodoCompletato` (Fase 3). Innestato in `applicaRisposta()` con
+  una sola riga (`punteggio += await this.calcolaBonusGrado(...)`), PRIMA
+  del calcolo delle facce del dado di ruolo: **trasversale al ruolo**
+  scelto in QUESTA stanza, mai collegato al ruolo che il giocatore aveva
+  quando ha guadagnato il bonus (deciso esplicitamente dall'autore, non
+  riaperto in fase di implementazione). **Verifica pre-push richiesta
+  esplicitamente dall'autore** (non standard per gli altri passi):
+  ri-mostrato il codice di `calcolaBonusGrado`, il punto esatto d'innesto
+  in `applicaRisposta()` e `otteniCompetenzeBonificate` più volte prima del
+  via libera al push — nessuna modifica emersa da questa verifica, solo
+  conferma.
+- `test-bonus-grado-tiro.mjs` (10 verifiche, tutte passate): stesso pattern
+  di `test-scegli-risoluzione.mjs` (nodo di prova sintetico, ruolo Custode
+  per isolare il bonus dall'override del dado di ruolo) e di
+  `test-xp-completamento-nodo.mjs` (fake D1 con modalità "guasto"). Copre:
+  competenza bonificata (+1 confermato), competenza non bonificata
+  (invariato), giocatore senza `profiloId` (invariato, **e verificato che
+  D1 non viene nemmeno interrogato** — corto circuito), fallimento D1
+  simulato (isolato, tiro comunque completato), binding D1 assente (stesso
+  trattamento).
+- **Verificato dal vivo con `wrangler dev`, non solo nei test simulati**
+  (per tutti e 4 i passi): Passo 1/2/3 con un profilo di prova reale
+  (registrato, XP forzato via query diretta su D1 locale, poi ripulito) —
+  caricamento stato, assegnazione bonus, errori 401/409 mostrati
+  correttamente in UI. Passo 4: confrontati due tiri reali sulla stessa
+  risposta a tiro di `1836-torino` (`decalogo-ginnastica`, ruolo Custode)
+  tra un giocatore con `profiloId`+bonus su Cadenza e uno senza `profiloId`
+  nella stessa stanza-tipo: `tiro.competenza = 2` contro `= 1` — differenza
+  di esattamente 1, come atteso.
+- Rilanciata l'intera suite (21 file) dopo ogni passo: nessuna regressione
+  in nessun momento.
+- **Con questo la Fase 4 di 4 è completa**: il profilo giocatore
+  persistente ha ora schema, login/registrazione via API (Fase 1),
+  collegamento opzionale a `/join` (Fase 2), XP automatico a fine nodo
+  (Fase 3), e grado/bonus di competenza applicati al tiro (Fase 4).
+  **Resta esplicitamente da fare** (non ancora pianificato in dettaglio,
+  vedi "Cosa manca"): una UI reale di login/registrazione in `public/`
+  collegata al flusso di `/join` (oggi solo `public/profilo.html` di test,
+  pagina separata) e la verifica che il `profiloId` dichiarato corrisponda
+  a un login realmente avvenuto (rimandata dalla Fase 2).
 
 **12/07/2026 — Passo 23: profilo giocatore persistente, Fase 3 di 4 (XP al completamento di un nodo)**
 Nuovi file: `migrations/0001_nodi_completati.sql`, `test-xp-completamento-nodo.mjs`.
