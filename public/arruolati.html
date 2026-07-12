@@ -7,9 +7,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
-  /* Placeholder puro (Passo 1 della UI di accesso reale): solo il
-     collegamento/routing da index.html va verificato qui, nessuna logica di
-     login/registrazione -- quella e' il Passo 2, non ancora costruito. */
+  /* Passo 2 della UI di accesso reale: login/registrazione vere (chiamano
+     /profilo/accedi e /profilo/registra, Fase 1, non toccati). Pagina
+     autonoma come public/profilo.html: script/stato propri, nessuna
+     condivisione con index.html. Il collegamento del profiloId a /join
+     resta il Passo 3 -- qui, a successo avvenuto, si mostra solo una
+     conferma, senza salvare nulla in STATO/localStorage di index.html. */
   :root {
     --bg: #15120f;
     --bg-rgb: 21, 18, 15;
@@ -85,6 +88,108 @@
     margin: 0 0 24px;
     font-size: 0.98rem;
   }
+  a.link-torna {
+    display: inline-block;
+    margin-bottom: 22px;
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    text-decoration: none;
+  }
+  a.link-torna:hover { color: var(--brass); }
+
+  .campo { margin-bottom: 18px; }
+  .campo label {
+    display: block;
+    font-family: var(--font-display);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 7px;
+  }
+  input[type=text], input[type=password] {
+    width: 100%;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 1.05rem;
+    padding: 13px 14px;
+    border-radius: 3px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input[type=text]:focus, input[type=password]:focus { border-color: var(--crimson); }
+
+  button.principale {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.85rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: var(--crimson);
+    color: #fff;
+    border: none;
+    padding: 14px 22px;
+    border-radius: 3px;
+    cursor: pointer;
+    width: 100%;
+    transition: background 0.15s, transform 0.1s;
+  }
+  button.principale:hover:not(:disabled) { background: var(--crimson-bright); }
+  button.principale:active:not(:disabled) { transform: scale(0.99); }
+  button.principale:disabled { background: var(--line); color: var(--text-faint); cursor: default; }
+
+  .errore {
+    color: var(--crimson-bright);
+    font-size: 0.88rem;
+    margin-top: 10px;
+    display: none;
+  }
+  .errore.mostra { display: block; }
+
+  /* Selettore Accedi/Registrati: due tab semplici, non un pulsante
+     prominente -- il tema Bersaglieri resta solo nel link "Arruolati" da
+     cui si arriva, qui il copy è deliberatamente neutro (decisione presa). */
+  .tab-selettore {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 24px;
+  }
+  .tab {
+    flex: 1;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted);
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.85rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 10px 0 12px;
+    cursor: pointer;
+  }
+  .tab.attiva { color: var(--brass); border-bottom-color: var(--crimson); }
+  .tab:hover:not(.attiva) { color: var(--text); }
+
+  .form-profilo { display: none; }
+  .form-profilo.attiva { display: block; }
+
+  .successo-box {
+    background: var(--bg-panel);
+    border: 1px solid var(--brass);
+    border-radius: 4px;
+    padding: 20px;
+    margin-bottom: 20px;
+    text-align: center;
+  }
+  .successo-box .testo-successo { font-size: 1.05rem; margin: 0; }
+
   a.torna {
     display: inline-block;
     font-family: var(--font-display);
@@ -108,15 +213,168 @@
     <div class="romanzo">Il ragazzo che correva nel tempo / I passi tornano</div>
   </header>
 
-  <div class="etichetta">Arruolamento</div>
-  <h1 class="grande">In costruzione.</h1>
+  <a class="link-torna" href="/">← Torna alla stanza</a>
+
+  <div class="etichetta">Profilo persistente</div>
+  <h1 class="grande">Arruolati</h1>
   <p class="spiega">
-    Presto qui potrai registrarti o accedere con il tuo profilo persistente,
-    per portare gradi ed esperienza da una sessione all'altra. Per ora, il
-    gioco resta libero: torna alla stanza e unisciti come ospite, senza
-    bisogno di nulla di tutto questo.
+    Accedi con un profilo esistente o registrane uno nuovo, per portare
+    gradi ed esperienza da una sessione all'altra.
   </p>
-  <a class="torna" href="/">Torna alla stanza</a>
+
+  <div class="tab-selettore" id="tab-selettore">
+    <button class="tab attiva" id="tab-accedi" type="button">Accedi</button>
+    <button class="tab" id="tab-registrati" type="button">Registrati</button>
+  </div>
+
+  <section id="form-accedi" class="form-profilo attiva">
+    <div class="campo">
+      <label for="accedi-nome">Nome utente</label>
+      <input type="text" id="accedi-nome" placeholder="Il tuo nome utente" maxlength="30" autocomplete="username" />
+    </div>
+    <div class="campo">
+      <label for="accedi-pin">PIN (6 cifre)</label>
+      <input type="password" id="accedi-pin" maxlength="6" inputmode="numeric" placeholder="••••••" autocomplete="current-password" />
+    </div>
+    <button class="principale" id="btn-accedi">Accedi</button>
+    <div class="errore" id="errore-accedi"></div>
+  </section>
+
+  <section id="form-registrati" class="form-profilo">
+    <div class="campo">
+      <label for="registrati-nome">Nome utente</label>
+      <input type="text" id="registrati-nome" placeholder="Scegli un nome utente" maxlength="30" autocomplete="username" />
+    </div>
+    <div class="campo">
+      <label for="registrati-pin">PIN (6 cifre)</label>
+      <input type="password" id="registrati-pin" maxlength="6" inputmode="numeric" placeholder="••••••" autocomplete="new-password" />
+    </div>
+    <button class="principale" id="btn-registrati">Registrati</button>
+    <div class="errore" id="errore-registrati"></div>
+  </section>
+
+  <section id="schermo-successo" class="form-profilo">
+    <div class="successo-box">
+      <p class="testo-successo" id="testo-successo"></p>
+    </div>
+    <a class="torna" href="/">Torna alla stanza</a>
+  </section>
 </div>
+
+<script>
+async function chiamaAPI(path, opzioni) {
+  const risposta = await fetch(path, opzioni);
+  const corpo = await risposta.json().catch(() => ({}));
+  if (!risposta.ok) {
+    const err = new Error(corpo.errore || "Richiesta non riuscita");
+    err.corpo = corpo;
+    err.status = risposta.status;
+    throw err;
+  }
+  return corpo;
+}
+
+function pinValido(pin) {
+  return /^\d{6}$/.test(pin);
+}
+
+// nome: "accedi" | "registrati" | "successo". Il tab-selettore sparisce solo
+// sulla schermata di successo (non ha senso cambiare modalità dopo esito).
+function mostraSchermo(nome) {
+  document.getElementById("tab-selettore").style.display = nome === "successo" ? "none" : "flex";
+  document.getElementById("tab-accedi").classList.toggle("attiva", nome === "accedi");
+  document.getElementById("tab-registrati").classList.toggle("attiva", nome === "registrati");
+  document.getElementById("form-accedi").classList.toggle("attiva", nome === "accedi");
+  document.getElementById("form-registrati").classList.toggle("attiva", nome === "registrati");
+  document.getElementById("schermo-successo").classList.toggle("attiva", nome === "successo");
+}
+
+document.getElementById("tab-accedi").addEventListener("click", () => mostraSchermo("accedi"));
+document.getElementById("tab-registrati").addEventListener("click", () => mostraSchermo("registrati"));
+
+function mostraSuccesso(testo) {
+  document.getElementById("testo-successo").textContent = testo;
+  mostraSchermo("successo");
+}
+
+// --- Accedi (POST /profilo/accedi) ---
+document.getElementById("btn-accedi").addEventListener("click", async () => {
+  const erroreBox = document.getElementById("errore-accedi");
+  erroreBox.classList.remove("mostra");
+
+  const nome = document.getElementById("accedi-nome").value.trim();
+  const pin = document.getElementById("accedi-pin").value.trim();
+  if (!nome) {
+    erroreBox.textContent = "Scrivi il tuo nome utente.";
+    erroreBox.classList.add("mostra");
+    return;
+  }
+  if (!pinValido(pin)) {
+    erroreBox.textContent = "Il PIN deve essere di 6 cifre numeriche.";
+    erroreBox.classList.add("mostra");
+    return;
+  }
+
+  // Mitigazione corsa concorrente (stesso pattern di profilo.html): il
+  // pulsante si disabilita SUBITO al click, si riabilita solo dopo la
+  // risposta del server (successo o errore).
+  const btn = document.getElementById("btn-accedi");
+  btn.disabled = true;
+  btn.textContent = "Un momento…";
+  try {
+    const { profilo } = await chiamaAPI("/profilo/accedi", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nome, pin }),
+    });
+    mostraSuccesso(`Accesso effettuato, ${profilo.nome}.`);
+  } catch (e) {
+    // Il server restituisce già un messaggio in italiano non tecnico
+    // (MESSAGGI_ERRORE_PROFILO in src/index.js): lo mostriamo direttamente.
+    erroreBox.textContent = (e.corpo && e.corpo.errore) || "Qualcosa è andato storto. Riprova.";
+    erroreBox.classList.add("mostra");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Accedi";
+  }
+});
+
+// --- Registrati (POST /profilo/registra) ---
+document.getElementById("btn-registrati").addEventListener("click", async () => {
+  const erroreBox = document.getElementById("errore-registrati");
+  erroreBox.classList.remove("mostra");
+
+  const nome = document.getElementById("registrati-nome").value.trim();
+  const pin = document.getElementById("registrati-pin").value.trim();
+  if (!nome) {
+    erroreBox.textContent = "Scegli un nome utente.";
+    erroreBox.classList.add("mostra");
+    return;
+  }
+  if (!pinValido(pin)) {
+    erroreBox.textContent = "Il PIN deve essere di 6 cifre numeriche.";
+    erroreBox.classList.add("mostra");
+    return;
+  }
+
+  const btn = document.getElementById("btn-registrati");
+  btn.disabled = true;
+  btn.textContent = "Un momento…";
+  try {
+    const { profilo } = await chiamaAPI("/profilo/registra", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nome, pin }),
+    });
+    mostraSuccesso(`Registrazione completata, ${profilo.nome}.`);
+  } catch (e) {
+    erroreBox.textContent = (e.corpo && e.corpo.errore) || "Qualcosa è andato storto. Riprova.";
+    erroreBox.classList.add("mostra");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Registrati";
+  }
+});
+</script>
 </body>
 </html>
