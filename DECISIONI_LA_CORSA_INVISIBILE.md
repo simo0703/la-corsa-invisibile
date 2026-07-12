@@ -720,6 +720,18 @@ oggi contiene un `index.html` minimo).
       nella proposta di cessione del comando (commit `2e32b12`, unico
       punto reale dove il gioco si rivolge a un giocatore per nome in un
       testo scritto durante la partita)
+- [ ] Messaggio d'errore più preciso per i 401/403 legittimi (punto 2
+      discusso dopo il fix del commit `7d6996f`, non ancora implementato):
+      oggi `chiamaAPIAutenticata()` in `public/index.html` mostra lo stesso
+      "La tua sessione su questo dispositivo non è più valida" per QUALUNQUE
+      401 o 403, sia per un token davvero corrotto sia per un 403 legittimo
+      (es. un giocatore che non è comandante prova ad avviare un nodo o
+      cambiare le risorse — caso normale, non un errore di sessione). Il
+      banner di conferma del commit `7d6996f` copre solo il caso della
+      sovrascrittura silenziosa di identità nella stessa stanza: non tocca
+      né distingue questo caso. Serve differenziare almeno "non sei tu il
+      comandante" (403) da "token non valido/sessione da rifare" (401) con
+      due messaggi separati, senza toccare `GameSession.js`.
 
 ---
 
