@@ -17,6 +17,7 @@ import {
   assegnaBonusProfilo,
   creaSessioneProfilo,
   invalidaSessioneProfilo,
+  otteniGradiProfili,
 } from "./src/lib/profili-giocatore.js";
 
 let falliti = 0;
@@ -54,6 +55,14 @@ function creaDbFinto() {
               return riga ? { ...riga } : null;
             }
             throw new Error(`Query .first() non gestita dal fake DB: ${normalizzata}`);
+          },
+          async all() {
+            if (normalizzata.startsWith("SELECT id, xp_totale FROM giocatori_persistenti WHERE id IN")) {
+              const idsRichiesti = args;
+              const results = righe.filter((r) => idsRichiesti.includes(r.id)).map((r) => ({ id: r.id, xp_totale: r.xp_totale }));
+              return { results, success: true };
+            }
+            throw new Error(`Query .all() non gestita dal fake DB: ${normalizzata}`);
           },
           async run() {
             if (normalizzata.startsWith("INSERT INTO giocatori_persistenti")) {
@@ -414,6 +423,37 @@ console.log("\n--- invalidaSessioneProfilo è idempotente: token già invalidato
   await invalidaSessioneProfilo(db, null);
   await invalidaSessioneProfilo(db, undefined);
   verifica("token null/undefined: nessuna riga toccata, nessuna eccezione", db.sessioni.length === 1);
+}
+
+console.log("\n--- otteniGradiProfili (visibilità del grado nel roster) ---");
+{
+  const db = creaDbFinto();
+  const a = await registraGiocatore(db, "RosterUno", "111222");
+  const b = await registraGiocatore(db, "RosterDue", "222333");
+  const c = await registraGiocatore(db, "RosterTre", "333444");
+  db.impostaXpTotale(a.profilo.id, 0); // grado 1, Bersagliere
+  db.impostaXpTotale(b.profilo.id, 1800); // grado 10, Capitano
+  db.impostaXpTotale(c.profilo.id, 200); // grado 2, Bersagliere Scelto
+
+  const gradi = await otteniGradiProfili(db, [a.profilo.id, b.profilo.id, c.profilo.id]);
+  verifica("grado corretto per il primo profilo (0 XP -> Bersagliere)", gradi[a.profilo.id] === "Bersagliere");
+  verifica("grado corretto per il secondo profilo (1800 XP -> Capitano)", gradi[b.profilo.id] === "Capitano");
+  verifica("grado corretto per il terzo profilo (200 XP -> Bersagliere Scelto)", gradi[c.profilo.id] === "Bersagliere Scelto");
+
+  const conIdRipetutoENullo = await otteniGradiProfili(db, [a.profilo.id, a.profilo.id, null, undefined]);
+  verifica(
+    "id duplicati/null/undefined nell'elenco richiesto non causano errori né duplicati nel risultato",
+    Object.keys(conIdRipetutoENullo).length === 1 && conIdRipetutoENullo[a.profilo.id] === "Bersagliere"
+  );
+
+  const idInesistente = await otteniGradiProfili(db, [999999]);
+  verifica("un id inesistente non compare nel risultato (nessuna eccezione)", Object.keys(idInesistente).length === 0);
+
+  const elencoVuoto = await otteniGradiProfili(db, []);
+  verifica("elenco vuoto restituisce un oggetto vuoto, nessuna query eseguita", Object.keys(elencoVuoto).length === 0);
+
+  const nessunElenco = await otteniGradiProfili(db, undefined);
+  verifica("nessun elenco fornito (undefined): nessun errore, oggetto vuoto", Object.keys(nessunElenco).length === 0);
 }
 
 console.log(`\n${falliti === 0 ? "Tutti i test passati." : `${falliti} test falliti.`}`);

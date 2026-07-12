@@ -6,6 +6,7 @@ import {
   otteniStatoProfilo,
   assegnaBonusProfilo,
   invalidaSessioneProfilo,
+  otteniGradiProfili,
 } from "./lib/profili-giocatore.js";
 
 export { GameSession };
@@ -103,6 +104,24 @@ export default {
       const { profiloToken } = await request.json();
       await invalidaSessioneProfilo(env.DB, profiloToken);
       return Response.json({ successo: true }, { status: 200 });
+    }
+
+    // Gradi del roster (visibilità del grado nella schermata di gioco, non
+    // un dato sensibile: stesso livello di esposizione di nome/ruolo, già
+    // pubblici a tutta la stanza). Nessuna verifica di possesso: riceve un
+    // elenco di profiloId (i giocatori con profilo nel roster della stanza
+    // corrente) e restituisce solo il nome del grado di ciascuno. Un
+    // fallimento D1 non deve bloccare la visualizzazione della stanza (solo
+    // cosmetica): isolato qui, risposta comunque 200 con un elenco vuoto.
+    if (url.pathname === "/profilo/gradi" && request.method === "POST") {
+      const { profiloIds } = await request.json();
+      let gradi = {};
+      try {
+        gradi = await otteniGradiProfili(env.DB, profiloIds);
+      } catch (errore) {
+        console.error("Lettura gradi del roster fallita:", errore);
+      }
+      return Response.json({ gradi }, { status: 200 });
     }
 
     // Fase 4: legge grado/XP/bonus/nodi completati di un profilo esistente.

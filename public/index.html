@@ -381,6 +381,12 @@
     color: var(--text-muted);
   }
   .giocatore-chip strong { color: var(--text); font-weight: 600; }
+  .grado-badge {
+    font-family: var(--font-display);
+    font-size: 0.68rem;
+    letter-spacing: 0.03em;
+    color: var(--brass);
+  }
 
   .nodi-lista {
     display: flex;
@@ -1001,6 +1007,32 @@ function renderRisorse(risorseDiSquadra) {
   }).join("");
 }
 
+// Nomi di grado del roster (visibilità del grado, non un nuovo bonus
+// meccanico -- decisione presa a monte): cache client per profiloId,
+// popolata da aggiornaGradiPerRoster(). Nessun effetto sul gameplay, solo
+// sulla resa visiva di renderGiocatori().
+let GRADI_CACHE = {};
+
+// Recupera i nomi di grado SOLO per i profiloId non ancora in cache (o per
+// tutti, con { forza: true }, quando è appena successo qualcosa che può
+// averli cambiati -- oggi solo il completamento di un nodo, l'unico momento
+// in cui l'XP cambia). Evita una chiamata a ogni tick di polling: il caso
+// comune (nessun profiloId nuovo, nessun nodo appena chiuso) non genera
+// alcuna richiesta di rete.
+async function aggiornaGradiPerRoster(giocatori, { forza = false } = {}) {
+  const idsRoster = [...new Set(giocatori.filter(g => g.profiloId != null).map(g => g.profiloId))];
+  const daRecuperare = forza ? idsRoster : idsRoster.filter(id => !(id in GRADI_CACHE));
+  if (daRecuperare.length === 0) return;
+  try {
+    const { gradi } = await chiamaAPI("/profilo/gradi", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profiloIds: daRecuperare }),
+    });
+    Object.assign(GRADI_CACHE, gradi);
+  } catch (e) {} // cosmetico: un fallimento qui non deve bloccare la resa del roster
+}
+
 function renderGiocatori(giocatori) {
   const lista = document.getElementById("lista-giocatori");
   if (!giocatori.length) {
@@ -1009,7 +1041,11 @@ function renderGiocatori(giocatori) {
   }
   lista.innerHTML = giocatori.map(g => {
     const ruoloInfo = CONFIG.ruoli.find(r => r.id === g.ruolo);
-    return `<div class="giocatore-chip"><strong>${g.nome}</strong> — ${ruoloInfo ? ruoloInfo.nome : g.ruolo}</div>`;
+    // Grado mostrato SOLO per chi ha un profiloId (ospiti: invariato,
+    // nessun grado) -- nome del grado, non solo il numero.
+    const gradoNome = g.profiloId != null ? GRADI_CACHE[g.profiloId] : null;
+    const gradoHtml = gradoNome ? ` <span class="grado-badge">${gradoNome}</span>` : "";
+    return `<div class="giocatore-chip"><strong>${g.nome}</strong> — ${ruoloInfo ? ruoloInfo.nome : g.ruolo}${gradoHtml}</div>`;
   }).join("");
 }
 
@@ -1126,8 +1162,12 @@ function renderSelezioneNodo() {
 // comandante) — stesso rendering per tutti e tre i casi, mai duplicato.
 // `risultato` ha sempre la stessa forma: { session, esito, prossimaRichiesta,
 // esitoNodo, complicazione, tiro, competenzaId }.
-function mostraRisultatoScelta(risultato) {
+async function mostraRisultatoScelta(risultato) {
   renderRisorse(risultato.session.risorseDiSquadra);
+  // Forza il ricalcolo dei gradi SOLO quando un nodo si è appena chiuso:
+  // è l'unico momento in cui l'XP (e quindi il grado) può essere cambiato
+  // per chi ha un profiloId (vedi assegnaXpNodoCompletato in GameSession.js).
+  await aggiornaGradiPerRoster(risultato.session.giocatori, { forza: !!risultato.esitoNodo });
   renderGiocatori(risultato.session.giocatori);
   renderTavolo(risultato.session.giocatori);
   renderSchedaPersonale(risultato.session.giocatori);
@@ -1216,7 +1256,7 @@ function renderRichiesta(richiesta, nodoAttivo) {
           { risposteIndice: indice },
           mostraErroreRisposta
         );
-        mostraRisultatoScelta(risultato);
+        await mostraRisultatoScelta(risultato);
       } catch (e) {
         disabilitaTutto(false);
         if (!e.sessioneNonValida) mostraErroreRisposta("Qualcosa è andato storto. Riprova.");
@@ -1255,7 +1295,7 @@ function renderRichiesta(richiesta, nodoAttivo) {
       }
 
       // Automatica: stessa gestione del click su un bottone.
-      mostraRisultatoScelta(risultato);
+      await mostraRisultatoScelta(risultato);
     } catch (e) {
       if (e.sessioneNonValida) {
         disabilitaTutto(false);
@@ -1617,6 +1657,7 @@ async function aggiornaSchermataGioco() {
 
   aggiornaComandanteDaSessione(session2.giocatori);
   renderRisorse(session2.risorseDiSquadra);
+  await aggiornaGradiPerRoster(session2.giocatori);
   renderGiocatori(session2.giocatori);
   renderTavolo(session2.giocatori);
   renderSchedaPersonale(session2.giocatori);
@@ -1642,6 +1683,10 @@ function avviaPolling() {
       const session = await chiamaAPI(`/api/stanza/${STATO.roomId}/state`);
       aggiornaComandanteDaSessione(session.giocatori);
       renderRisorse(session.risorseDiSquadra);
+      // Cache-aware (vedi aggiornaGradiPerRoster): a ogni tick di polling
+      // (ogni 6s) non genera una richiesta di rete a meno che non sia
+      // apparso un profiloId mai visto prima in questa stanza.
+      await aggiornaGradiPerRoster(session.giocatori);
       renderGiocatori(session.giocatori);
       renderTavolo(session.giocatori);
       renderSchedaPersonale(session.giocatori);

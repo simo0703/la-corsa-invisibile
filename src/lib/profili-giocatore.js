@@ -257,6 +257,32 @@ export function calcolaGrado(xpTotale, bonusScelti) {
   };
 }
 
+// Nomi di grado per un elenco di profili (roster di una stanza, vedi
+// public/index.html): SOLO il nome del grado, calcolato da xp_totale --
+// bonusScelti non serve qui (bonusDisponibili/prossimoTraguardoBonus non
+// sono usati dal chiamante), quindi UNA query in blocco (WHERE id IN (...))
+// invece di una per profilo. Nessuna verifica di possesso/PIN: il grado non
+// è un dato sensibile, stesso livello di esposizione già previsto per
+// nome/ruolo di ogni giocatore nel roster (sempre visibili a tutta la
+// stanza). Ritorna { [profiloId]: gradoNome }, chiavi assenti per id
+// inesistenti -- il chiamante decide come trattarle (nessun grado mostrato).
+export async function otteniGradiProfili(db, profiloIds) {
+  const idsUnici = [...new Set((profiloIds || []).filter((id) => id != null))];
+  if (idsUnici.length === 0) return {};
+
+  const segnaposto = idsUnici.map(() => "?").join(", ");
+  const { results } = await db
+    .prepare(`SELECT id, xp_totale FROM giocatori_persistenti WHERE id IN (${segnaposto})`)
+    .bind(...idsUnici)
+    .all();
+
+  const gradi = {};
+  for (const riga of results) {
+    gradi[riga.id] = calcolaGrado(riga.xp_totale).gradoNome;
+  }
+  return gradi;
+}
+
 // Registra un nuovo profilo. Errori possibili (motivo specifico: qui non
 // c'è rischio di facilitare un tentativo di accesso indebito, a differenza
 // del login): "nome_troppo_corto" | "nome_troppo_lungo" |
