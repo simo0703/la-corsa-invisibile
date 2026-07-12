@@ -66,7 +66,13 @@ export default {
         const status = risultato.errore === "nome_gia_in_uso" ? 409 : 400;
         return Response.json({ errore: MESSAGGI_ERRORE_PROFILO[risultato.errore] }, { status });
       }
-      return Response.json({ profilo: risultato.profilo }, { status: 201 });
+      // token di sessione (30 giorni, vedi sessioni_profilo in schema.sql):
+      // sostituirà il solo profiloId dichiarato al /join -- verifica non
+      // ancora collegata (arriva nel Passo 2), qui solo emesso e restituito.
+      return Response.json(
+        { profilo: risultato.profilo, token: risultato.token, tokenScadenza: risultato.tokenScadenza },
+        { status: 201 }
+      );
     }
 
     if (url.pathname === "/profilo/accedi" && request.method === "POST") {
@@ -75,7 +81,10 @@ export default {
       if (!risultato.successo) {
         return Response.json({ errore: MESSAGGI_ERRORE_PROFILO.credenziali_non_valide }, { status: 401 });
       }
-      return Response.json({ profilo: risultato.profilo }, { status: 200 });
+      return Response.json(
+        { profilo: risultato.profilo, token: risultato.token, tokenScadenza: risultato.tokenScadenza },
+        { status: 200 }
+      );
     }
 
     // Fase 4: legge grado/XP/bonus/nodi completati di un profilo esistente.

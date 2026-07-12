@@ -15,6 +15,7 @@ import {
   normalizzaBonusScelti,
   otteniStatoProfilo,
   assegnaBonusProfilo,
+  creaSessioneProfilo,
 } from "./src/lib/profili-giocatore.js";
 
 let falliti = 0;
@@ -31,7 +32,9 @@ function verifica(descrizione, condizione) {
 // modulo (SELECT ... WHERE nome = ?, INSERT INTO giocatori_persistenti).
 function creaDbFinto() {
   const righe = [];
+  const sessioni = []; // righe di sessioni_profilo: { id, profilo_id, token_hash, scade_il }
   let prossimoId = 1;
+  let prossimoIdSessione = 1;
 
   function prepare(sql) {
     const normalizzata = sql.replace(/\s+/g, " ").trim();
@@ -72,6 +75,11 @@ function creaDbFinto() {
               if (riga) riga.bonus_scelti = bonusSceltiJson;
               return { success: true };
             }
+            if (normalizzata.startsWith("INSERT INTO sessioni_profilo")) {
+              const [profiloId, tokenHash, scadeIl] = args;
+              sessioni.push({ id: prossimoIdSessione++, profilo_id: profiloId, token_hash: tokenHash, scade_il: scadeIl });
+              return { success: true };
+            }
             throw new Error(`Query .run() non gestita dal fake DB: ${normalizzata}`);
           },
         };
@@ -87,7 +95,7 @@ function creaDbFinto() {
     riga.xp_totale = xp;
   }
 
-  return { prepare, impostaXpTotale };
+  return { prepare, impostaXpTotale, sessioni };
 }
 
 console.log("--- validazione formato ---");
@@ -320,6 +328,53 @@ console.log("\n--- assegnaBonusProfilo ---");
   const secondoBonus = await assegnaBonusProfilo(db, profiloId, "246810", "ancoraggio");
   verifica("al grado 10, con un bonus già assegnato a grado 2: il prossimo assegnato è per il grado 4", secondoBonus.bonusAssegnato.grado === 4);
   verifica("bonusDisponibili scende da 4 a 3", secondoBonus.bonusDisponibili === 3);
+}
+
+console.log("\n--- token di sessione: registrazione e login emettono un token ---");
+{
+  const db = creaDbFinto();
+
+  const registrazione = await registraGiocatore(db, "Sentinella", "112233");
+  verifica("la registrazione restituisce un token", typeof registrazione.token === "string" && registrazione.token.length > 0);
+  verifica("il token è esadecimale a 256 bit (64 caratteri)", /^[0-9a-f]{64}$/.test(registrazione.token));
+  verifica("la registrazione restituisce una scadenza (stringa ISO)", typeof registrazione.tokenScadenza === "string" && !Number.isNaN(Date.parse(registrazione.tokenScadenza)));
+  verifica(
+    "la scadenza è ~30 giorni da ora (tolleranza 5 minuti)",
+    Math.abs(Date.parse(registrazione.tokenScadenza) - (Date.now() + 30 * 24 * 60 * 60 * 1000)) < 5 * 60 * 1000
+  );
+  verifica("una riga di sessione è stata scritta in D1", db.sessioni.length === 1);
+  verifica("la riga di sessione è collegata al profilo giusto", db.sessioni[0].profilo_id === registrazione.profilo.id);
+  verifica(
+    "il token salvato in D1 è l'HASH, non il token in chiaro",
+    db.sessioni[0].token_hash !== registrazione.token && db.sessioni[0].token_hash.length === 64
+  );
+
+  const login = await accediGiocatore(db, "Sentinella", "112233");
+  verifica("anche il login restituisce un token", typeof login.token === "string" && login.token.length > 0);
+  verifica("login e registrazione emettono token DIVERSI", login.token !== registrazione.token);
+  verifica(
+    "un secondo login aggiunge una SECONDA riga di sessione, non sovrascrive la prima (multi-dispositivo)",
+    db.sessioni.length === 2
+  );
+
+  const secondoLogin = await accediGiocatore(db, "Sentinella", "112233");
+  verifica("ogni login emette un token nuovo, anche per lo stesso profilo", secondoLogin.token !== login.token);
+  verifica("terza riga di sessione scritta (tre sessioni valide contemporaneamente)", db.sessioni.length === 3);
+}
+
+console.log("\n--- creaSessioneProfilo (funzione di dominio, chiamata anche direttamente) ---");
+{
+  const db = creaDbFinto();
+  const registrazione = await registraGiocatore(db, "Vedetta", "998877");
+  const sessioniPrima = db.sessioni.length;
+
+  const sessione = await creaSessioneProfilo(db, registrazione.profilo.id);
+  verifica("restituisce un token esadecimale a 256 bit", /^[0-9a-f]{64}$/.test(sessione.token));
+  verifica("restituisce una scadenza valida", !Number.isNaN(Date.parse(sessione.scadeIl)));
+  verifica("scrive una nuova riga in sessioni_profilo", db.sessioni.length === sessioniPrima + 1);
+
+  const sessione2 = await creaSessioneProfilo(db, registrazione.profilo.id);
+  verifica("due chiamate consecutive generano token diversi (nessuna collisione prevedibile)", sessione.token !== sessione2.token);
 }
 
 console.log(`\n${falliti === 0 ? "Tutti i test passati." : `${falliti} test falliti.`}`);

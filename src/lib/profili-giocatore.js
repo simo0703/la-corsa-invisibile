@@ -50,6 +50,48 @@ function generaSalt() {
   return bytesAEsadecimale(crypto.getRandomValues(new Uint8Array(16)));
 }
 
+// Token di sessione per il profilo persistente (sostituisce, dal prossimo
+// passo, il solo profiloId dichiarato senza prova di possesso -- vedi
+// sessioni_profilo in schema.sql). 32 byte casuali via crypto.getRandomValues
+// (crittograficamente sicuro, non Math.random): 256 bit di entropia, non
+// serve un salt per proteggerlo da un attacco a dizionario come per il PIN
+// -- non esiste uno spazio di ricerca praticabile per un valore casuale di
+// questa dimensione.
+const DURATA_TOKEN_GIORNI = 30;
+
+function generaTokenSessione() {
+  return bytesAEsadecimale(crypto.getRandomValues(new Uint8Array(32)));
+}
+
+// SHA-256 (non iterato come il PIN: il token è già ad alta entropia, qui
+// l'hash serve solo a evitare che una lettura/fuga del DB esponga token
+// direttamente utilizzabili, non a rallentare un attacco a forza bruta).
+async function hashSha256(testo) {
+  const bit = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(testo));
+  return bytesAEsadecimale(new Uint8Array(bit));
+}
+
+// Crea una nuova sessione per un profilo già autenticato (login o
+// registrazione appena riusciti): genera token+scadenza, salva SOLO l'hash
+// in D1 (mai il token in chiaro, stesso principio del pin_hash), e
+// restituisce il token in chiaro una sola volta, da consegnare al client.
+// Una riga per sessione (non una per profilo): più dispositivi possono
+// avere una sessione valida contemporaneamente, un nuovo login non invalida
+// quelli già aperti altrove -- la sola revoca prevista per ora è il logout
+// esplicito (Passo 3, non ancora costruito).
+export async function creaSessioneProfilo(db, profiloId) {
+  const token = generaTokenSessione();
+  const tokenHash = await hashSha256(token);
+  const scadeIl = new Date(Date.now() + DURATA_TOKEN_GIORNI * 24 * 60 * 60 * 1000).toISOString();
+
+  await db
+    .prepare("INSERT INTO sessioni_profilo (profilo_id, token_hash, scade_il) VALUES (?, ?, ?)")
+    .bind(profiloId, tokenHash, scadeIl)
+    .run();
+
+  return { token, scadeIl };
+}
+
 // PBKDF2-SHA256 via Web Crypto (crypto.subtle): disponibile nativamente sia
 // nel runtime dei Cloudflare Workers sia sotto Node puro (dove girano questi
 // test) -- nessuna dipendenza esterna.
@@ -210,7 +252,8 @@ export async function registraGiocatore(db, nome, pin) {
   // Riletto dopo l'INSERT (invece di comporre l'oggetto a mano) per usare
   // il timestamp generato davvero dal DB, non uno calcolato lato app.
   const riga = await trovaGiocatorePerNome(db, nomePulito);
-  return { successo: true, profilo: rigaAProfilo(riga) };
+  const sessione = await creaSessioneProfilo(db, riga.id);
+  return { successo: true, profilo: rigaAProfilo(riga), token: sessione.token, tokenScadenza: sessione.scadeIl };
 }
 
 // Verifica nome+pin. Errore SEMPRE generico "credenziali_non_valide",
@@ -227,7 +270,8 @@ export async function accediGiocatore(db, nome, pin) {
 
   if (!(await pinCorrisponde(riga, pin))) return { successo: false, errore: "credenziali_non_valide" };
 
-  return { successo: true, profilo: rigaAProfilo(riga) };
+  const sessione = await creaSessioneProfilo(db, riga.id);
+  return { successo: true, profilo: rigaAProfilo(riga), token: sessione.token, tokenScadenza: sessione.scadeIl };
 }
 
 // Legge lo stato completo del profilo (grado, XP, bonus, nodi completati) --

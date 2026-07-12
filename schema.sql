@@ -52,3 +52,26 @@ CREATE TABLE IF NOT EXISTS giocatori_persistenti (
 );
 
 CREATE INDEX IF NOT EXISTS idx_giocatori_persistenti_nome ON giocatori_persistenti(nome);
+
+-- Token di sessione per il profilo persistente (sostituisce il solo
+-- profiloId dichiarato senza prova di possesso -- vedi
+-- src/lib/profili-giocatore.js, creaSessioneProfilo). Tabella dedicata
+-- invece di colonne su giocatori_persistenti: una riga per SESSIONE, non
+-- per profilo, così più dispositivi possono avere un token valido
+-- contemporaneamente senza che un nuovo login invalidi quelli già aperti
+-- altrove -- coerente con "revoca solo tramite logout esplicito" (nessun
+-- meccanismo che sovrascriva un token già emesso). Tabella nuova, non
+-- un'ALTER su una tabella già popolata: CREATE TABLE IF NOT EXISTS basta,
+-- a differenza del caso di nodi_completati (vedi migrations/0001).
+CREATE TABLE IF NOT EXISTS sessioni_profilo (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  profilo_id INTEGER NOT NULL REFERENCES giocatori_persistenti(id),
+  -- Token in chiaro restituito al client una sola volta, alla creazione;
+  -- qui si salva solo l'hash (SHA-256, non iterato: il token è già a 256
+  -- bit di entropia casuale, non un segreto a bassa entropia come il PIN).
+  token_hash TEXT NOT NULL UNIQUE,
+  creato_il TEXT NOT NULL DEFAULT (datetime('now')),
+  scade_il TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessioni_profilo_token_hash ON sessioni_profilo(token_hash);
