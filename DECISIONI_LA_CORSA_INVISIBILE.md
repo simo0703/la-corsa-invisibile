@@ -732,10 +732,112 @@ oggi contiene un `index.html` minimo).
       né distingue questo caso. Serve differenziare almeno "non sei tu il
       comandante" (403) da "token non valido/sessione da rifare" (401) con
       due messaggi separati, senza toccare `GameSession.js`.
+- [ ] Rifinire dal vivo i due esperimenti visivi (texture nodi + sfondo
+      tavolo/badge, entrambi marcati "primo passaggio" nel codice):
+      posizioni di `POSTI_TAVOLO` mai aggiustate dopo averle viste in
+      browser; opacità/leggibilità del velo sulle texture dei pannelli
+      (`.situazione-box`/`.pannello-comandante`) verificata solo via
+      `getComputedStyle`, non ancora con una vera controprova visiva (il
+      pannello di preview usato in sessione è andato in timeout, probabile
+      peso delle immagini); le 5 texture pesano 9-10 MB ciascuna — da
+      comprimere/ridimensionare prima di andare in produzione, specialmente
+      per connessioni mobili (una schermata di gioco con nodo attivo scarica
+      oggi ~19 MB di immagini in tutto).
 
 ---
 
 ## Changelog tecnico
+
+**12/07/2026 — Esperimenti visivi: sfondo/badge del tavolo (mai documentato prima) + texture dei nodi nei pannelli**
+File modificati: `public/index.html`; nuovi asset
+`public/img/texture-{1836-torino,1848-milano,1915-carso-piave,emergenza-civile,missione-moderna}.png`.
+Questa voce documenta **due esperimenti visivi distinti**, marcati entrambi
+"ESPERIMENTO VISIVO (primo passaggio, da valutare)" nel codice: il primo
+(sfondo tavolo + badge dei ruoli) era già stato scritto e verificato in una
+sessione precedente ma non era mai stato registrato qui — lacuna notata
+durante un audit di giocabilità del 12/07/2026, colmata ora insieme al
+secondo esperimento appena fatto, perché condividono lo stesso principio
+(continuità visiva senza dover disegnare nuove illustrazioni) e lo stesso
+pattern tecnico (velo semi-trasparente scuro sopra un'immagine, leggibilità
+del testo prioritaria).
+- **Sfondo tavolo + badge dei ruoli** (già in `public/index.html`, non
+  toccato in questo passaggio, solo documentato ora): `tavolo-sfondo.png`
+  come `background-image` di `#schermo-gioco` e `.tavolo-vista`
+  (`aspect-ratio: 2816/1536` per allineare le percentuali di `POSTI_TAVOLO`
+  ai pixel reali dell'immagine); un badge per ruolo
+  (`/img/badge-${ruolo}.png`) renderizzato per ogni posto occupato in
+  `renderTavolo()`. Il velo di leggibilità è `.contenuto-scuro`
+  (`rgba(var(--bg-rgb), 0.75)`), un contenitore separato sopra l'immagine,
+  non un effetto sullo stesso elemento. `POSTI_TAVOLO` marca esplicitamente
+  le percentuali dei posti come una stima da aggiustare guardando il
+  risultato vero in browser — non ancora rifinite.
+- **Texture dei nodi nei pannelli** (nuovo in questo passaggio): obiettivo
+  ridurre lo stacco visivo tra l'immagine curata del tavolo e i pannelli
+  sottostanti (`.situazione-box`, `.pannello-comandante`), rimasti
+  rettangoli scuri anonimi. 5 nuove texture, una per nodo, rinominate
+  manualmente dall'autore in `public/img/` — **trovata e corretta prima di
+  scrivere codice** una doppia estensione su tutti e 5 i file
+  (`texture-1836-torino.png.png` ecc., probabilmente Esplora File che
+  aggiungeva `.png` a un nome che lo includeva già): rinominati su
+  indicazione esplicita dell'autore (Opzione 1 tra due proposte) per
+  restare coerenti con `badge-*.png`/`tavolo-sfondo.png` già presenti.
+  - Nodo attivo → texture: nessuna mappa da mantenere, stessa convenzione
+    già in uso per i badge (`/img/texture-${nodoId}.png`, come
+    `/img/badge-${ruolo}.png`).
+  - **Dove esattamente applicare la texture** (unico punto tecnico non
+    ovvio dal codice, verificato prima di scrivere): NON sul contenitore
+    `#area-nodo`/`#pannello-comandante` (div vuoti che si limitano a
+    ospitare l'HTML renderizzato), ma sulle classi con lo sfondo solido
+    vero e proprio (`.situazione-box`, `.pannello-comandante`) — altrimenti
+    la texture resterebbe nascosta dietro lo sfondo opaco esistente.
+  - **Nuova variabile CSS `--texture-nodo-attivo`**, impostata da
+    `applicaTexturaNodo(nodoId)` su `#schermo-gioco` (elemento stabile, mai
+    ricreato) invece che sugli elementi che vengono rigenerati a ogni
+    render (`.situazione-box` viene ricreato da ogni `renderRichiesta()`):
+    ereditarietà CSS invece di dover riapplicare lo stile manualmente a
+    ogni render. Chiamata sia in `aggiornaSchermataGioco()` sia nel ciclo
+    di polling (ogni 6s), stessa cadenza con cui si aggiornano già
+    risorse/roster/pannello del comandante.
+  - **Velo di leggibilità**: variante dello stesso principio di
+    `.contenuto-scuro` (`rgba(var(--bg-rgb), ...)`), ma applicata come
+    `linear-gradient` a due fermate identiche nello stesso
+    `background-image` invece che su un contenitore separato — scelta per
+    non dover restrutturare il markup di `.situazione-box`/
+    `.pannello-comandante` in un "primo passaggio". Opacità 0.82 (contro lo
+    0.75 di `.contenuto-scuro`): questi pannelli stanno già sopra quel
+    velo, serviva qualcosa in più per proteggere il testo su una texture
+    potenzialmente più "rumorosa" di un colore piatto. Senza nodo attivo, il
+    gradiente resta comunque presente ma con due fermate identiche (tinta
+    piatta): visivamente equivalente al vecchio `background: var(--bg-panel)`
+    solido, nessuna regressione per lo stato "nessun nodo avviato ancora".
+  - **Scope deliberatamente ristretto**: solo `.situazione-box` e
+    `.pannello-comandante`, non `.esito-box`/`.esito-finale-box` (mostrati
+    dopo una scelta/alla fine del nodo) né i singoli bottoni delle
+    risposte (`button.risposta`, riusato anche fuori dal contesto del nodo,
+    es. nella proposta di cessione del comando — toccarlo avrebbe avuto
+    effetti collaterali fuori scope).
+  - Verificato dal vivo con `wrangler dev` su 3 nodi (`1836-torino`,
+    `1915-carso-piave`, `missione-moderna`, incluso un cambio nodo dal
+    pannello del comandante): `--texture-nodo-attivo` e i
+    `background-image` calcolati risultano corretti in tutti e tre i casi
+    (via `getComputedStyle`, non solo lettura del codice). **Non è stato
+    possibile ottenere una conferma visiva via screenshot**: il pannello di
+    preview è andato ripetutamente in timeout, verosimilmente per il peso
+    delle immagini `cover` coinvolte (vedi punto sotto) — verifica quindi
+    fatta sul DOM reale in esecuzione, non su un mock, ma senza controprova
+    visiva diretta.
+  - **Osservazione non richiesta, segnalata per completezza**: le 5 texture
+    pesano 9-10 MB ciascuna (`tavolo-sfondo.png` da solo pesa già 8,8 MB) —
+    con `.situazione-box`/`.pannello-comandante` visibili insieme al tavolo,
+    una schermata di gioco con nodo attivo scarica ~19 MB di immagini.
+    Nessuna ottimizzazione (compressione, ridimensionamento) fatta in
+    questo passaggio: non richiesta, fuori scope per un "primo passaggio
+    esperimento" — ma da tenere presente prima di andare in produzione,
+    specialmente su connessioni mobili.
+- Rilanciata l'intera suite di test (23 file): nessuna regressione (nessun
+  file server-side toccato in questo passaggio).
+
+---
 
 **12/07/2026 — Fix: secondo /join nella stessa stanza non sovrascrive più l'identità in silenzio**
 File modificati: `public/index.html`, nuovo `test-identita-client.mjs`.

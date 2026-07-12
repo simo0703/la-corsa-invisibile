@@ -429,8 +429,26 @@
     font-style: italic;
   }
 
+  /* ESPERIMENTO VISIVO (primo passaggio, da valutare): texture del nodo
+     attivo come sfondo, dietro allo stesso velo scuro semi-trasparente già
+     usato per tavolo-sfondo.png (rgba(var(--bg-rgb), ...) -- qui più opaco,
+     0.82 invece di 0.75, perché questo box sta già sopra il velo di
+     .contenuto-scuro e il testo dentro va protetto due volte). La variabile
+     --texture-nodo-attivo è impostata da applicaTexturaNodo() su
+     #schermo-gioco (un solo elemento stabile, mai ricreato) così arriva per
+     ereditarietà anche a .situazione-box, che invece viene rigenerato a
+     ogni renderRichiesta() -- niente da riapplicare manualmente a ogni
+     render. Senza nodo attivo, var(...) ricade su "none": il gradiente
+     resta comunque (due fermate dello stesso colore = tinta piatta,
+     visivamente equivalente al vecchio "background: var(--bg-panel)"
+     solido prima di questo esperimento). */
   .situazione-box {
-    background: var(--bg-panel);
+    background-color: var(--bg-panel);
+    background-image:
+      linear-gradient(rgba(var(--bg-rgb), 0.82), rgba(var(--bg-rgb), 0.82)),
+      var(--texture-nodo-attivo, none);
+    background-size: cover;
+    background-position: center;
     border-left: 3px solid var(--crimson);
     border-radius: 0 4px 4px 0;
     padding: 18px 20px;
@@ -596,8 +614,21 @@
   button.secondario:hover { background: rgba(176,141,87,0.1); }
 
   /* --- Pannello del comandante --- */
+  /* ESPERIMENTO VISIVO (primo passaggio, da valutare): stessa texture del
+     nodo attivo di .situazione-box sopra, stesso velo, stessa variabile
+     --texture-nodo-attivo -- vedi il commento lì per i dettagli. Nota: il
+     div con id="pannello-comandante" in HTML è solo un contenitore vuoto
+     (il suo innerHTML viene sostituito da renderPannelloComandante()); la
+     texture va su QUESTA classe (l'elemento .pannello-comandante vero e
+     proprio, con bordo crimson), non sul contenitore -- altrimenti
+     resterebbe nascosta dietro lo sfondo solido di questo elemento. */
   .pannello-comandante {
-    background: var(--bg-panel);
+    background-color: var(--bg-panel);
+    background-image:
+      linear-gradient(rgba(var(--bg-rgb), 0.82), rgba(var(--bg-rgb), 0.82)),
+      var(--texture-nodo-attivo, none);
+    background-size: cover;
+    background-position: center;
     border: 1px solid var(--crimson);
     border-radius: 4px;
     padding: 18px 20px;
@@ -1218,6 +1249,23 @@ function renderTavolo(giocatori) {
   }).join("");
 }
 
+// ESPERIMENTO VISIVO (primo passaggio, da valutare): imposta la variabile
+// CSS --texture-nodo-attivo su #schermo-gioco (un solo elemento stabile,
+// mai ricreato) in base al nodo attivo nella sessione -- .situazione-box e
+// .pannello-comandante la ereditano e la usano come sfondo (vedi i commenti
+// su quelle due regole). Nome file convenzione uguale ai badge dei ruoli
+// (`/img/texture-${nodoId}.png`, come `/img/badge-${ruolo}.png` sopra):
+// nessuna mappa nodoId -> file da mantenere a parte. Senza nodo attivo
+// (stanza appena creata, nessun /avvia-nodo ancora chiamato) la variabile
+// torna "none": i due pannelli restano nel loro aspetto solido di sempre.
+function applicaTexturaNodo(nodoId) {
+  const schermoGioco = document.getElementById("schermo-gioco");
+  schermoGioco.style.setProperty(
+    "--texture-nodo-attivo",
+    nodoId ? `url('/img/texture-${nodoId}.png')` : "none"
+  );
+}
+
 // Sempre visibile: le 5 competenze del giocatore corrente. Legge i dati
 // dalla sessione live (giocatori) invece che solo da STATO.competenze,
 // così resta corretta anche per chi si è unito prima di questo campo
@@ -1801,6 +1849,7 @@ async function aggiornaSchermataGioco() {
   renderSchedaPersonale(session2.giocatori);
   renderPannelloComandante(session2);
   renderPromptCessione(session2);
+  applicaTexturaNodo(session2.nodoAttivo);
 
   if (!session2.nodoAttivo) {
     renderSelezioneNodo();
@@ -1830,6 +1879,7 @@ function avviaPolling() {
       renderSchedaPersonale(session.giocatori);
       renderPannelloComandante(session);
       renderPromptCessione(session);
+      applicaTexturaNodo(session.nodoAttivo);
 
       // Se questo giocatore stava aspettando che il comandante risolvesse
       // il suo testo libero ambiguo, e non c'è più nulla in attesa,
