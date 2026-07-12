@@ -1,9 +1,10 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 12 luglio 2026 (fine sessione, dopo il Passo 24 — profilo
-giocatore persistente, Fase 4 di 4 COMPLETA: grado, bonus di competenza,
-schermata di test e applicazione del bonus al tiro; commit 09d6140
-pushato su main, deploy automatico Cloudflare avviato)
+Aggiornato al: 12 luglio 2026 (fine sessione, dopo il ciclo di lavoro
+successivo alla Fase 4: UI di accesso reale — 4 passi, sistema di token
+di sessione per il profilo — 3 passi, riconoscimento del grado nel
+gameplay — 2 punti. Tutti e tre i filoni COMPLETI e pushati su main,
+ultimo commit `2e32b12`, deploy automatico Cloudflare avviato)
 
 Questo file serve a non perdersi tra una sessione di lavoro e l'altra: raccoglie cosa
 è stato deciso, cosa è ancora un'ipotesi da confermare, e cosa manca. Va aggiornato
@@ -16,66 +17,93 @@ ruolo) che non risultano loggate qui sotto come Passi numerati — la sessione c
 ha scritte non ha aggiornato questo file. Non ricostruito retroattivamente in questa
 sessione (fuori scope); se serve, va fatto a parte guardando `git log`.
 
-**Punto di ripresa**: con il Passo 24 si chiude la Fase 4 di 4 (ultima) del
-profilo giocatore persistente — **pushato su main (commit `09d6140`), deploy
-automatico Cloudflare avviato**. Quattro pezzi fatti uno alla volta, con
-conferma esplicita dell'autore tra un passo e l'altro (nessun commit
-intermedio, un solo commit a fine fase):
+**Punto di ripresa**: chiuso l'intero ciclo di lavoro apertosi dopo la Fase 4
+del profilo persistente (Passo 24) — **tre filoni indipendenti, tutti
+completi e pushati su main**:
 
-1. **Calcolo del grado** (`calcolaGrado(xpTotale, bonusScelti)` in
-   `profili-giocatore.js`): 10 gradi, gerarchia reale dei Bersaglieri
-   (Bersagliere → Bersagliere Scelto → Caporale → Caporal Maggiore →
-   Sergente → Sergente Maggiore → Maresciallo → Sottotenente → Tenente →
-   Capitano). Soglia **confermata dall'autore**: N×200 XP cumulativi per
-   salire dal grado N al grado N+1 (grado 1/Bersagliere a 0 XP, grado
-   10/Capitano a 1800 XP). Bonus di competenza ogni 2 gradi (2,4,6,8,10 →
-   5 bonus massimi), calcolato SEMPRE al volo confrontando i traguardi
-   raggiunti con `bonusScelti.assegnati` — mai un contatore ridondante.
-   Endpoint `POST /profilo/stato`: **confermato** che resta senza token di
-   sessione, si riautentica con profiloId+PIN a ogni lettura (stesso
-   trattamento di `/profilo/accedi`).
-2. **`POST /profilo/assegna-bonus`**: ricalcola SEMPRE server-side, da
-   xp_totale/bonus_scelti appena letti da D1, se c'è davvero un bonus
-   disponibile prima di scrivere — non si fida mai del client. `bonus_scelti`
-   passa dal bare array `'[]'` (Fase 1, mai popolato con contenuto reale
-   finora) all'oggetto `{"assegnati":[...]}`: nessuna migrazione D1
-   necessaria, `normalizzaBonusScelti()` interpreta correttamente entrambe le
-   forme in lettura. Nessuna protezione lato server contro una corsa
-   concorrente vera (due richieste quasi simultanee) — **accettato
-   esplicitamente dall'autore**, stesso livello di robustezza già presente in
-   `assegnaXpCompletamentoNodo` (Fase 3); il rischio pratico (doppio
-   click/tap) è mitigato lato UI (punto 3).
-3. **`public/profilo.html`**: schermata **di SOLO TEST**, non collegata a
-   `index.html` — richiede un profiloId+PIN già esistenti inseriti a mano
-   (nessun login/registrazione reale qui, quello resta un passo a parte,
-   **non ancora pianificato**, vedi "Cosa manca"). Mostra grado (nome +
-   barra XP verso il prossimo), bonus già assegnati, e — se disponibile —
-   un selettore di competenza con conferma che chiama
-   `/profilo/assegna-bonus`. Mitigazione della corsa concorrente: il
-   pulsante si disabilita SUBITO al click, si riabilita solo dopo la
-   risposta del server (verificato dal vivo esaurendo i bonus via API
-   mentre la UI restava aperta con lo stato stantio: errore chiaro, nessuna
-   doppia scrittura).
-4. **Applicazione del bonus al tiro** (`GameSession.calcolaBonusGrado()`):
-   +1 al punteggio se il giocatore ha `profiloId` E la competenza richiesta
-   è tra quelle bonificate, sommato PRIMA del calcolo delle facce del dado
-   di ruolo — **trasversale al ruolo** scelto in QUESTA stanza (nessun
-   collegamento al ruolo, deciso esplicitamente). Corto circuito a 0 senza
-   query se `profiloId` è `null` o `env.DB` manca; un fallimento D1 è
-   isolato in un try/catch (log + 0), stesso principio già seguito
-   nell'assegnazione XP di Fase 3. **Verificato dal vivo** con
-   `wrangler dev` confrontando due tiri reali sulla stessa risposta a tiro
-   di `1836-torino`: `tiro.competenza = 1` senza bonus, `= 2` con un bonus
-   assegnato su quella competenza — differenza di esattamente 1.
+1. **UI di accesso reale** (4 passi, commit `04a8b76`→`aa55517`→`407d132`→`47d1e0b`):
+   - **Passo 1** (`04a8b76`): link discreto "Arruolati" su schermo-codice e
+     schermo-join + pagina placeholder `public/arruolati.html` — solo
+     routing/scheletro, nessuna logica di login. **Premessa verificata prima
+     di implementare**: il repo non aveva (e non ha tuttora) un vero "codice
+     stanza" digitabile a mano — solo link con roomId — quindi "codice
+     stanza" nella richiesta originale è stato interpretato come il
+     meccanismo già esistente, non una nuova UI di inserimento manuale.
+   - **Passo 2** (`aa55517`): sostituito il placeholder con login/
+     registrazione veri (tab Accedi/Registrati, chiamano `/profilo/accedi`
+     e `/profilo/registra` di Fase 1, non toccati).
+   - **Passo 3** (`407d132`): dopo login/registrazione, il profiloId veniva
+     salvato in `localStorage` e passato al `/join` se presente — **poi
+     superato dal sistema di token al punto 2 sotto** (oggi si passa un
+     token, non più il profiloId puro). Percorso ospite invariato in tutti
+     e 4 i passi.
+   - **Passo 4** (`47d1e0b`): invito post-sessione ("Vuoi conservare questo
+     grado? Arruolati...") agganciato alla schermata di fine nodo esistente
+     (`.esito-finale-box`), solo per ospiti. **Premessa verificata e
+     corretta durante il lavoro**: non esisteva (e non esiste tuttora) un
+     numero di XP/grado visibile durante la partita — l'invito resta
+     narrativo, senza cifra precisa, agganciato al momento concettuale
+     "fine nodo" invece che a un contatore reale.
 
-Restano dalla Fase 1-3 (invariati, non toccati in questo passo):
-`autenticaGiocatore()`/`autenticaComandante()` e i token in-game (Passo
-19/20), verifica di possesso del `profiloId` dichiarato a `/join` (mai
-implementata, rimandata "se necessaria" dalla Fase 2), schema D1 (Fase 1)
-applicato sia in locale sia in produzione.
-Vedi Passo 24 nel changelog per i dettagli tecnici di ogni pezzo, Passo 23
-per i due punti di design della Fase 3 (migrazione su tabella già popolata,
-gestione errori D1), Passo 21 per le tre scelte di design della Fase 1.
+2. **Sistema di token di sessione per il profilo** (3 passi, commit
+   `81eb548`→`32505c9`→`aad64ca`) — **chiude il rischio di impersonazione**
+   segnalato come nota aperta dopo il Passo 3 sopra (fino ad allora, un
+   profiloId bastava dichiararlo al `/join`, senza prova di possesso):
+   - **Passo 1** (`81eb548`): nuova tabella `sessioni_profilo` (**una riga
+     per sessione, non per profilo**: più dispositivi possono restare
+     collegati insieme, un nuovo login non invalida gli altri). Token da
+     256 bit (`crypto.getRandomValues`), salvato in D1 SOLO come hash
+     SHA-256, scadenza 30 giorni. `/profilo/registra` e `/profilo/accedi`
+     restituiscono ora anche `token`+`tokenScadenza`.
+   - **Passo 2** (`32505c9`): `/join` accetta un `profiloToken` (nome scelto
+     per non confondersi col token in-partita già esistente sullo stesso
+     endpoint — **punto di formato chiarito con l'autore prima di
+     implementare**) e ne ricava il profiloId verificandolo contro
+     `sessioni_profilo` — un profiloId dichiarato a parte, senza token
+     valido, viene SEMPRE ignorato da qui in poi. Fallback silenzioso a
+     ospite per token assente/scaduto/inesistente o un fallimento D1
+     isolato: il join non si blocca mai.
+   - **Passo 3** (`aad64ca`): migrazione client (`arruolati.html` salva
+     nome+profiloToken+scadenza, mai più il profiloId puro, mai il PIN) +
+     nuovo `POST /profilo/logout` che invalida la sessione anche
+     server-side (cancella la riga, non solo `localStorage`); scadenza
+     controllata SOLO lato client al caricamento, senza chiamare il server
+     preventivamente.
+   - **Finestra temporanea nota, poi richiusa**: tra il push del Passo 2 e
+     quello del Passo 3, il client (ancora sul vecchio `profiloId`) veniva
+     silenziosamente ignorato dal server aggiornato — segnalato all'autore
+     subito dopo il Passo 2, richiuso appena il Passo 3 è stato pushato.
+
+3. **Riconoscimento del grado nel gameplay** (2 punti, commit `ec1fb5b`,
+   `2e32b12`) — **solo visualizzazione, nessun nuovo effetto meccanico**:
+   il bonus +1/competenza di Fase 4 resta l'unico effetto numerico del
+   grado, per non far pesare il divario tra veterani e pubblico nuovo
+   (decisione presa esplicitamente, non riaperta):
+   - **Badge nel roster** (`ec1fb5b`): nuovo `POST /profilo/gradi` (una
+     query in blocco per un elenco di profiloId, riusa `calcolaGrado` già
+     esistente — nessuna duplicazione), cache client per profiloId
+     (`GRADI_CACHE`) per non interrogare il server a ogni tick di polling
+     (6s): solo su profiloId mai visti prima, o forzato subito dopo la
+     chiusura di un nodo (unico momento in cui l'XP cambia).
+   - **Prefisso di grado nel nome** (`2e32b12`): applicato SOLO nella
+     proposta di cessione del comando — **premessa verificata prima di
+     implementare**: né il Cronista né l'interprete di testo libero
+     compongono oggi testo con il nome del giocatore (solo con `{ruolo}`),
+     quindi quello era l'UNICO punto reale dove il gioco si rivolge a un
+     giocatore per nome in un testo scritto durante la partita.
+     `storicoScelte` (l'altro candidato considerato) non è mai mostrato in
+     UI, solo nello stato interno della stanza: scartato. Nessun titolo per
+     grado base "Bersagliere" o per ospiti (scelta fatta e segnalata
+     all'autore: un titolo per chiunque abbia un profilo, anche a XP zero,
+     segnalerebbe solo "ha un profilo", non un progresso reale).
+
+Con questo, tutti e tre i punti lasciati aperti dopo il Passo 24 (UI di
+login/registrazione, verifica di possesso del profiloId, uso più ampio dei
+bonus nel gameplay) sono chiusi — vedi "Cosa manca" sotto.
+Restano dalla Fase 1-3 del profilo persistente (invariati, non toccati in
+questo ciclo): `autenticaGiocatore()`/`autenticaComandante()` e i token
+in-game (Passo 19/20, concettualmente distinti dal `profiloToken` sopra),
+schema D1 applicato sia in locale sia in produzione.
 Con il Passo 20, l'Esploratore ha un primo bilanciamento di classe: dado di
 risoluzione 1d6 (invece del default 1d4) quando tira con la propria
 competenza principale (Cadenza), e un meccanismo generico di bonus
@@ -664,21 +692,175 @@ oggi contiene un `index.html` minimo).
 - [x] Profilo giocatore persistente, Fase 4 di 4 (grado, bonus di
       competenza, applicazione al tiro) — fatto nel Passo 24, **tutte e 4 le
       fasi ora complete e pushate su main**
-- [ ] UI reale di login/registrazione in `public/`, collegata al flusso di
-      `/join` — oggi esiste solo `public/profilo.html`, una schermata **di
-      solo test** che assume un profiloId+PIN già noti inseriti a mano,
-      senza login/registrazione vera né collegamento alla schermata di
-      ingresso in stanza. Da pianificare in una sessione dedicata (vedi
-      Passo 24 nel changelog)
-- [ ] Verifica che il `profiloId` dichiarato a `/join` corrisponda a un
-      login realmente avvenuto (rimandata dalla Fase 2, mai implementata)
-- [ ] Uso reale di `bonusScelti`/dei bonus assegnati nel gameplay oltre al
-      +1 al tiro già collegato (es. comunicarlo più chiaramente al
-      giocatore durante la partita, non solo sulla schermata profilo)
+- [x] UI reale di login/registrazione in `public/`, collegata al flusso di
+      `/join` — fatto in 4 passi (commit `04a8b76`, `aa55517`, `407d132`,
+      `47d1e0b`): link "Arruolati" + placeholder, schermate vere di
+      Accedi/Registrati in `arruolati.html`, collegamento al `/join`
+      (poi migrato al sistema di token, vedi sotto), invito post-sessione
+      per gli ospiti agganciato alla fine del nodo
+- [x] Verifica che il `profiloId` dichiarato a `/join` corrisponda a un
+      login realmente avvenuto — fatto in 3 passi con un sistema di token
+      di sessione dedicato (commit `81eb548`, `32505c9`, `aad64ca`): tabella
+      `sessioni_profilo`, token da 256 bit salvato come hash SHA-256,
+      scadenza 30 giorni, `/join` verifica un `profiloToken` e ne ricava il
+      profiloId — un profiloId dichiarato a parte non viene più accettato.
+      Logout esplicito (`POST /profilo/logout`) invalida anche server-side
+- [x] Uso reale di `bonusScelti`/dei bonus assegnati nel gameplay oltre al
+      +1 al tiro già collegato — fatto come riconoscimento NARRATIVO/
+      VISIVO del grado, non un nuovo effetto meccanico (decisione presa
+      esplicitamente): badge grado nel roster della stanza (commit
+      `ec1fb5b`, nuovo `POST /profilo/gradi`) e prefisso di grado nel nome
+      nella proposta di cessione del comando (commit `2e32b12`, unico
+      punto reale dove il gioco si rivolge a un giocatore per nome in un
+      testo scritto durante la partita)
 
 ---
 
 ## Changelog tecnico
+
+**12/07/2026 — Riconoscimento del grado nel gameplay (2 punti, dopo il sistema di token) — COMPLETO, pushato su main**
+Commit: `ec1fb5b` (badge nel roster), `2e32b12` (prefisso nel nome).
+File modificati: `public/index.html`, `src/index.js`, `src/lib/profili-giocatore.js`,
+`test-profili-giocatore.mjs`.
+- Solo visualizzazione: **nessun nuovo effetto meccanico** legato al grado —
+  il bonus +1/competenza di Fase 4 resta l'unico effetto numerico, decisione
+  presa esplicitamente per non far pesare il divario tra veterani e
+  pubblico nuovo (il gioco è pensato anche per promozione a sconosciuti).
+- **Badge nel roster** (`ec1fb5b`): nuovo `otteniGradiProfili(db,
+  profiloIds)` in `profili-giocatore.js` — una query in blocco (`WHERE id
+  IN (...)`), riusa `calcolaGrado` già esistente (bonusScelti non serve,
+  solo `gradoNome`). Nuovo `POST /profilo/gradi`, nessuna verifica di
+  possesso: il grado non è più sensibile di nome/ruolo, già pubblici a
+  tutta la stanza. Lato client, `GRADI_CACHE` (per profiloId) evita una
+  richiesta a ogni tick di polling (6s): si recuperano solo i profiloId
+  mai visti, tranne subito dopo la chiusura di un nodo (forzato, unico
+  momento in cui l'XP cambia). Verificato dal vivo: un profilo a 1800 XP
+  mostra "— Esploratore Capitano" nel roster, un ospite nessun grado,
+  nessuna nuova richiesta di rete su un tick di polling atteso dal vivo.
+- **Prefisso di grado nel nome** (`2e32b12`): **premessa verificata prima
+  di implementare** (richiesta dall'autore esplicitamente prima di
+  scegliere il punto d'innesto) — né il Cronista (`componiNarrazione`,
+  unico placeholder valorizzato oggi è `{ruolo}`) né l'interprete di testo
+  libero compongono mai testo con il nome del giocatore. L'UNICO punto
+  reale è stato quindi la proposta di cessione del comando in
+  `public/index.html` (`nomeProponente`). Nuova funzione client
+  `nomeConGrado(giocatore)`: "Grado Nome" se il giocatore ha un profiloId
+  E il grado è sopra il base; altrimenti solo "Nome" — nessun titolo per
+  grado base "Bersagliere" o per ospiti, scelta fatta e segnalata
+  all'autore (un titolo per chiunque abbia un profilo, anche a XP zero,
+  segnalerebbe solo "ha un profilo", non un progresso reale).
+  `storicoScelte` (altro candidato considerato, richiesto esplicitamente
+  di verificare) **non è mai mostrato in UI**, solo nello stato interno
+  della stanza: scartato, come da istruzione se risultava un dettaglio
+  solo tecnico. Verificato dal vivo (due tab dello stesso browser
+  condividono `localStorage`, stesso limite già noto: verificato invece
+  chiamando `renderPromptCessione` direttamente in console con dati
+  reali) tre casi: profilo graduato → "Capitano Rossi vuole cederti il
+  comando"; ospite → invariato; profilo a grado base → invariato.
+- Rilanciata l'intera suite di test dopo entrambi i punti: nessuna
+  regressione.
+
+**12/07/2026 — Token di sessione per il profilo persistente (3 passi) — COMPLETO, pushato su main**
+Commit: `81eb548` (Passo 1: emissione e storage), `32505c9` (Passo 2:
+verifica al `/join`), `aad64ca` (Passo 3: client + logout).
+Nuovi file: `test-join-profilo-token.mjs`.
+File modificati: `schema.sql`, `src/lib/profili-giocatore.js`,
+`src/durable-objects/GameSession.js`, `src/index.js`, `public/arruolati.html`,
+`public/index.html`, `test-profili-giocatore.mjs`, `test-game-session.mjs`,
+`test-xp-completamento-nodo.mjs`, `test-bonus-grado-tiro.mjs`.
+Chiude il rischio di impersonazione segnalato come nota aperta dopo il
+Passo 3 dell'UI di accesso (sotto): fino ad allora un profiloId dichiarato
+al `/join` non richiedeva alcuna prova di possesso.
+- **Passo 1**: struttura dati proposta e scelta con una riga di
+  motivazione (come richiesto), non decisa unilateralmente: tabella
+  dedicata `sessioni_profilo` invece di colonne su `giocatori_persistenti`
+  — una riga per SESSIONE, non per profilo, così più dispositivi possono
+  restare collegati insieme e un nuovo login non invalida gli altri
+  (coerente con "revoca solo tramite logout esplicito"). Token da 256 bit
+  (`crypto.getRandomValues`, non `Math.random`), salvato in D1 SOLO come
+  hash SHA-256 (non iterato: il token è già ad alta entropia, a differenza
+  del PIN), scadenza 30 giorni. `/profilo/registra`/`/profilo/accedi`
+  restituiscono ora anche `token`+`tokenScadenza`. Migrazione (nuova
+  tabella, `CREATE TABLE IF NOT EXISTS` basta) applicata e verificata solo
+  in locale.
+- **Passo 2**: punto di formato chiarito con l'autore PRIMA di
+  implementare (non deciso unilateralmente) — nome del campo `profiloToken`
+  invece di `token`, per non confondersi con il token in-partita già
+  esistente sullo stesso endpoint `/join`. Il profiloId si ricava SOLO
+  verificando `profiloToken` contro `sessioni_profilo` (hash + scadenza) —
+  un profiloId dichiarato a parte, senza token valido, viene SEMPRE
+  ignorato da questo passo in poi (comportamento diverso dalla Fase 2,
+  segnalato esplicitamente come cambiamento, non un dettaglio silenzioso).
+  Fallback sempre silenzioso a ospite: token assente, scaduto, inesistente,
+  o un fallimento D1 isolato non bloccano mai il join. Aggiornati i test
+  esistenti che usavano il vecchio profiloId diretto
+  (`test-xp-completamento-nodo.mjs`, `test-bonus-grado-tiro.mjs`,
+  `test-game-session.mjs`) per impostarlo direttamente sullo storage dove
+  serviva solo come precondizione di setup, non l'oggetto del test.
+- **Passo 3**: `arruolati.html` salva nome+profiloToken+scadenza in
+  `localStorage`, mai più il PIN né il profiloId puro. `index.html` passa
+  `profiloToken` al `/join`; la scadenza è controllata SOLO lato client al
+  caricamento (nessuna chiamata preventiva al server) — un token scaduto
+  si ripulisce da solo, il giocatore torna al percorso ospite senza
+  errori. Nuovo `POST /profilo/logout` (`invalidaSessioneProfilo`):
+  cancella la riga in `sessioni_profilo`, idempotente. "Non sei tu?
+  Continua come ospite" ora lo chiama (best-effort: lo scollegamento
+  locale avviene comunque anche se la richiesta di rete fallisce).
+- **Finestra temporanea segnalata e poi richiusa**: tra il push del Passo
+  2 e quello del Passo 3, il client (ancora sul vecchio comportamento)
+  passava un `profiloId` che il server ignorava silenziosamente — gli
+  utenti già collegati sarebbero entrati come ospiti finché il Passo 3 non
+  fosse stato pushato. Segnalato esplicitamente all'autore subito dopo il
+  push del Passo 2.
+- Verificato dal vivo con `wrangler dev` a ogni passo (registrazione/login
+  con token reale, join con `profiloId` derivato correttamente dal token,
+  `profiloId` dichiarato a mano ignorato, token falso → ospite, logout →
+  riga cancellata da D1 verificata con query diretta, token scaduto
+  ripulito automaticamente al caricamento). Rilanciata l'intera suite
+  dopo ogni passo: nessuna regressione.
+
+**12/07/2026 — UI di accesso reale (4 passi) — COMPLETA, pushata su main**
+Commit: `04a8b76` (Passo 1: link "Arruolati" + placeholder), `aa55517`
+(Passo 2: schermate vere di login/registrazione), `407d132` (Passo 3:
+collegamento del profilo al `/join`), `47d1e0b` (Passo 4: invito
+post-sessione per gli ospiti).
+Nuovi file: `public/arruolati.html`.
+File modificati: `public/index.html`.
+- **Passo 1**: link discreto "Arruolati — hai già un profilo?" su
+  schermo-codice e schermo-join (vive dentro le sezioni `.schermo`, non
+  nell'header condiviso: sparisce da solo durante la partita, senza
+  logica JS dedicata). **Premessa verificata prima di implementare**: il
+  repo non ha (e non aveva) un campo per digitare manualmente un "codice
+  stanza" — solo un link con roomId, il commento nel codice dice
+  esplicitamente "nessun codice richiesto" — quindi "codice stanza" nella
+  richiesta originale è stato interpretato come il meccanismo già
+  esistente (link/roomId), non come una nuova UI da costruire; percorso
+  ospite lasciato **invariato nella sostanza**, come richiesto.
+- **Passo 2**: placeholder sostituito con login/registrazione veri (tab
+  Accedi/Registrati), chiamano `/profilo/accedi`/`/profilo/registra` di
+  Fase 1 senza toccarli. Validazione client minima (nome non vuoto, PIN a
+  6 cifre), pulsante disabilitato al click fino alla risposta, errori
+  mostrati con il testo già non tecnico del server.
+- **Passo 3**: dopo login/registrazione, profiloId (poi migrato a
+  profiloToken, vedi sopra) salvato in `localStorage` — **decisione presa
+  con l'autore prima di implementare** tra query string e `localStorage`
+  condiviso (stesso origin tra `arruolati.html` e `index.html`): scelto
+  `localStorage`, nessuna esposizione in URL/cronologia, e il PIN non
+  serviva comunque (in quel momento `/join` non verificava il possesso).
+  Indicatore "Accesso come..." su schermo-join con opzione "Non sei tu?
+  Continua come ospite".
+- **Passo 4**: **premessa segnalata e verificata prima di implementare**
+  — la richiesta assumeva un numero di XP/grado già visibile in game a
+  quel punto; verificato che non esisteva (`applicaRisposta()` non
+  restituisce mai dati XP al client, nessuna occorrenza in
+  `public/index.html`). Scelta l'opzione di non toccare `GameSession.js`
+  (confermata dall'autore): invito narrativo agganciato alla schermata di
+  fine nodo esistente (`.esito-finale-box`), solo per ospiti, nome scelto
+  in partita passato come suggerimento in query string al ritorno su
+  `arruolati.html` (mai dati sensibili).
+- Verificato dal vivo con `wrangler dev` a ogni passo. Rilanciata l'intera
+  suite dopo ogni passo: nessuna regressione (i test non toccano
+  `public/`, verificato comunque per sicurezza).
 
 **12/07/2026 — Passo 24: profilo giocatore persistente, Fase 4 di 4 (grado, bonus, applicazione al tiro) — COMPLETA, pushato su main**
 Nuovi file: `public/profilo.html`, `test-bonus-grado-tiro.mjs`.
