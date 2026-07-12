@@ -73,6 +73,26 @@
   .schermo.attivo { display: block; animation: entra 0.35s ease; }
   @keyframes entra { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
+  /* Link discreto verso il profilo persistente (login/registrazione, ancora
+     da costruire — vedi arruolati.html): solo sulle schermate di INGRESSO
+     (creazione stanza, join), mai durante la partita — l'invito a creare un
+     profilo a fine sessione è un passo a parte, non ancora costruito. Per
+     questo vive dentro ciascuna sezione .schermo invece che nell'header
+     condiviso: sparisce da solo quando si passa alla schermata di gioco,
+     senza bisogno di logica JS dedicata a nasconderlo. */
+  .link-arruolamento {
+    display: inline-block;
+    margin-top: 22px;
+    font-family: var(--font-display);
+    font-size: 0.72rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+  }
+  .link-arruolamento:hover { color: var(--brass); border-bottom-color: var(--brass); }
+
   .etichetta {
     font-family: var(--font-display);
     font-size: 0.7rem;
@@ -576,6 +596,7 @@
     </p>
     <button class="principale" id="btn-crea-stanza">Crea una stanza</button>
     <div class="errore" id="errore-codice"></div>
+    <a class="link-arruolamento" href="/arruolati.html">Arruolati — hai già un profilo?</a>
   </section>
 
   <!-- SCHERMATA 2: ingresso in stanza (nome + ruolo) -->
@@ -597,6 +618,7 @@
     </div>
     <button class="principale" id="btn-join">Unisciti alla squadra</button>
     <div class="errore" id="errore-join"></div>
+    <a class="link-arruolamento" href="/arruolati.html">Arruolati — hai già un profilo?</a>
   </section>
 
   <!-- SCHERMATA 3: gioco -->

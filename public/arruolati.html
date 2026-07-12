@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Arruolati — La Corsa Invisibile</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  /* Placeholder puro (Passo 1 della UI di accesso reale): solo il
+     collegamento/routing da index.html va verificato qui, nessuna logica di
+     login/registrazione -- quella e' il Passo 2, non ancora costruito. */
+  :root {
+    --bg: #15120f;
+    --bg-rgb: 21, 18, 15;
+    --bg-panel: #1f1a16;
+    --line: #3a3128;
+    --crimson: #a6332b;
+    --crimson-bright: #c94538;
+    --brass: #b08d57;
+    --text: #ece4d6;
+    --text-muted: #a89a87;
+    --text-faint: #6b5f51;
+    --font-display: 'Oswald', sans-serif;
+    --font-body: 'Source Serif 4', serif;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+  }
+  body {
+    background-image:
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0px, transparent 1px, transparent 2px),
+      radial-gradient(ellipse at top, rgba(166,51,43,0.08), transparent 60%);
+  }
+  .wrap {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 0 20px 80px;
+    min-height: 100vh;
+  }
+  header.masthead {
+    padding: 28px 0 20px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 28px;
+  }
+  header.masthead .titolo {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.5rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  header.masthead .titolo .lampeggio { color: var(--crimson-bright); }
+  header.masthead .romanzo {
+    font-size: 0.75rem;
+    color: var(--text-faint);
+    font-style: italic;
+    letter-spacing: 0.02em;
+    margin-top: 4px;
+  }
+  .etichetta {
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--brass);
+    margin-bottom: 8px;
+  }
+  h1.grande {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.6rem;
+    letter-spacing: 0.01em;
+    line-height: 1.25;
+    margin: 0 0 14px;
+  }
+  p.spiega {
+    color: var(--text-muted);
+    line-height: 1.6;
+    margin: 0 0 24px;
+    font-size: 0.98rem;
+  }
+  a.torna {
+    display: inline-block;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.85rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--brass);
+    border: 1px solid var(--brass);
+    padding: 13px 20px;
+    border-radius: 3px;
+    text-decoration: none;
+  }
+  a.torna:hover { background: rgba(176,141,87,0.1); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="masthead">
+    <div class="titolo">La Corsa <span class="lampeggio">Invisibile</span></div>
+    <div class="romanzo">Il ragazzo che correva nel tempo / I passi tornano</div>
+  </header>
+
+  <div class="etichetta">Arruolamento</div>
+  <h1 class="grande">In costruzione.</h1>
+  <p class="spiega">
+    Presto qui potrai registrarti o accedere con il tuo profilo persistente,
+    per portare gradi ed esperienza da una sessione all'altra. Per ora, il
+    gioco resta libero: torna alla stanza e unisciti come ospite, senza
+    bisogno di nulla di tutto questo.
+  </p>
+  <a class="torna" href="/">Torna alla stanza</a>
+</div>
+</body>
+</html>
