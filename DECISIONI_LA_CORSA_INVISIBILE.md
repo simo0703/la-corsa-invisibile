@@ -662,11 +662,18 @@ oggi contiene un `index.html` minimo).
 - [ ] Tarare le soglie provvisorie dell'interprete (`sogliaAlta: 0.6`,
       `margineDistacco: 0.15` in `GameSession.js`) su testo libero reale
       scritto da persone vere, non solo su frasi di test scritte a mano
-- [ ] Convertire altre risposte fisse a tiro reale — ogni nodo ne ha oggi
-      solo una; tutti e 5 i nodi (`1836-torino`, `1848-milano`,
-      `1915-carso-piave`, `emergenza-civile`, `missione-moderna`) hanno
-      già pool e librerie pronti, quindi una nuova risposta a tiro in un
-      nodo esistente può riusarli senza altro lavoro di contenuto
+- [ ] Convertire altre risposte fisse a tiro reale — `1848-milano` ne ha
+      ora due (Cadenza su `milano-barricata`, Precisione su
+      `milano-ferito`, quest'ultima aggiunta per dare finalmente
+      all'Incursore un'occasione di tirare sulla propria specialità); gli
+      altri 4 nodi (`1836-torino`, `1915-carso-piave`, `emergenza-civile`,
+      `missione-moderna`) ne hanno ancora solo una ciascuno. Tutti e 5 i
+      nodi hanno già pool e librerie pronti, quindi una nuova risposta a
+      tiro in un nodo esistente può riusarli senza altro lavoro di
+      contenuto — **attenzione**: se il nuovo tiro condivide il pool con un
+      tiro già esistente nello stesso nodo, vedi la miglioria aperta
+      sull'asse `richiestaId` nel changelog del 12/07/2026, per evitare lo
+      stesso rischio di mescolamento risolto qui con l'Opzione 2
 - [x] `public/index.html` non mandava `giocatoreId` a `/scegli` — corretto
       nel Passo 11, verificato dal vivo con `wrangler dev` + browser
 - [x] Identità comandante (primo giocatore della stanza) + pannello nella
@@ -717,6 +724,80 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**12/07/2026 — Secondo tiro reale nel nodo 1848-milano: Precisione (Incursore) su `milano-ferito`**
+File modificati: `src/game-config.js`, `src/lib/narratore-1848-milano.md`,
+`test-narratore-1848-milano.mjs`.
+- Richiesta dall'autore dopo un audit di giocabilità: delle 5 competenze del
+  gioco, Precisione (competenza principale dell'Incursore) non era mai
+  richiesta da nessuna delle 5 risposte a tiro reale esistenti (una per
+  nodo). Convertita a tiro reale la risposta "Lo disarmate e proseguite,
+  lasciandolo dove sta" nella richiesta `milano-ferito` (nodo `1848-milano`,
+  indice 1 nell'array `risposte`) — scelta tra le risposte fisse candidate
+  perché narrativamente la più coerente con un gesto tecnico/di mira (le
+  altre risposte fisse esaminate, negli altri 4 nodi, non si prestavano).
+  Nuovo testo: "Lo disarmate con un gesto solo. Pulito. Poi proseguite,
+  lasciandolo dove sta." `competenzaRichiesta: "precisione"`,
+  `effettiPerEsito` su Cadenza (in continuità con l'effetto fisso precedente,
+  `{ cadenza: 1 }`) + margine 1/2/3 come tutte le altre risposte a tiro
+  reale — **questi numeri sono stati dedotti dal pattern esistente, non
+  dettati dall'autore: da rivedere alla prima verifica dal vivo**, stesso
+  trattamento riservato a tutti gli altri numeri di bilanciamento in questo
+  file.
+- **Problema scoperto prima di scrivere il pool**: `narratore-1848-milano.md`
+  aveva UN solo tiro reale quando è stato scritto (`milano-barricata`), e le
+  tabelle "Baseline per esito" (apertura/sviluppo/eco) sono di fatto
+  scritte per QUELLA scena specifica, non per il nodo in astratto — es.
+  `apertura-pieno-1` cita esplicitamente "la carica ha trovato il punto
+  debole". Il contesto passato al Cronista da `GameSession.js` non porta
+  `richiestaId` (solo `esito`, `competenzaId`, `ruoloId`, `margine`,
+  `variabili`, `storicoFrammenti`): il motore non ha modo di sapere quale
+  richiesta ha generato il tiro, quindi non può escludere i frammenti
+  scritti per la barricata quando il tiro è sul disarmo.
+- **Decisione esplicita dell'autore, tra tre opzioni proposte**: **Opzione
+  2** — scrivere frammenti propri per il disarmo in tutti e tre gli slot
+  (non solo `sviluppo`), condizionati su `esito` + `competenzaId:
+  precisione`, aggiunti ACCANTO al baseline della barricata (mai in sua
+  sostituzione). Scartate: Opzione 1 (frammenti solo in `sviluppo`, più
+  rapida ma rischio di mescolamento anche lì) e Opzione 3 (aggiungere un
+  asse `richiestaId` al contesto — risolverebbe il problema alla radice ma
+  richiede toccare `GameSession.js`, il "motore neutro").
+  **Conseguenza accettata consapevolmente**: il mescolamento resta
+  possibile, solo ridotto di probabilità — i baseline della barricata
+  restano candidati anche per il tiro sul disarmo (verificato e testato
+  esplicitamente in `test-narratore-1848-milano.mjs`, non è un bug).
+- `narratore-1848-milano.md`: aggiunte 3 nuove tabelle "Per competenza ed
+  esito (disarmo — Precisione)", una per slot — 6 righe in `apertura`, 3 in
+  `sviluppo` (la riga esistente `sviluppo-competenza-precisione`, senza
+  colonna `esito`, resta valida e continua a comparire per qualunque
+  esito), 6 in `eco`. Conteggio frammenti per slot: apertura 10→16,
+  sviluppo 11→14, eco 8→14.
+- `test-narratore-1848-milano.mjs`: conteggi aggiornati, nuove asserzioni
+  per la combinazione `competenzaId: precisione` in tutti e tre gli slot
+  (candidati attesi presenti), verifica esplicita che il mescolamento con
+  il baseline della barricata sia presente e accettato (non una
+  regressione), e verifica dal vivo su 100 tentativi per esito che il
+  testo composto includa almeno una volta un frammento di disarmo.
+- **Non toccato**: `src/lib/interprete-libero/1848-milano/milano-ferito.js`
+  — verificato che la libreria del testo libero mappa solo
+  `testoLibero → risposteIndice`, indipendente dal fatto che la risposta
+  risultante sia a tiro o a effetto fisso (la differenza è gestita
+  interamente da `GameSession.applicaRisposta()`, chiamata identica in
+  entrambi i casi). `GameSession.js` non toccato per decisione esplicita
+  (vedi sopra, Opzione 3 scartata per ora).
+- Rilanciata l'intera suite (22 file): nessuna regressione.
+- **Miglioria futura aperta (Opzione 3, non implementata)**: aggiungere un
+  campo `richiestaId` al contesto passato da `GameSession.js` a
+  `componiNarrazione()` (dato opaco, come già `competenzaId`/`ruoloId` —
+  non violerebbe la regola del motore neutro), più una colonna `richiestaId`
+  sulle righe dei pool `.md` che oggi sono implicitamente legate a una sola
+  scena. Risolverebbe alla radice il problema del mescolamento tra scene
+  diverse nello stesso nodo — utile da riconsiderare se in futuro si
+  aggiungono altri tiri reali allo stesso nodo (oggi solo `1848-milano` ne
+  ha due; gli altri 4 nodi restano a un tiro ciascuno, quindi il problema
+  non si presenta ancora lì).
+
+---
 
 **12/07/2026 — Riconoscimento del grado nel gameplay (2 punti, dopo il sistema di token) — COMPLETO, pushato su main**
 Commit: `ec1fb5b` (badge nel roster), `2e32b12` (prefisso nel nome).

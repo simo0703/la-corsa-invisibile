@@ -40,9 +40,18 @@ const testoMarkdown = readFileSync(percorsoMd, "utf8");
 console.log("--- caricamento dal file: parseFrammenti ---");
 const frammenti = parseFrammenti(testoMarkdown);
 verifica("il file produce i tre slot apertura/sviluppo/eco", Object.keys(frammenti).sort().join(",") === "apertura,eco,sviluppo");
-verifica("slot apertura: 6 baseline per esito + 4 per ruolo = 10 frammenti", frammenti.apertura.length === 10);
-verifica("slot sviluppo: 6 baseline per esito + 5 per competenza = 11 frammenti", frammenti.sviluppo.length === 11);
-verifica("slot eco: 3 baseline per esito + 5 per fascia di margine (2 per \"critico\") = 8 frammenti", frammenti.eco.length === 8);
+verifica(
+  "slot apertura: 6 baseline per esito + 4 per ruolo + 6 per competenza=precisione/esito (disarmo) = 16 frammenti",
+  frammenti.apertura.length === 16
+);
+verifica(
+  "slot sviluppo: 6 baseline per esito + 5 per competenza + 3 per competenza=precisione/esito (disarmo) = 14 frammenti",
+  frammenti.sviluppo.length === 14
+);
+verifica(
+  "slot eco: 3 baseline per esito + 5 per fascia di margine (2 per \"critico\") + 6 per competenza=precisione/esito (disarmo) = 14 frammenti",
+  frammenti.eco.length === 14
+);
 
 const apertura1 = frammenti.apertura.find((f) => f.id === "apertura-pieno-1");
 verifica(
@@ -147,6 +156,77 @@ for (const [fasciaMargine, idAtteso] of [
     `fasciaMargine "${fasciaMargine}" non esclude il baseline dell'esito dall'eco`,
     candidati.some((f) => f.id === "eco-pieno-1")
   );
+}
+
+console.log("\n--- asse competenza=precisione + esito, in tutti e tre gli slot (disarmo, milano-ferito) ---");
+{
+  const attesiPerSlotEsito = {
+    apertura: {
+      pieno: ["apertura-precisione-pieno-1", "apertura-precisione-pieno-2"],
+      parziale: ["apertura-precisione-parziale-1", "apertura-precisione-parziale-2"],
+      fallimento: ["apertura-precisione-fallimento-1", "apertura-precisione-fallimento-2"],
+    },
+    sviluppo: {
+      pieno: ["sviluppo-precisione-pieno-1"],
+      parziale: ["sviluppo-precisione-parziale-1"],
+      fallimento: ["sviluppo-precisione-fallimento-1"],
+    },
+    eco: {
+      pieno: ["eco-precisione-pieno-1", "eco-precisione-pieno-2"],
+      parziale: ["eco-precisione-parziale-1", "eco-precisione-parziale-2"],
+      fallimento: ["eco-precisione-fallimento-1", "eco-precisione-fallimento-2"],
+    },
+  };
+  const baselinePerSlot = { apertura: "apertura-pieno-1", sviluppo: "sviluppo-pieno-1", eco: "eco-pieno-1" };
+
+  for (const [slot, perEsito] of Object.entries(attesiPerSlotEsito)) {
+    for (const [esito, idsAttesi] of Object.entries(perEsito)) {
+      const candidati = pool.ottieniFrammenti(slot, contesto({ esito, competenzaId: "precisione" }));
+      verifica(
+        `slot "${slot}", esito "${esito}": tutti i frammenti di disarmo scritti per questa combinazione sono candidati`,
+        idsAttesi.every((id) => candidati.some((f) => f.id === id))
+      );
+    }
+  }
+
+  // Mescolamento accettato per decisione esplicita (Opzione 2, non Opzione 3
+  // con asse "scena"/richiestaId): i baseline scritti per la barricata
+  // restano candidati anche quando il tiro è sul disarmo. Lo documentiamo
+  // qui come comportamento noto, non come regressione.
+  for (const slot of Object.keys(baselinePerSlot)) {
+    const candidati = pool.ottieniFrammenti(slot, contesto({ esito: "pieno", competenzaId: "precisione" }));
+    verifica(
+      `slot "${slot}": il baseline della barricata resta candidato anche con competenzaId=precisione ` +
+        "(mescolamento noto e accettato, vedi DECISIONI_LA_CORSA_INVISIBILE.md)",
+      candidati.some((f) => f.id === baselinePerSlot[slot])
+    );
+  }
+
+  // Verifica dal vivo (non solo sui candidati): su molti tentativi, il testo
+  // composto per il tiro di Precisione deve includere almeno una volta un
+  // frammento scritto per il disarmo in ciascuno slot -- non solo essere
+  // candidato in teoria.
+  for (const esito of ["pieno", "parziale", "fallimento"]) {
+    const testiPrecisioneAttesi = [
+      ...attesiPerSlotEsito.apertura[esito],
+      ...attesiPerSlotEsito.sviluppo[esito],
+      ...attesiPerSlotEsito.eco[esito],
+    ]
+      .map((id) => [...frammenti.apertura, ...frammenti.sviluppo, ...frammenti.eco].find((f) => f.id === id).testo);
+
+    let comparsoAlmenoUnaVolta = false;
+    for (let i = 0; i < 100; i++) {
+      const { testo } = componiNarrazione(pool, contesto({ esito, competenzaId: "precisione", variabili: {} }));
+      if (testiPrecisioneAttesi.some((t) => testo.includes(t))) {
+        comparsoAlmenoUnaVolta = true;
+        break;
+      }
+    }
+    verifica(
+      `esito "${esito}", competenzaId=precisione: su 100 tentativi compare almeno una volta un frammento di disarmo nel testo composto`,
+      comparsoAlmenoUnaVolta
+    );
+  }
 }
 
 console.log("\n--- varietà dei frammenti eco per fasciaMargine critico ---");

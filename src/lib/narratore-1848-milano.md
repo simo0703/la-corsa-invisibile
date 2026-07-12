@@ -47,6 +47,24 @@ nello sviluppo), quindi non hanno una colonna `esito`.
 | apertura-ruolo-custode | custode | {ruolo} tiene d'occhio chi è più indietro, anche mentre la squadra si lancia avanti. |
 | apertura-ruolo-incursore | incursore | {ruolo} è già sul legno spezzato, senza aspettare che il varco sia sicuro. |
 
+### Per competenza ed esito (disarmo — Precisione)
+
+Frammenti specifici per l'azione di disarmo a tiro reale (richiesta
+"milano-ferito", risposta "Lo disarmate con un gesto solo"): condizionati
+sia su `esito` sia su `competenzaId: precisione`, così restano candidati
+aggiuntivi accanto al baseline generico sopra (scritto pensando alla
+barricata) invece di sostituirlo — vedi la nota sul rischio di
+mescolamento nel log delle decisioni.
+
+| id | esito | competenzaId | testo |
+|---|---|---|---|
+| apertura-precisione-pieno-1 | pieno | precisione | La mano si chiude sull'arma prima che lui capisca cosa sta succedendo. |
+| apertura-precisione-pieno-2 | pieno | precisione | Non c'è esitazione. Il gesto è già deciso prima di cominciare. |
+| apertura-precisione-parziale-1 | parziale | precisione | La mano esita un istante, poi si muove comunque. |
+| apertura-precisione-parziale-2 | parziale | precisione | Il primo tentativo non basta. Bisogna insistere. |
+| apertura-precisione-fallimento-1 | fallimento | precisione | La presa è sbagliata fin dall'inizio. |
+| apertura-precisione-fallimento-2 | fallimento | precisione | Il fango, o la fretta, rendono tutto più difficile del previsto. |
+
 ## Slot: sviluppo
 
 ### Baseline per esito
@@ -74,6 +92,21 @@ hanno una colonna `esito`.
 | sviluppo-competenza-passoAvanti | passoAvanti | È il Passo Avanti a spingere oltre la barricata, quando ogni istinto direbbe di fermarsi. |
 | sviluppo-competenza-ancoraggio | ancoraggio | È l'Ancoraggio a tenere la mente lucida, mentre tutto intorno è fumo e rumore. |
 
+### Per competenza ed esito (disarmo — Precisione)
+
+Stessa logica della tabella equivalente nello slot `apertura`: righe
+condizionate sia su `esito` sia su `competenzaId: precisione`, specifiche
+per la scena di disarmo. La riga `sviluppo-competenza-precisione` sopra
+(senza colonna `esito`) resta valida e continua a comparire per qualunque
+esito: le due tabelle convivono senza conflitto, ampliando solo la
+varietà dei candidati.
+
+| id | esito | competenzaId | testo |
+|---|---|---|---|
+| sviluppo-precisione-pieno-1 | pieno | precisione | Un movimento secco. Non ha nemmeno il tempo di reagire. |
+| sviluppo-precisione-parziale-1 | parziale | precisione | Il gesto riesce. Il ferito geme più forte. Qualcuno, poco lontano, potrebbe averlo sentito. |
+| sviluppo-precisione-fallimento-1 | fallimento | precisione | Il ferito si dimena. L'arma resta a metà tra le mani. Bisogna strapparla. |
+
 ## Slot: eco
 
 ### Baseline per esito
@@ -83,6 +116,21 @@ hanno una colonna `esito`.
 | eco-pieno-1 | pieno | La barricata è alle spalle, e la città sembra un poco più vicina. |
 | eco-parziale-1 | parziale | Il varco è aperto, ma il prezzo pagato resta addosso a tutti. |
 | eco-fallimento-1 | fallimento | Milano prende nota di questo momento. La squadra, forse, anche. |
+
+### Per competenza ed esito (disarmo — Precisione)
+
+Stessa logica delle tabelle equivalenti in `apertura` e `sviluppo`: righe
+condizionate sia su `esito` sia su `competenzaId: precisione`, specifiche
+per la scena di disarmo.
+
+| id | esito | competenzaId | testo |
+|---|---|---|---|
+| eco-precisione-pieno-1 | pieno | precisione | La colonna riprende il passo. Nessuno si volta indietro. |
+| eco-precisione-pieno-2 | pieno | precisione | Il fumo si richiude sulla scena come se non fosse successo niente. |
+| eco-precisione-parziale-1 | parziale | precisione | Il gemito resta indietro, ma qualcuno potrebbe averlo sentito. |
+| eco-precisione-parziale-2 | parziale | precisione | Si riparte, ma il fiato è un po' più corto di prima. |
+| eco-precisione-fallimento-1 | fallimento | precisione | Il rumore dell'arma a terra resta sospeso nell'aria, troppo a lungo. |
+| eco-precisione-fallimento-2 | fallimento | precisione | Bisogna guardarsi alle spalle, ora, un po' più spesso. |
 
 ### Per fascia di margine
 

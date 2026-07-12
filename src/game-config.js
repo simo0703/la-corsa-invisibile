@@ -297,9 +297,18 @@ export const GAME_CONFIG = {
               esito: "Non è più un nemico o un alleato: è solo un uomo che ha bisogno di aiuto.",
             },
             {
-              testo: "Lo disarmate e proseguite, lasciandolo dove sta",
-              effetti: { cadenza: 1 },
-              esito: "Non c'è tempo per la pietà, oggi. La colonna deve avanzare.",
+              testo: "Lo disarmate con un gesto solo. Pulito. Poi proseguite, lasciandolo dove sta.",
+              competenzaRichiesta: "precisione",
+              effettiPerEsito: {
+                pieno: { cadenza: 2, margine: 1 },
+                parziale: { cadenza: 1, spiritoDiCorpo: -1, margine: 2 },
+                fallimento: { cadenza: -1, spiritoDiCorpo: -1, margine: 3 },
+              },
+              esito: {
+                pieno: "L'arma cambia mano senza un suono. Lui fissa le mani vuote.",
+                parziale: "L'arma cede, ma resiste un attimo prima di arrendersi.",
+                fallimento: "L'arma scivola, sbatte a terra. Il rumore è secco, nel fumo.",
+              },
             },
             {
               testo: "Vi fermate a interrogarlo prima di decidere",
