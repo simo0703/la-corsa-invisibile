@@ -1033,6 +1033,22 @@ async function aggiornaGradiPerRoster(giocatori, { forza = false } = {}) {
   } catch (e) {} // cosmetico: un fallimento qui non deve bloccare la resa del roster
 }
 
+// Riconoscimento narrativo del grado (nessun nuovo bonus meccanico): "Nome"
+// diventa "Grado Nome" ovunque il gioco si rivolga a un giocatore per nome in
+// un testo scritto durante la partita (oggi: solo la proposta di cessione
+// del comando, l'unico testo del genere che esiste -- vedi
+// DECISIONI_LA_CORSA_INVISIBILE.md). Nessun titolo per un giocatore senza
+// profiloId (invariato) o al grado base "Bersagliere": mostrarlo per
+// chiunque abbia un profilo, anche a XP zero, renderebbe il titolo un
+// semplice segnale "ha un profilo" invece che un riconoscimento di
+// progresso reale -- scelta fatta qui, non richiesta esplicitamente.
+function nomeConGrado(giocatore) {
+  if (giocatore.profiloId == null) return giocatore.nome;
+  const gradoNome = GRADI_CACHE[giocatore.profiloId];
+  if (!gradoNome || gradoNome === "Bersagliere") return giocatore.nome;
+  return `${gradoNome} ${giocatore.nome}`;
+}
+
 function renderGiocatori(giocatori) {
   const lista = document.getElementById("lista-giocatori");
   if (!giocatori.length) {
@@ -1389,7 +1405,7 @@ function renderPromptCessione(session) {
   // nome di chi propone si legge da session.giocatori (chi ha comandante
   // === true), non serve altro dal server.
   const proponente = session.giocatori.find(g => g.comandante === true);
-  const nomeProponente = proponente ? proponente.nome : "Il comandante";
+  const nomeProponente = proponente ? nomeConGrado(proponente) : "Il comandante";
   box.innerHTML = `
     <div class="pannello-comandante">
       <div class="titolo-pannello">Proposta di comando</div>
