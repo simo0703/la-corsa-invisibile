@@ -278,15 +278,21 @@ function pinValido(pin) {
   return /^\d{6}$/.test(pin);
 }
 
-// Passo 3: dopo un login/registrazione riuscito, salva SOLO profiloId+nome
-// in localStorage (stesso origin di index.html, che la legge all'avvio) --
-// MAI il PIN: /join (Fase 2) accetta il profiloId senza verificarne il
-// possesso, quindi non serve nulla di sensibile per completare il
-// collegamento. Persistente finché non viene rimosso esplicitamente (da
-// index.html, se l'utente sceglie "continua come ospite").
+// Dopo un login/registrazione riuscito, salva nome+profiloToken+scadenza in
+// localStorage (stesso origin di index.html, che li legge all'avvio) -- MAI
+// il PIN, e dal sistema di token di sessione (Passo 2) nemmeno più il
+// profiloId puro: /join ora ricava il profiloId SOLO verificando un
+// profiloToken valido, un profiloId dichiarato a parte viene ignorato. Il
+// nome resta utile solo per l'indicatore "Accesso come...", non dimostra
+// nulla. Persistente finché non viene rimosso esplicitamente (da
+// index.html, logout o "continua come ospite" invalidano anche server-side
+// via /profilo/logout).
 const CHIAVE_PROFILO_COLLEGATO = "lci_profilo";
-function collegaProfilo(profilo) {
-  localStorage.setItem(CHIAVE_PROFILO_COLLEGATO, JSON.stringify({ profiloId: profilo.id, nome: profilo.nome }));
+function collegaProfilo(profilo, token, tokenScadenza) {
+  localStorage.setItem(
+    CHIAVE_PROFILO_COLLEGATO,
+    JSON.stringify({ nome: profilo.nome, profiloToken: token, tokenScadenza })
+  );
 }
 
 // nome: "accedi" | "registrati" | "successo". Il tab-selettore sparisce solo
@@ -333,12 +339,12 @@ document.getElementById("btn-accedi").addEventListener("click", async () => {
   btn.disabled = true;
   btn.textContent = "Un momento…";
   try {
-    const { profilo } = await chiamaAPI("/profilo/accedi", {
+    const { profilo, token, tokenScadenza } = await chiamaAPI("/profilo/accedi", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nome, pin }),
     });
-    collegaProfilo(profilo);
+    collegaProfilo(profilo, token, tokenScadenza);
     mostraSuccesso(`Accesso effettuato, ${profilo.nome}.`);
   } catch (e) {
     // Il server restituisce già un messaggio in italiano non tecnico
@@ -373,12 +379,12 @@ document.getElementById("btn-registrati").addEventListener("click", async () => 
   btn.disabled = true;
   btn.textContent = "Un momento…";
   try {
-    const { profilo } = await chiamaAPI("/profilo/registra", {
+    const { profilo, token, tokenScadenza } = await chiamaAPI("/profilo/registra", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nome, pin }),
     });
-    collegaProfilo(profilo);
+    collegaProfilo(profilo, token, tokenScadenza);
     mostraSuccesso(`Registrazione completata, ${profilo.nome}.`);
   } catch (e) {
     erroreBox.textContent = (e.corpo && e.corpo.errore) || "Qualcosa è andato storto. Riprova.";

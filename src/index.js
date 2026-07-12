@@ -1,6 +1,12 @@
 import { GameSession } from "./durable-objects/GameSession.js";
 import { GAME_CONFIG } from "./game-config.js";
-import { registraGiocatore, accediGiocatore, otteniStatoProfilo, assegnaBonusProfilo } from "./lib/profili-giocatore.js";
+import {
+  registraGiocatore,
+  accediGiocatore,
+  otteniStatoProfilo,
+  assegnaBonusProfilo,
+  invalidaSessioneProfilo,
+} from "./lib/profili-giocatore.js";
 
 export { GameSession };
 
@@ -67,8 +73,9 @@ export default {
         return Response.json({ errore: MESSAGGI_ERRORE_PROFILO[risultato.errore] }, { status });
       }
       // token di sessione (30 giorni, vedi sessioni_profilo in schema.sql):
-      // sostituirà il solo profiloId dichiarato al /join -- verifica non
-      // ancora collegata (arriva nel Passo 2), qui solo emesso e restituito.
+      // il client lo passa come profiloToken al /join (GameSession.js lo
+      // verifica per ricavare il profiloId, mai un profiloId dichiarato a
+      // parte) e lo conserva per il logout esplicito (/profilo/logout sotto).
       return Response.json(
         { profilo: risultato.profilo, token: risultato.token, tokenScadenza: risultato.tokenScadenza },
         { status: 201 }
@@ -85,6 +92,17 @@ export default {
         { profilo: risultato.profilo, token: risultato.token, tokenScadenza: risultato.tokenScadenza },
         { status: 200 }
       );
+    }
+
+    // Logout esplicito (Passo 3 del sistema di token): invalida la sessione
+    // anche lato server (cancella la riga in sessioni_profilo), non solo
+    // una rimozione lato client. Idempotente: un profiloToken già
+    // scaduto/invalido/assente non produce mai un errore -- il client vuole
+    // solo essere sicuro che il token, se esisteva, non sia più valido.
+    if (url.pathname === "/profilo/logout" && request.method === "POST") {
+      const { profiloToken } = await request.json();
+      await invalidaSessioneProfilo(env.DB, profiloToken);
+      return Response.json({ successo: true }, { status: 200 });
     }
 
     // Fase 4: legge grado/XP/bonus/nodi completati di un profilo esistente.

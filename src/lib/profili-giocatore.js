@@ -109,6 +109,19 @@ export async function verificaTokenSessione(db, token) {
   return riga.profilo_id;
 }
 
+// Logout esplicito (Passo 3): invalida la sessione lato server cancellando
+// la riga in sessioni_profilo il cui hash corrisponde al token dichiarato --
+// non solo una rimozione lato client. Idempotente e senza errori "rumorosi":
+// un token già scaduto, già rimosso, o assente non fa fallire nulla (DELETE
+// su zero righe non è un errore), coerente con "fallback silenzioso" già
+// seguito per la verifica. Nessun valore di ritorno: il chiamante non ha
+// bisogno di sapere se una riga esisteva davvero.
+export async function invalidaSessioneProfilo(db, token) {
+  if (!token) return;
+  const tokenHash = await hashSha256(token);
+  await db.prepare("DELETE FROM sessioni_profilo WHERE token_hash = ?").bind(tokenHash).run();
+}
+
 // PBKDF2-SHA256 via Web Crypto (crypto.subtle): disponibile nativamente sia
 // nel runtime dei Cloudflare Workers sia sotto Node puro (dove girano questi
 // test) -- nessuna dipendenza esterna.

@@ -727,17 +727,32 @@ function caricaStato() {
   } catch (e) {}
 }
 
-// Profilo persistente collegato a questo dispositivo (Passo 3 della UI di
-// accesso): scritto da arruolati.html dopo un login/registrazione riuscito,
-// stesso origin quindi stesso localStorage -- SOLO profiloId+nome, mai il
-// PIN (non serve: /join, Fase 2, accetta il profiloId senza verificarne il
-// possesso). Assente per un giocatore ospite: comportamento invariato,
-// nessun profiloId inviato a /join.
+// Profilo persistente collegato a questo dispositivo: scritto da
+// arruolati.html dopo un login/registrazione riuscito, stesso origin quindi
+// stesso localStorage -- nome (solo per l'indicatore) + profiloToken +
+// tokenScadenza, MAI il PIN e (dal sistema di token di sessione) nemmeno più
+// il profiloId puro: /join ricava il profiloId SOLO verificando il
+// profiloToken, un profiloId dichiarato a parte verrebbe ignorato. Assente
+// per un giocatore ospite: comportamento invariato, nessun profiloToken
+// inviato a /join.
 const CHIAVE_PROFILO_COLLEGATO = "lci_profilo";
 let PROFILO_COLLEGATO = null;
+
+// Scadenza verificata SOLO lato client, confrontando la data salvata: non
+// dimostra che il token sia ancora valido lato server (potrebbe essere
+// stato invalidato da un logout altrove), ma evita di mandare a /join un
+// token già scaduto per certo -- se il server lo rifiuta comunque, il
+// fallback silenzioso di GameSession.js (Passo 2) tratta il giocatore come
+// ospite senza errori, quindi qui basta un controllo best-effort.
 function caricaProfiloCollegato() {
   try {
-    PROFILO_COLLEGATO = JSON.parse(localStorage.getItem(CHIAVE_PROFILO_COLLEGATO) || "null");
+    const salvato = JSON.parse(localStorage.getItem(CHIAVE_PROFILO_COLLEGATO) || "null");
+    if (salvato && salvato.tokenScadenza && Date.parse(salvato.tokenScadenza) > Date.now()) {
+      PROFILO_COLLEGATO = salvato;
+    } else {
+      if (salvato) localStorage.removeItem(CHIAVE_PROFILO_COLLEGATO); // scaduto: ripulisci, non lasciare un residuo stantio
+      PROFILO_COLLEGATO = null;
+    }
   } catch (e) {
     PROFILO_COLLEGATO = null;
   }
@@ -747,7 +762,10 @@ function caricaProfiloCollegato() {
 // /join): un giocatore su un dispositivo condiviso può scollegare il
 // profilo sbagliato e proseguire come ospite, senza dover uscire dalla
 // pagina -- coerente col principio "il profilo è visibile ma mai un
-// ostacolo" di questa UI.
+// ostacolo" di questa UI. Il logout invalida la sessione anche lato server
+// (POST /profilo/logout, best-effort: se la richiesta fallisce il profilo
+// viene comunque scollegato su questo dispositivo, il token scadrà da solo
+// entro 30 giorni).
 function renderProfiloCollegato() {
   const box = document.getElementById("profilo-collegato-box");
   if (!box) return;
@@ -761,10 +779,18 @@ function renderProfiloCollegato() {
       <button class="scollega" id="btn-scollega-profilo">Non sei tu? Continua come ospite</button>
     </div>
   `;
-  document.getElementById("btn-scollega-profilo").addEventListener("click", () => {
+  document.getElementById("btn-scollega-profilo").addEventListener("click", async () => {
+    const profiloToken = PROFILO_COLLEGATO.profiloToken;
     localStorage.removeItem(CHIAVE_PROFILO_COLLEGATO);
     PROFILO_COLLEGATO = null;
     renderProfiloCollegato();
+    try {
+      await chiamaAPI("/profilo/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profiloToken }),
+      });
+    } catch (e) {} // best-effort: lo scollegamento locale è già avvenuto sopra
   });
 }
 
@@ -910,10 +936,11 @@ document.getElementById("btn-join").addEventListener("click", async () => {
     // non diventerà comandante (vedi GameSession.js).
     const corpoJoin = { nome, ruolo };
     if (STATO.tokenCreazione) corpoJoin.tokenCreazione = STATO.tokenCreazione;
-    // profiloId SOLO se questo dispositivo ha già fatto login/registrazione
-    // su arruolati.html (Passo 3): un giocatore ospite non lo invia mai,
-    // comportamento invariato.
-    if (PROFILO_COLLEGATO) corpoJoin.profiloId = PROFILO_COLLEGATO.profiloId;
+    // profiloToken SOLO se questo dispositivo ha già fatto login/registrazione
+    // su arruolati.html: un giocatore ospite non lo invia mai, comportamento
+    // invariato. Il server (GameSession.js) verifica il token e ne ricava il
+    // profiloId -- un profiloId dichiarato qui non verrebbe più accettato.
+    if (PROFILO_COLLEGATO) corpoJoin.profiloToken = PROFILO_COLLEGATO.profiloToken;
     const session = await chiamaAPI(`/api/stanza/${STATO.roomId}/join`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

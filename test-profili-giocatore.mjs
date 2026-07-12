@@ -16,6 +16,7 @@ import {
   otteniStatoProfilo,
   assegnaBonusProfilo,
   creaSessioneProfilo,
+  invalidaSessioneProfilo,
 } from "./src/lib/profili-giocatore.js";
 
 let falliti = 0;
@@ -79,6 +80,12 @@ function creaDbFinto() {
               const [profiloId, tokenHash, scadeIl] = args;
               sessioni.push({ id: prossimoIdSessione++, profilo_id: profiloId, token_hash: tokenHash, scade_il: scadeIl });
               return { success: true };
+            }
+            if (normalizzata.startsWith("DELETE FROM sessioni_profilo WHERE token_hash = ?")) {
+              const [tokenHash] = args;
+              const indice = sessioni.findIndex((s) => s.token_hash === tokenHash);
+              if (indice !== -1) sessioni.splice(indice, 1);
+              return { success: true }; // idempotente: nessuna riga trovata non è un errore
             }
             throw new Error(`Query .run() non gestita dal fake DB: ${normalizzata}`);
           },
@@ -375,6 +382,38 @@ console.log("\n--- creaSessioneProfilo (funzione di dominio, chiamata anche dire
 
   const sessione2 = await creaSessioneProfilo(db, registrazione.profilo.id);
   verifica("due chiamate consecutive generano token diversi (nessuna collisione prevedibile)", sessione.token !== sessione2.token);
+}
+
+console.log("\n--- invalidaSessioneProfilo (logout esplicito, Passo 3): invalida lato server, non solo lato client ---");
+{
+  const db = creaDbFinto();
+  const registrazione = await registraGiocatore(db, "Guardiano", "554433");
+  verifica("una sessione esiste dopo la registrazione", db.sessioni.length === 1);
+
+  await invalidaSessioneProfilo(db, registrazione.token);
+  verifica("la sessione è stata cancellata da sessioni_profilo", db.sessioni.length === 0);
+
+  const nuovoLogin = await accediGiocatore(db, "Guardiano", "554433");
+  verifica("il profilo resta accessibile: il logout invalida solo QUEL token, non il profilo", nuovoLogin.successo === true);
+  verifica("il login dopo il logout emette una sessione nuova", db.sessioni.length === 1);
+  verifica("il nuovo token è diverso da quello invalidato", nuovoLogin.token !== registrazione.token);
+}
+
+console.log("\n--- invalidaSessioneProfilo è idempotente: token già invalidato o mai esistito non causa errori ---");
+{
+  const db = creaDbFinto();
+  await registraGiocatore(db, "Vedetta2", "667788");
+  await invalidaSessioneProfilo(db, "token-mai-esistito-in-nessuna-sessione");
+  verifica("nessuna riga toccata per un token inesistente, nessuna eccezione sollevata", db.sessioni.length === 1);
+
+  const secondaChiamata = await invalidaSessioneProfilo(db, "token-mai-esistito-in-nessuna-sessione");
+  verifica("una seconda invalidazione dello stesso token (già assente) non lancia eccezioni", secondaChiamata === undefined);
+
+  // token vuoto/assente: nessuna query, nessun errore (stesso corto
+  // circuito già visto in verificaTokenSessione).
+  await invalidaSessioneProfilo(db, null);
+  await invalidaSessioneProfilo(db, undefined);
+  verifica("token null/undefined: nessuna riga toccata, nessuna eccezione", db.sessioni.length === 1);
 }
 
 console.log(`\n${falliti === 0 ? "Tutti i test passati." : `${falliti} test falliti.`}`);
