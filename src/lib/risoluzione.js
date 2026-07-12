@@ -1,11 +1,11 @@
 import { GAME_CONFIG } from "../game-config.js";
 
-// Creazione e risoluzione basate sulle competenze personali. Questo modulo
-// NON è ancora collegato al flusso dei nodi (GameSession.js /scegli) — per
-// ora i nodi restano a effetti fissi come prima. Il collegamento (una
-// richiesta che chiede "tira con la tua Precisione" invece di un effetto
-// fisso) è il passo successivo, volutamente separato per poter testare
-// questa parte da sola.
+// Creazione e risoluzione basate sulle competenze personali. Collegato al
+// flusso dei nodi: GameSession.js importa sia creaCompetenzeIniziali() (usata
+// in /join) sia risolviAzione() (usata in /scegli, per le risposte con
+// competenzaRichiesta). Non tutte le risposte dei 5 nodi usano ancora un
+// tiro reale — quelle senza competenzaRichiesta restano a effetto fisso,
+// come previsto dal modello di ramificazione in game-config.js.
 
 // Costruisce le competenze iniziali di un personaggio in base al ruolo
 // scelto e a una distribuzione libera dei punti extra decisa dal giocatore.

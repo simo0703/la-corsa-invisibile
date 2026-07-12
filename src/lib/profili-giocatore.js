@@ -205,10 +205,10 @@ export function normalizzaBonusScelti(bonusSceltiJson) {
 
 // Scala gradi (Fase 4): 10 gradi, gerarchia reale dei Bersaglieri (confermata
 // con l'autore). Grado 1 (Bersagliere) è il punto di partenza a 0 XP --
-// nessuna soglia da superare per averlo. Interpretazione della soglia
-// "N × 200 XP cumulativi" scelta qui: sono gli XP cumulativi necessari per
-// salire DAL grado N AL grado N+1 (grado 2 a 200 XP, grado 3 a 400, ...,
-// grado 10 a 1800) -- da confermare con l'autore se non è quanto intendeva.
+// nessuna soglia da superare per averlo. Soglia "N × 200 XP cumulativi"
+// confermata con l'autore: sono gli XP cumulativi necessari per salire DAL
+// grado N AL grado N+1 (grado 2 a 200 XP, grado 3 a 400, ..., grado 10 a
+// 1800 -- Capitano).
 export const NOMI_GRADO = [
   "Bersagliere",
   "Bersagliere Scelto",
