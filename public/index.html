@@ -93,6 +93,37 @@
   }
   .link-arruolamento:hover { color: var(--brass); border-bottom-color: var(--brass); }
 
+  /* Indicatore di profilo collegato (Passo 3): mostrato solo su
+     schermo-join, dove avviene davvero /join -- non duplicato su
+     schermo-codice (schermata di sola creazione stanza, senza /join). */
+  .profilo-collegato {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    background: var(--bg-panel);
+    border: 1px solid var(--brass);
+    border-radius: 4px;
+    padding: 10px 14px;
+    margin-bottom: 20px;
+    font-size: 0.85rem;
+  }
+  .profilo-collegato .nome-profilo strong { color: var(--brass); }
+  .profilo-collegato button.scollega {
+    background: none;
+    border: none;
+    color: var(--text-faint);
+    font-family: var(--font-display);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 0;
+  }
+  .profilo-collegato button.scollega:hover { color: var(--brass); }
+
   .etichetta {
     font-family: var(--font-display);
     font-size: 0.7rem;
@@ -603,6 +634,7 @@
   <section id="schermo-join" class="schermo">
     <div class="etichetta">La squadra</div>
     <h1 class="grande">Come vuoi essere chiamato al tavolo?</h1>
+    <div id="profilo-collegato-box"></div>
     <p class="spiega">
       Scegli un nome e un ruolo. Il ruolo definisce cosa il tuo personaggio sa fare
       meglio, ma le risorse della squadra — Cadenza, Spirito di Corpo, Passo Avanti —
@@ -670,6 +702,47 @@ function caricaStato() {
     const salvato = JSON.parse(localStorage.getItem("lci_stato") || "null");
     if (salvato) STATO = salvato;
   } catch (e) {}
+}
+
+// Profilo persistente collegato a questo dispositivo (Passo 3 della UI di
+// accesso): scritto da arruolati.html dopo un login/registrazione riuscito,
+// stesso origin quindi stesso localStorage -- SOLO profiloId+nome, mai il
+// PIN (non serve: /join, Fase 2, accetta il profiloId senza verificarne il
+// possesso). Assente per un giocatore ospite: comportamento invariato,
+// nessun profiloId inviato a /join.
+const CHIAVE_PROFILO_COLLEGATO = "lci_profilo";
+let PROFILO_COLLEGATO = null;
+function caricaProfiloCollegato() {
+  try {
+    PROFILO_COLLEGATO = JSON.parse(localStorage.getItem(CHIAVE_PROFILO_COLLEGATO) || "null");
+  } catch (e) {
+    PROFILO_COLLEGATO = null;
+  }
+}
+
+// Mostrato solo su schermo-join (unico punto in cui avviene davvero
+// /join): un giocatore su un dispositivo condiviso può scollegare il
+// profilo sbagliato e proseguire come ospite, senza dover uscire dalla
+// pagina -- coerente col principio "il profilo è visibile ma mai un
+// ostacolo" di questa UI.
+function renderProfiloCollegato() {
+  const box = document.getElementById("profilo-collegato-box");
+  if (!box) return;
+  if (!PROFILO_COLLEGATO) {
+    box.innerHTML = "";
+    return;
+  }
+  box.innerHTML = `
+    <div class="profilo-collegato">
+      <span class="nome-profilo">Accesso come <strong>${PROFILO_COLLEGATO.nome}</strong></span>
+      <button class="scollega" id="btn-scollega-profilo">Non sei tu? Continua come ospite</button>
+    </div>
+  `;
+  document.getElementById("btn-scollega-profilo").addEventListener("click", () => {
+    localStorage.removeItem(CHIAVE_PROFILO_COLLEGATO);
+    PROFILO_COLLEGATO = null;
+    renderProfiloCollegato();
+  });
 }
 
 async function chiamaAPI(path, opzioni) {
@@ -740,6 +813,7 @@ function trovaNodo(nodoId) {
 // --- Avvio ---
 async function avvia() {
   caricaStato();
+  caricaProfiloCollegato();
   await caricaConfig();
 
   const params = new URLSearchParams(window.location.search);
@@ -758,6 +832,7 @@ async function avvia() {
   } else if (STATO.roomId) {
     // stanza nota ma non ancora presentati
     mostraSchermo("schermo-join");
+    renderProfiloCollegato();
   } else {
     mostraSchermo("schermo-codice");
   }
@@ -781,6 +856,7 @@ document.getElementById("btn-crea-stanza").addEventListener("click", async () =>
     salvaStato();
     history.replaceState(null, "", "?stanza=" + risposta.roomId);
     mostraSchermo("schermo-join");
+    renderProfiloCollegato();
   } catch (e) {
     erroreBox.textContent = "Qualcosa è andato storto. Riprova.";
     erroreBox.classList.add("mostra");
@@ -811,6 +887,10 @@ document.getElementById("btn-join").addEventListener("click", async () => {
     // non diventerà comandante (vedi GameSession.js).
     const corpoJoin = { nome, ruolo };
     if (STATO.tokenCreazione) corpoJoin.tokenCreazione = STATO.tokenCreazione;
+    // profiloId SOLO se questo dispositivo ha già fatto login/registrazione
+    // su arruolati.html (Passo 3): un giocatore ospite non lo invia mai,
+    // comportamento invariato.
+    if (PROFILO_COLLEGATO) corpoJoin.profiloId = PROFILO_COLLEGATO.profiloId;
     const session = await chiamaAPI(`/api/stanza/${STATO.roomId}/join`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
