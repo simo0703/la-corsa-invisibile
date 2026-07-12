@@ -203,6 +203,13 @@
   }
   .errore.mostra { display: block; }
 
+  /* Variante di .errore con due bottoni invece di solo testo (vedi
+     mostraAvvisoIdentitaEsistente): stesso richiamo visivo, i bottoni
+     mantengono il proprio stile (.principale/.secondario), qui solo
+     spaziatura tra testo e bottoni e tra i due bottoni. */
+  .avviso-identita p { margin: 0 0 10px; }
+  .avviso-identita button { margin-right: 8px; }
+
   /* --- Schermata di gioco --- */
   /* ESPERIMENTO VISIVO (primo passaggio, da valutare): sfondo tavolo +
      posti dei giocatori. #schermo-gioco porta lo sfondo atmosferico su
@@ -678,6 +685,7 @@
       <select id="select-ruolo"></select>
     </div>
     <button class="principale" id="btn-join">Unisciti alla squadra</button>
+    <div class="errore avviso-identita" id="avviso-identita-esistente"></div>
     <div class="errore" id="errore-join"></div>
     <a class="link-arruolamento" href="/arruolati.html">Arruolati — hai già un profilo?</a>
   </section>
@@ -715,7 +723,13 @@
 <script>
 const API = ""; // stesso dominio
 let CONFIG = null;
-let STATO = { roomId: null, nome: null, ruolo: null, giocatoreId: null, token: null, tokenCreazione: null, comandante: false, competenze: null };
+// identitaRoomId: il roomId per cui nome/giocatoreId/token/comandante sono
+// validi -- SEPARATO da roomId (che indica la stanza verso cui si sta
+// navigando in questo momento, non necessariamente quella dell'identità già
+// salvata). Serve a riconoscere quando roomId cambia sotto un'identità
+// ancora presente in localStorage, per evitare di sovrascriverla in
+// silenzio (vedi pulisciIdentita() e identitaEsistentePerStanzaCorrente()).
+let STATO = { roomId: null, nome: null, ruolo: null, giocatoreId: null, token: null, tokenCreazione: null, comandante: false, competenze: null, identitaRoomId: null };
 
 function mostraSchermo(id) {
   document.querySelectorAll(".schermo").forEach(s => s.classList.remove("attivo"));
@@ -821,6 +835,37 @@ function identitaValida() {
   return !!(STATO.giocatoreId && STATO.token);
 }
 
+// Ripulisce l'identità di gioco (nome/ruolo/giocatoreId/token/comandante/
+// competenze/identitaRoomId) SENZA toccare roomId o tokenCreazione: quelli
+// restano responsabilità di chi chiama, a seconda del motivo della pulizia
+// (nuova stanza creata, nuova stanza raggiunta via link). Usata per evitare
+// che un'identità di una stanza precedente resti "appesa" in localStorage
+// dopo essere passati a una stanza diversa -- prima di questo fix, solo
+// roomId/tokenCreazione venivano aggiornati, lasciando gli altri campi
+// silenziosamente disallineati (bug scoperto nell'indagine sul messaggio
+// "sessione non più valida").
+function pulisciIdentita() {
+  STATO.nome = null;
+  STATO.ruolo = null;
+  STATO.giocatoreId = null;
+  STATO.token = null;
+  STATO.comandante = false;
+  STATO.competenze = null;
+  STATO.identitaRoomId = null;
+}
+
+// Vero se esiste già, in questo browser, un'identità valida per la stanza
+// verso cui si sta per fare /join (STATO.roomId, già impostato da chi
+// chiama prima di mostrare schermo-join). Un secondo /join in questo caso
+// creerebbe un SECONDO giocatore nella stessa stanza, sovrascrivendo
+// silenziosamente l'identità precedente in localStorage (bug confermato:
+// se quell'identità era il comandante, il comandante reale resta valido sul
+// server ma questo dispositivo perde l'accesso alle azioni riservate,
+// mostrando poi un fuorviante "sessione non più valida" al primo tentativo).
+function identitaEsistentePerStanzaCorrente() {
+  return identitaValida() && STATO.identitaRoomId === STATO.roomId;
+}
+
 const MESSAGGIO_SESSIONE_NON_VALIDA =
   "La tua sessione su questo dispositivo non è più valida. Ricarica la pagina per continuare.";
 
@@ -875,6 +920,16 @@ async function avvia() {
   const stanzaUrl = params.get("stanza");
 
   if (stanzaUrl) {
+    // Se questo dispositivo ha un'identità salvata per una stanza DIVERSA
+    // da quella del link appena aperto, ripuliscila esplicitamente: prima
+    // di questo fix, roomId veniva sovrascritto ma nome/giocatoreId/token
+    // restavano quelli della stanza precedente, e la condizione sotto
+    // (STATO.roomId && STATO.nome) mandava dritti a schermo-gioco per la
+    // stanza NUOVA usando un'identità che lì non esiste -- stesso bug
+    // collegato scoperto per btn-crea-stanza, stessa correzione.
+    if (STATO.identitaRoomId && STATO.identitaRoomId !== stanzaUrl) {
+      pulisciIdentita();
+    }
     STATO.roomId = stanzaUrl;
     salvaStato();
   }
@@ -903,6 +958,14 @@ document.getElementById("btn-crea-stanza").addEventListener("click", async () =>
   btn.textContent = "Un momento…";
   try {
     const risposta = await chiamaAPI("/api/crea-stanza", { method: "POST" });
+    // Una stanza nuova è sempre una stanza DIVERSA (roomId generato con
+    // crypto.randomUUID() lato server): qualunque identità già salvata
+    // appartiene per forza alla stanza precedente, va ripulita esplicitamente
+    // invece di lasciarla appesa sotto il nuovo roomId (bug corretto: prima
+    // solo roomId/tokenCreazione venivano aggiornati qui).
+    if (STATO.identitaRoomId) {
+      pulisciIdentita();
+    }
     STATO.roomId = risposta.roomId;
     // tokenCreazione prova "sei tu il creatore" al successivo /join (vedi
     // GameSession.js): salvato subito, cosi' sopravvive anche se la pagina
@@ -922,16 +985,14 @@ document.getElementById("btn-crea-stanza").addEventListener("click", async () =>
 });
 
 // --- Schermata 2: join ---
-document.getElementById("btn-join").addEventListener("click", async () => {
-  const nome = document.getElementById("input-nome").value.trim();
-  const ruolo = document.getElementById("select-ruolo").value;
+
+// Esegue davvero la chiamata /join e aggiorna STATO -- corpo invariato
+// rispetto a prima di questo fix, solo estratto in una funzione a parte
+// così può essere richiamato sia dal click diretto (nessuna identità in
+// conflitto) sia dal bottone di conferma del banner qui sotto (identità in
+// conflitto, ma l'utente ha scelto esplicitamente di procedere comunque).
+async function eseguiJoin(nome, ruolo) {
   const erroreBox = document.getElementById("errore-join");
-  erroreBox.classList.remove("mostra");
-  if (!nome) {
-    erroreBox.textContent = "Scrivi un nome prima di continuare.";
-    erroreBox.classList.add("mostra");
-    return;
-  }
   const btn = document.getElementById("btn-join");
   btn.disabled = true;
   btn.textContent = "Un momento…";
@@ -947,7 +1008,8 @@ document.getElementById("btn-join").addEventListener("click", async () => {
     // invariato. Il server (GameSession.js) verifica il token e ne ricava il
     // profiloId -- un profiloId dichiarato qui non verrebbe più accettato.
     if (PROFILO_COLLEGATO) corpoJoin.profiloToken = PROFILO_COLLEGATO.profiloToken;
-    const session = await chiamaAPI(`/api/stanza/${STATO.roomId}/join`, {
+    const roomIdDestinazione = STATO.roomId;
+    const session = await chiamaAPI(`/api/stanza/${roomIdDestinazione}/join`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(corpoJoin),
@@ -962,6 +1024,11 @@ document.getElementById("btn-join").addEventListener("click", async () => {
     STATO.token = session.token;
     STATO.comandante = mioGiocatore.comandante === true;
     STATO.competenze = mioGiocatore.competenze;
+    // L'identità appena ottenuta è valida per QUESTA stanza -- registrato
+    // esplicitamente così un /join successivo sulla stessa stanza può
+    // riconoscere che sovrascriverebbe un'identità già funzionante (vedi
+    // identitaEsistentePerStanzaCorrente()).
+    STATO.identitaRoomId = roomIdDestinazione;
     // tokenCreazione è "one-shot" lato server (consumato al primo /join che
     // lo usa con successo): dopo un /join riuscito non ha più senso
     // tenerlo lato client, sia che abbia assegnato comandante sia che non
@@ -980,6 +1047,61 @@ document.getElementById("btn-join").addEventListener("click", async () => {
     btn.disabled = false;
     btn.textContent = "Unisciti alla squadra";
   }
+}
+
+// Banner di conferma quando questo browser ha già un'identità valida per la
+// STESSA stanza (vedi identitaEsistentePerStanzaCorrente()): nessuna
+// sovrascrittura silenziosa, l'utente sceglie esplicitamente se procedere
+// come nuovo giocatore o restare con l'identità già presente. Riusa lo
+// stile della classe "errore" già in uso in tutta la pagina (stesso colore
+// di richiamo), con due bottoni al posto del solo testo.
+function mostraAvvisoIdentitaEsistente(nomeNuovo, ruoloNuovo) {
+  const box = document.getElementById("avviso-identita-esistente");
+  const ruoloAttualeInfo = CONFIG.ruoli.find(r => r.id === STATO.ruolo);
+  const nomeRuoloAttuale = ruoloAttualeInfo ? ruoloAttualeInfo.nome : STATO.ruolo;
+  box.innerHTML = `
+    <p>Risulti già presente in questa stanza come <strong>${STATO.nome}</strong> (${nomeRuoloAttuale}). Vuoi continuare come <strong>${nomeNuovo}</strong> invece?</p>
+    <button class="principale" id="btn-conferma-nuova-identita">Continua come ${nomeNuovo}</button>
+    <button class="secondario" id="btn-annulla-nuova-identita">Annulla</button>
+  `;
+  box.classList.add("mostra");
+  document.getElementById("btn-conferma-nuova-identita").addEventListener("click", async () => {
+    nascondiAvvisoIdentitaEsistente();
+    await eseguiJoin(nomeNuovo, ruoloNuovo);
+  });
+  document.getElementById("btn-annulla-nuova-identita").addEventListener("click", async () => {
+    // "Resta con l'identità precedente, nessuna chiamata /join eseguita":
+    // riporta il dispositivo alla partita già in corso con l'identità che
+    // aveva, invece di lasciarlo bloccato su una schermata di join ormai
+    // superflua.
+    nascondiAvvisoIdentitaEsistente();
+    mostraSchermo("schermo-gioco");
+    await aggiornaSchermataGioco();
+    avviaPolling();
+  });
+}
+function nascondiAvvisoIdentitaEsistente() {
+  const box = document.getElementById("avviso-identita-esistente");
+  box.classList.remove("mostra");
+  box.innerHTML = "";
+}
+
+document.getElementById("btn-join").addEventListener("click", async () => {
+  const nome = document.getElementById("input-nome").value.trim();
+  const ruolo = document.getElementById("select-ruolo").value;
+  const erroreBox = document.getElementById("errore-join");
+  erroreBox.classList.remove("mostra");
+  nascondiAvvisoIdentitaEsistente();
+  if (!nome) {
+    erroreBox.textContent = "Scrivi un nome prima di continuare.";
+    erroreBox.classList.add("mostra");
+    return;
+  }
+  if (identitaEsistentePerStanzaCorrente()) {
+    mostraAvvisoIdentitaEsistente(nome, ruolo);
+    return;
+  }
+  await eseguiJoin(nome, ruolo);
 });
 
 // --- Schermata 3: gioco ---

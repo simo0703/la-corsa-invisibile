@@ -725,6 +725,85 @@ oggi contiene un `index.html` minimo).
 
 ## Changelog tecnico
 
+**12/07/2026 — Fix: secondo /join nella stessa stanza non sovrascrive più l'identità in silenzio**
+File modificati: `public/index.html`, nuovo `test-identita-client.mjs`.
+- Bug segnalato dall'autore durante un test manuale: cliccando "Avvia" su un
+  nodo compariva a volte "La tua sessione su questo dispositivo non è più
+  valida" nonostante fosse l'unico giocatore/comandante. Indagine (senza
+  modifiche) confermata in una sessione precedente: `localStorage` usa
+  un'unica chiave globale (`"lci_stato"`, nessun namespacing per stanza) e
+  ogni `/join` — nella stessa stanza o in una diversa — sovrascriveva
+  interamente `giocatoreId`/`token`/`nome`/`comandante` senza controllare se
+  un'identità funzionante era già presente. Riprodotto dal vivo con
+  `wrangler dev`: un secondo `/join` nella STESSA stanza (es. tornando sulla
+  schermata di ingresso e premendo di nuovo "Unisciti") crea un secondo
+  giocatore (ospite, non comandante) e sostituisce silenziosamente
+  l'identità del comandante in `localStorage` — il comandante reale resta
+  valido sul server, ma il dispositivo perde l'accesso alle azioni riservate
+  e riceve poi il messaggio fuorviante "sessione non più valida" (in realtà
+  un 403 "non sei il comandante", non un problema di sessione).
+- **Correzione lato client, come richiesto — nessuna modifica a
+  `GameSession.js` o al server**: nuovo campo `STATO.identitaRoomId` (il
+  roomId per cui l'identità salvata è valida, separato da `STATO.roomId` che
+  indica la stanza verso cui si sta navigando). Prima di ogni `/join`:
+  - se `STATO.identitaRoomId` coincide con la stanza di destinazione
+    (stessa stanza, identità già presente) → **niente più sovrascrittura
+    automatica**: banner di conferma sulla schermata di ingresso ("Risulti
+    già presente in questa stanza come X (ruolo). Vuoi continuare come Y
+    invece?") con due bottoni — "Continua come Y" esegue il `/join` scelto
+    esplicitamente; "Annulla" non chiama `/join`, riporta il dispositivo
+    alla partita già in corso con l'identità precedente intatta;
+  - se l'identità salvata è per una stanza DIVERSA → **nessun cambiamento
+    di comportamento**, si procede come prima (caso legittimo: si è
+    lasciata una stanza, se ne raggiunge un'altra).
+  Scelta di UX per il banner (chiesta esplicitamente all'autore prima di
+  scrivere codice, con tre opzioni: `window.confirm()` nativo, banner inline
+  in stile `.errore` già esistente, pannello in stile `renderPromptCessione`
+  — **non decisa unilateralmente**): banner inline, riusa la classe
+  `.errore` già in uso in tutta la pagina con l'aggiunta di due bottoni.
+- **Bug collegato corretto, come richiesto**: `btn-crea-stanza` ora ripulisce
+  esplicitamente `nome`/`giocatoreId`/`token`/`comandante`/`competenze`
+  (nuova funzione `pulisciIdentita()`) quando l'identità salvata appartiene
+  a una stanza precedente, invece di lasciarla "appesa" sotto il nuovo
+  `roomId` come faceva prima (aggiornava solo `roomId`/`tokenCreazione`).
+- **Bug gemello scoperto e corretto in più, non esplicitamente nominato
+  nella richiesta ma stessa causa**: la stessa disattenzione esisteva anche
+  in `avvia()` per chi apre un link `?stanza=<altraStanza>` mentre ha ancora
+  un'identità di una stanza precedente in `localStorage` — la condizione
+  `STATO.roomId && STATO.nome` mandava dritti a `schermo-gioco` per la
+  stanza NUOVA usando l'identità VECCHIA (mai un vero `/join` per quella
+  stanza). Corretto con la stessa `pulisciIdentita()`. Verificato dal vivo
+  che questo, non `btn-crea-stanza` (mai raggiungibile una volta già in una
+  stanza, non esiste un bottone "lascia stanza" nella UI attuale), è il
+  percorso realisticamente raggiungibile per il pattern "seconda stanza
+  sopra la prima" descritto nella segnalazione originale.
+- Verificato dal vivo con `wrangler dev`, guidando davvero il browser, tutti
+  e tre gli scenari dell'indagine precedente: secondo `/join` nella stessa
+  stanza (banner mostrato, "Annulla" non chiama `/join` e torna al gioco con
+  l'identità originale intatta, "Continua come..." esegue il `/join` scelto
+  e sostituisce l'identità); due tab sullo stesso link (stesso meccanismo di
+  `localStorage` condiviso di sopra, copertura equivalente); nuova stanza
+  raggiunta con un'identità precedente ancora attiva (identità ripulita,
+  schermata di ingresso mostrata invece del salto diretto al gioco).
+  Rilanciata l'intera suite (23 file): nessuna regressione.
+- Nuovo `test-identita-client.mjs`: prima volta che un test tocca la logica
+  di `public/index.html` (finora testata solo manualmente/dal vivo, nessun
+  file `test-*.mjs` esistente la toccava). `public/index.html` non è un
+  modulo (HTML con `<script>` inline, nessun `export`): il test estrae il
+  testo delle tre funzioni pure coinvolte (`identitaValida`,
+  `pulisciIdentita`, `identitaEsistentePerStanzaCorrente` — nessuna tocca il
+  DOM) direttamente dal file reale con una regex ed esegue quel testo in un
+  contesto `vm` isolato di Node, invece di duplicarle a mano in un fixture
+  separato — resta sincronizzato con l'implementazione vera senza bisogno di
+  un bundler o di un browser headless.
+- **Non toccato, come richiesto**: `GameSession.js`, nessuna rotta del
+  server, il messaggio "sessione non più valida" per i casi di 401/403
+  legittimi (token davvero corrotto, davvero non comandante) resta
+  invariato — un messaggio più preciso per distinguere questi casi resta un
+  passo successivo separato, non ancora affrontato.
+
+---
+
 **12/07/2026 — Secondo tiro reale nel nodo 1848-milano: Precisione (Incursore) su `milano-ferito`**
 File modificati: `src/game-config.js`, `src/lib/narratore-1848-milano.md`,
 `test-narratore-1848-milano.mjs`.
