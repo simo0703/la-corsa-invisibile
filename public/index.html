@@ -200,6 +200,10 @@
     font-size: 0.88rem;
     margin-top: 10px;
     display: none;
+    /* I messaggi impostati via textContent possono avere una seconda riga
+       separata da \n (es. "Al comando: [nome]." sotto un 403): senza
+       pre-line il newline collasserebbe in uno spazio. */
+    white-space: pre-line;
   }
   .errore.mostra { display: block; }
 
@@ -915,18 +919,61 @@ function identitaEsistentePerStanzaCorrente() {
 
 const MESSAGGIO_SESSIONE_NON_VALIDA =
   "La tua sessione su questo dispositivo non è più valida. Ricarica la pagina per continuare.";
+// Nessuna promessa di rientro nel testo del 401: non esiste un flusso di
+// ri-autenticazione (ricaricare non risolve, un secondo /join è bloccato),
+// quindi il messaggio si limita a constatare.
+const MESSAGGIO_SESSIONE_SCADUTA =
+  "La tua sessione non è più valida su questo dispositivo.";
+const MESSAGGIO_COMANDO_PERSO = "Il comando non è più tuo.";
+const MESSAGGIO_AZIONE_DEL_COMANDANTE = "Questa azione spetta al comandante.";
+
+// Sceglie il messaggio da mostrare per un errore di sessione. Per le azioni
+// riservate al comandante il codice HTTP distingue due situazioni diverse
+// per il giocatore, e il messaggio deve farlo altrettanto:
+// - 401 = il TOKEN non è valido (mancante/scaduto/di un'altra identità):
+//   il problema è la sessione di questo dispositivo;
+// - 403 = il token è valido ma questo profilo NON è il comandante della
+//   stanza: la sessione è a posto, è il comando che manca. Il testo dipende
+//   dal punto di chiamata (`contesto`):
+//   - "comandante" = pannello del comandante, visibile solo a chi ERA
+//     comandante: il ruolo gli è appena passato di mano -> "non più tuo";
+//   - "nodo" = selezione del nodo, visibile a TUTTI i giocatori: chi clicca
+//     può non essere mai stato comandante -> "spetta al comandante".
+//   In entrambi i casi, se il roster in memoria sa già chi comanda ora
+//   (vedi NOME_COMANDANTE_CORRENTE), lo dice in una seconda riga --
+//   nessuna chiamata di rete in più.
+// Per le chiamate senza `contesto` resta il messaggio generico di sempre.
+function messaggioErroreSessione(status, contesto) {
+  if (!contesto) return MESSAGGIO_SESSIONE_NON_VALIDA;
+  if (status === 401) return MESSAGGIO_SESSIONE_SCADUTA;
+  const primaRiga = contesto === "nodo" ? MESSAGGIO_AZIONE_DEL_COMANDANTE : MESSAGGIO_COMANDO_PERSO;
+  return NOME_COMANDANTE_CORRENTE
+    ? `${primaRiga}\nAl comando: ${NOME_COMANDANTE_CORRENTE}.`
+    : primaRiga;
+}
 
 // Wrapper per le chiamate che richiedono giocatoreId + token (/scegli,
 // /interpreta, /risorse, /avvia-nodo, /risolvi-interpretazione): aggiunge
 // l'identità al corpo della richiesta e intercetta i soli errori di
-// SESSIONE (401 token non valido, 403 non comandante) mostrando lo stesso
+// SESSIONE (401 token non valido, 403 non comandante) mostrando un
 // messaggio chiaro con `mostraErrore` -- gli altri errori (es. 400 di
 // dominio, come un nodo o una risorsa sconosciuti) passano invariati al
 // chiamante, che li gestisce come faceva già prima del token.
-async function chiamaAPIAutenticata(path, corpoBase, mostraErrore) {
+// `contesto`: per le chiamate riservate al comandante distingue i messaggi
+// di 401 e 403 in base al punto di partenza (vedi messaggioErroreSessione):
+// - "comandante" = pannello del comandante (/risorse, /avvia-nodo,
+//   /risolvi-interpretazione, /proponi-cessione e l'annullamento della
+//   cessione dal pannello);
+// - "nodo" = selezione del nodo (/avvia-nodo dalle carte, visibili a tutti).
+// Le altre chiamate autenticate (/scegli, /interpreta, accetta/rifiuta
+// cessione del destinatario) non passano nulla e mantengono il messaggio
+// generico di prima.
+async function chiamaAPIAutenticata(path, corpoBase, mostraErrore, contesto = null) {
   if (!identitaValida()) {
-    mostraErrore(MESSAGGIO_SESSIONE_NON_VALIDA);
-    const err = new Error(MESSAGGIO_SESSIONE_NON_VALIDA);
+    // Identità assente = stesso caso del 401 (nessun token da presentare).
+    const messaggio = messaggioErroreSessione(401, contesto);
+    mostraErrore(messaggio);
+    const err = new Error(messaggio);
     err.sessioneNonValida = true;
     throw err;
   }
@@ -938,7 +985,7 @@ async function chiamaAPIAutenticata(path, corpoBase, mostraErrore) {
     });
   } catch (e) {
     if (e.status === 401 || e.status === 403) {
-      mostraErrore(MESSAGGIO_SESSIONE_NON_VALIDA);
+      mostraErrore(messaggioErroreSessione(e.status, contesto));
       e.sessioneNonValida = true;
     }
     throw e;
@@ -1352,7 +1399,8 @@ function renderSelezioneNodo() {
         await chiamaAPIAutenticata(
           `/api/stanza/${STATO.roomId}/avvia-nodo`,
           { nodoId },
-          mostraErroreSelezioneNodo
+          mostraErroreSelezioneNodo,
+          "nodo" // selezione nodo, visibile a tutti: 401/403 con messaggi distinti
         );
         area.innerHTML = `<div class="caricamento">si comincia…</div>`;
         await aggiornaSchermataGioco();
@@ -1565,12 +1613,21 @@ function mostraEsito(testoEsito, prossimaRichiesta, esitoNodo, nodoAttivo, tiro,
   }
 }
 
+// Nome (con grado, se noto) del comandante corrente secondo l'ultimo roster
+// ricevuto dal server. Serve SOLO alla seconda riga dei messaggi d'errore
+// 403 ("Al comando: [nome]."): il roster arriva già a ogni tick di polling
+// e a ogni aggiornaSchermataGioco, qui viene solo trattenuto -- nessuna
+// chiamata di rete né campo nuovo nel payload.
+let NOME_COMANDANTE_CORRENTE = null;
+
 // Il ruolo comandante può cambiare senza un'azione diretta di questo
 // dispositivo (una cessione accettata da qualcun altro, o accettata da
 // questo stesso giocatore): rilegge sempre da session.giocatori invece di
 // fidarsi solo del valore salvato a /join, così pannello-comandante
 // appare/scompare per la persona giusta senza bisogno di ricaricare.
 function aggiornaComandanteDaSessione(giocatori) {
+  const comandante = giocatori.find(g => g.comandante === true);
+  NOME_COMANDANTE_CORRENTE = comandante ? nomeConGrado(comandante) : null;
   const io = giocatori.find(g => g.id === STATO.giocatoreId);
   if (io && STATO.comandante !== (io.comandante === true)) {
     STATO.comandante = io.comandante === true;
@@ -1755,7 +1812,8 @@ function renderPannelloComandante(session) {
           await chiamaAPIAutenticata(
             `/api/stanza/${STATO.roomId}/risolvi-interpretazione`,
             { risposteIndice },
-            mostraErroreComandante
+            mostraErroreComandante,
+            "comandante" // pannello del comandante
           );
           await aggiornaSchermataGioco();
         } catch (e) {
@@ -1770,7 +1828,8 @@ function renderPannelloComandante(session) {
         await chiamaAPIAutenticata(
           `/api/stanza/${STATO.roomId}/risolvi-interpretazione`,
           { annulla: true },
-          mostraErroreComandante
+          mostraErroreComandante,
+          "comandante" // pannello del comandante
         );
         await aggiornaSchermataGioco();
       } catch (e) {
@@ -1788,7 +1847,8 @@ function renderPannelloComandante(session) {
       await chiamaAPIAutenticata(
         `/api/stanza/${STATO.roomId}/risorse`,
         { risorsa: "margine", delta },
-        mostraErroreComandante
+        mostraErroreComandante,
+        "comandante" // pannello del comandante
       );
       await aggiornaSchermataGioco();
     } catch (e) {
@@ -1803,7 +1863,8 @@ function renderPannelloComandante(session) {
       await chiamaAPIAutenticata(
         `/api/stanza/${STATO.roomId}/avvia-nodo`,
         { nodoId },
-        mostraErroreComandante
+        mostraErroreComandante,
+        "comandante" // pannello del comandante
       );
       await aggiornaSchermataGioco();
     } catch (e) {
@@ -1820,7 +1881,8 @@ function renderPannelloComandante(session) {
         await chiamaAPIAutenticata(
           `/api/stanza/${STATO.roomId}/proponi-cessione`,
           { versoGiocatoreId },
-          mostraErroreComandante
+          mostraErroreComandante,
+          "comandante" // pannello del comandante
         );
         await aggiornaSchermataGioco();
       } catch (e) {
@@ -1839,7 +1901,10 @@ function renderPannelloComandante(session) {
     btnAnnullaCessione.addEventListener("click", async () => {
       erroreComandante.classList.remove("mostra");
       try {
-        await chiamaAPIAutenticata(`/api/stanza/${STATO.roomId}/rifiuta-cessione`, {}, mostraErroreComandante);
+        // Annullamento della propria proposta dal pannello: se nel frattempo
+        // il comando è passato ad altri, il server risponde 403 -- contesto
+        // "comandante", così il messaggio è quello giusto.
+        await chiamaAPIAutenticata(`/api/stanza/${STATO.roomId}/rifiuta-cessione`, {}, mostraErroreComandante, "comandante");
         await aggiornaSchermataGioco();
       } catch (e) {
         if (!e.sessioneNonValida) mostraErroreComandante("Qualcosa è andato storto. Riprova.");
