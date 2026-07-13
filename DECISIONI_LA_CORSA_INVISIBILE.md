@@ -1,12 +1,13 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 13 luglio 2026 (dopo due interventi committati e pushati su
-main: titolo del pannello comandante in avorio a contrasto WCAG AA, commit
-`1caefcb`, e messaggi 401/403 distinti per il comandante, commit `0a0bc88`
-— ultimo commit su main, deploy automatico Cloudflare avviato. La sessione
-precedente, 12 luglio, aveva chiuso i tre filoni post-Fase 4: UI di accesso
-reale, token di sessione per il profilo, riconoscimento del grado nel
-gameplay — vedi "Punto di ripresa" sotto)
+Aggiornato al: 13 luglio 2026 (ultimo commit su main `a33880c`, deploy
+automatico Cloudflare avviato). Interventi di questa sessione (13 luglio),
+tutti pushati su main: titolo del pannello comandante in avorio a contrasto
+WCAG AA (`1caefcb`), messaggi 401/403 distinti per il comandante
+(`0a0bc88`), asse `richiestaId` abilitato nel contesto del Cronista
+(`a33880c`). La sessione precedente, 12 luglio, aveva chiuso i tre filoni
+post-Fase 4: UI di accesso reale, token di sessione per il profilo,
+riconoscimento del grado nel gameplay — vedi "Punto di ripresa" sotto.
 
 Questo file serve a non perdersi tra una sessione di lavoro e l'altra: raccoglie cosa
 è stato deciso, cosa è ancora un'ipotesi da confermare, e cosa manca. Va aggiornato
@@ -673,9 +674,39 @@ oggi contiene un `index.html` minimo).
       nodi hanno già pool e librerie pronti, quindi una nuova risposta a
       tiro in un nodo esistente può riusarli senza altro lavoro di
       contenuto — **attenzione**: se il nuovo tiro condivide il pool con un
-      tiro già esistente nello stesso nodo, vedi la miglioria aperta
-      sull'asse `richiestaId` nel changelog del 12/07/2026, per evitare lo
-      stesso rischio di mescolamento risolto qui con l'Opzione 2
+      tiro già esistente nello stesso nodo, condiziona i frammenti sull'asse
+      `richiestaId` (ora abilitato, vedi punto chiuso sotto) per evitare il
+      mescolamento tra scene, invece dell'accorgimento provvisorio
+      dell'Opzione 2 (frammenti dedicati affiancati ai baseline) usato in
+      `1848-milano`
+- [x] Abilitare l'asse `richiestaId` nel contesto del Cronista — **CHIUSO
+      il 13/07/2026** (commit `a33880c`, `src/durable-objects/GameSession.js`
+      + `test-scegli-cronista.mjs`):
+      - il contesto passato a `componiNarrazione` include ora
+        `richiestaId: richiestaAttiva.id` (lo stesso id già usato poco sotto
+        per `storicoScelte`, nessun id nuovo da inventare);
+      - **nessuna modifica al motore (`narratore-simulato.js`) né al
+        loader**: il loader tratta già qualunque colonna sconosciuta di un
+        `.md` come condizione confrontata col contesto, quindi l'asse
+        funziona da solo appena un frammento lo usa (verificato con un test
+        di loader su dati reali);
+      - **modifica INERTE**: nessun frammento è oggi condizionato su
+        `richiestaId`, nessun `.md` toccato;
+      - **perché serviva**: in `1848-milano` i due tiri reali sono separati
+        solo perché usano competenze diverse (Cadenza su `milano-barricata`
+        vs Precisione su `milano-ferito`) e l'asse `competenzaId` li
+        distingue per coincidenza. La separazione collassa appena due tiri
+        dello stesso nodo useranno la stessa competenza: da lì in poi serve
+        `richiestaId`;
+      - **REGOLA DA NON VIOLARE**: le tabelle "Baseline per esito" nei `.md`
+        devono restare INCONDIZIONATE su `richiestaId`. Se una baseline
+        fosse condizionata, una richiesta senza frammenti dedicati farebbe
+        lanciare l'errore "zero candidati" di `componiNarrazione`, che NON è
+        coperto dal try/catch del registro e arriverebbe al tavolo.
+        Verificato: nessun `.md` contiene oggi una colonna `richiestaId`;
+      - test: **646 asserzioni su 23 file, 0 FAIL** (+5 nuove in
+        `test-scegli-cronista`, di cui una cattura il contesto reale passato
+        dal motore e conferma `richiestaId === "decalogo-ginnastica"`)
 - [x] `public/index.html` non mandava `giocatoreId` a `/scegli` — corretto
       nel Passo 11, verificato dal vivo con `wrangler dev` + browser
 - [x] Identità comandante (primo giocatore della stanza) + pannello nella
@@ -788,6 +819,28 @@ oggi contiene un `index.html` minimo).
       Emerso durante il lavoro sui messaggi 401/403 (vedi sopra): è il
       motivo per cui il testo del 401 si limita a constatare, senza
       promettere un rientro.
+- [ ] **Il Cronista può ripetersi alla lettera** (PRIORITÀ: prima del
+      playtest): il motore SA fare anti-ripetizione (`scegliFrammento`
+      esclude gli id nello storico recente, e `componiNarrazione`
+      restituisce `frammentiUsati`), ma nessuno lo alimenta —
+      `GameSession.js` passa `storicoFrammenti: []` hardcoded e scarta il
+      `frammentiUsati` di ritorno. Risultato: oggi lo stesso frammento può
+      essere pescato più volte identico nella stessa sessione. Al tavolo si
+      nota molto più del mescolamento tra scene risolto con l'asse
+      `richiestaId`. Richiede uno stato di sessione
+      (`session.storicoFrammenti`) con migrazione in
+      `initState()`/`migrateState()`, come da regola del progetto.
+- [ ] **Frammenti di scena per `1848-milano`** (lavoro di CONTENUTO, non
+      tecnico): ora che l'asse `richiestaId` esiste (vedi punto chiuso in
+      "Cosa manca" sopra), si possono scrivere frammenti dedicati a
+      `milano-barricata` e `milano-ferito`, rendendo il Cronista specifico
+      invece che generico sulle due scene. Va scritto e approvato in chat
+      come contenuto creativo, e sarà anche l'occasione per il test
+      end-to-end dell'asse che oggi manca: `1836-torino` ha un solo tiro
+      reale, quindi non permette di verificare "il frammento dedicato
+      compare solo per la sua richiesta" attraverso il flusso completo di
+      `/scegli` (oggi l'asse è testato end-to-end sul valore che arriva nel
+      contesto, e a livello di loader sul filtraggio — vedi il punto chiuso).
 
 ---
 
@@ -1139,6 +1192,7 @@ File modificati: `src/game-config.js`, `src/lib/narratore-1848-milano.md`,
   aggiungono altri tiri reali allo stesso nodo (oggi solo `1848-milano` ne
   ha due; gli altri 4 nodi restano a un tiro ciascuno, quindi il problema
   non si presenta ancora lì).
+  → implementata il 13/07/2026, commit `a33880c` (vedi "Cosa manca").
 
 ---
 
