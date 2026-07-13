@@ -858,6 +858,67 @@
     .zona-chat .chat-messaggi { max-height: 420px; }
   }
 
+  /* --- Riconoscimento --- */
+  /* Schermata "sei gia' seduto?": il roster come lista di scelte. */
+  .lista-rientro { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .rientro-scelta {
+    text-align: left;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease;
+  }
+  .rientro-scelta:hover:not(:disabled) { border-color: var(--brass); background: var(--bg-panel-raised); }
+  .rientro-scelta:disabled { opacity: 0.5; cursor: default; }
+  .rientro-scelta .ruolo-rientro { color: var(--text-muted); font-size: 0.82rem; }
+  #attesa-rientro { margin-top: 14px; color: var(--text-muted); font-size: 0.9rem; }
+
+  /* Avviso di sistema del Riconoscimento dentro il pannello chat: bordo crimson
+     per distinguerlo dai messaggi umani (che hanno il nome in brass). */
+  .avviso-sistema {
+    background: var(--bg-panel-raised);
+    border: 1px solid var(--crimson);
+    border-radius: 4px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    font-size: 0.88rem;
+    line-height: 1.4;
+  }
+  .avviso-sistema .avviso-testo { margin-bottom: 8px; }
+  .avviso-sistema .avviso-bottoni { display: flex; gap: 8px; flex-wrap: wrap; }
+  .avviso-sistema button { font-size: 0.82rem; padding: 6px 12px; margin: 0; }
+  .avviso-sistema .errore { margin: 6px 0 0; }
+
+  /* Voce discreta e defilata per "il comandante non risponde" (Caso 3): un
+     link testo in fondo, non un bottone grosso. Chi la cerca la trova. */
+  #riga-comando-defilata { margin-top: 18px; text-align: center; }
+  #riga-comando-defilata:empty { margin-top: 0; }
+  .link-comando-defilato {
+    background: none;
+    border: none;
+    color: var(--text-faint);
+    font-family: var(--font-body);
+    font-size: 0.78rem;
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 4px;
+  }
+  .link-comando-defilato:hover { color: var(--text-muted); }
+  /* Esito della propria richiesta di comando (es. rifiutata): messaggio
+     discreto ma visibile, non un errore urlato. */
+  .nota-esito-comando {
+    margin: 12px 0 0;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    line-height: 1.4;
+  }
+
   .caricamento {
     text-align: center;
     color: var(--text-faint);
@@ -915,6 +976,22 @@
     <a class="link-arruolamento" href="/arruolati.html">Arruolati — hai già un profilo?</a>
   </section>
 
+  <!-- SCHERMATA 2-bis: riconoscimento (sei già seduto a questo tavolo?) -->
+  <section id="schermo-riconoscimento" class="schermo">
+    <div class="etichetta">Bentornato</div>
+    <h1 class="grande">Sei già seduto a questo tavolo?</h1>
+    <p class="spiega">
+      Se eri già in questa partita ma il tuo browser se n'è dimenticato (per
+      esempio l'hai chiusa, o sei su un altro telefono), scegli qui sotto il tuo
+      nome: chiederemo agli altri giocatori di confermare che sei proprio tu.
+      Se invece è la prima volta che entri, scegli «Sono nuovo».
+    </p>
+    <div class="lista-rientro" id="lista-rientro"></div>
+    <button class="secondario" id="btn-sono-nuovo">Sono nuovo, fammi entrare</button>
+    <div class="errore" id="errore-riconoscimento"></div>
+    <div id="attesa-rientro"></div>
+  </section>
+
   <!-- SCHERMATA 3: gioco -->
   <!-- Layout a tre zone su desktop (libri | gioco | chat), mono-colonna su
        mobile. L'ordine nel DOM è gioco → chat → libri: così su mobile (nessuna
@@ -945,12 +1022,21 @@
         <div id="area-nodo"></div>
 
         <div id="pannello-comandante"></div>
+
+        <!-- Voce discreta e defilata: "il comandante non risponde" (Caso 3) -->
+        <div id="riga-comando-defilata"></div>
+        <!-- Esito della PROPRIA richiesta di comando (es. rifiutata): il
+             richiedente è in gioco, non deve restare senza risposta -->
+        <div id="esito-comando"></div>
       </div>
     </div>
 
     <aside class="zona-chat">
       <div class="pannello-chat" id="pannello-chat">
         <div class="titolo-chat">Chat della squadra</div>
+        <!-- Avviso di sistema del Riconoscimento: NON e' un messaggio della chat
+             umana, arriva da riconoscimentoPendente (vedi renderRiconoscimento) -->
+        <div id="avviso-riconoscimento"></div>
         <div class="chat-messaggi" id="chat-messaggi"></div>
         <form class="chat-invio" id="chat-invio">
           <input type="text" id="chat-input" maxlength="500" autocomplete="off"
@@ -1114,13 +1200,15 @@ function identitaEsistentePerStanzaCorrente() {
   return identitaValida() && STATO.identitaRoomId === STATO.roomId;
 }
 
+// Da quando esiste il Riconoscimento, ricaricare la pagina PUÒ risolvere: se
+// hai ripreso la partita da un altro dispositivo, il tuo token qui è stato
+// invalidato (è la vecchia scheda). Ricaricando riparti dal riconoscimento e
+// puoi rientrare. Il messaggio quindi indica sia la causa più probabile sia
+// la via d'uscita.
 const MESSAGGIO_SESSIONE_NON_VALIDA =
-  "La tua sessione su questo dispositivo non è più valida. Ricarica la pagina per continuare.";
-// Nessuna promessa di rientro nel testo del 401: non esiste un flusso di
-// ri-autenticazione (ricaricare non risolve, un secondo /join è bloccato),
-// quindi il messaggio si limita a constatare.
+  "La tua sessione su questo dispositivo non è più valida — forse hai ripreso la partita da un altro dispositivo. Ricarica la pagina per rientrare.";
 const MESSAGGIO_SESSIONE_SCADUTA =
-  "La tua sessione non è più valida su questo dispositivo.";
+  "La tua sessione non è più valida su questo dispositivo (forse ripresa altrove). Ricarica la pagina per rientrare.";
 const MESSAGGIO_COMANDO_PERSO = "Il comando non è più tuo.";
 const MESSAGGIO_AZIONE_DEL_COMANDANTE = "Questa azione spetta al comandante.";
 
@@ -1184,6 +1272,16 @@ async function chiamaAPIAutenticata(path, corpoBase, mostraErrore, contesto = nu
     if (e.status === 401 || e.status === 403) {
       mostraErrore(messaggioErroreSessione(e.status, contesto));
       e.sessioneNonValida = true;
+      if (e.status === 401) {
+        // 401 = il token non è più valido su questo dispositivo (tipicamente
+        // la partita è stata ripresa altrove: è la vecchia scheda). Scarto
+        // l'identità morta MA tengo roomId: così un reload non ricade nel
+        // gioco con lo stesso token che il server rifiuterà di nuovo, ma passa
+        // dal Riconoscimento e può rientrare -- coerente col messaggio mostrato.
+        // Non tocco il 403 (sessione valida, manca solo il comando).
+        pulisciIdentita();
+        salvaStato();
+      }
     }
     throw e;
   }
@@ -1268,11 +1366,321 @@ async function avvia() {
     await aggiornaSchermataGioco();
     avviaPolling();
   } else if (STATO.roomId) {
-    // stanza nota ma non ancora presentati
-    mostraSchermo("schermo-join");
-    renderProfiloCollegato();
+    // stanza nota ma nessuna identità valida su questo dispositivo: prima di
+    // offrire un ingresso da nuovo giocatore, prova il Riconoscimento (Caso 2
+    // automatico se registrato, altrimenti la schermata "sei già seduto?").
+    await ingressoRiconoscimento();
   } else {
     mostraSchermo("schermo-codice");
+  }
+}
+
+// ===== RICONOSCIMENTO (client) =====
+// Imposta l'identità sul dispositivo a partire dalla risposta di un rientro
+// (Caso 2 /rientro-registrato o Caso 1 /reclama-rientro): entrambe portano
+// { token, giocatoreId, giocatori }. Poi va dritto al gioco.
+async function applicaIdentitaRiagganciata(risposta) {
+  const mio = risposta.giocatori.find(g => g.id === risposta.giocatoreId);
+  if (!mio) return false;
+  STATO.giocatoreId = risposta.giocatoreId;
+  STATO.token = risposta.token;
+  STATO.nome = mio.nome;
+  STATO.ruolo = mio.ruolo;
+  STATO.comandante = mio.comandante === true;
+  STATO.competenze = mio.competenze;
+  STATO.identitaRoomId = STATO.roomId;
+  STATO.tokenCreazione = null;
+  salvaStato();
+  fermaPollingRientro();
+  mostraSchermo("schermo-gioco");
+  await aggiornaSchermataGioco();
+  avviaPolling();
+  return true;
+}
+
+// Ingresso quando c'è una stanza nota ma nessuna identità valida qui.
+async function ingressoRiconoscimento() {
+  // CASO 2 (per primo): se questo dispositivo ha un profilo collegato, il
+  // server può riagganciare il record con quel profiloId senza chiedere
+  // conferma a nessuno (prova crittografica).
+  if (PROFILO_COLLEGATO && PROFILO_COLLEGATO.profiloToken) {
+    try {
+      const r = await chiamaAPI(`/api/stanza/${STATO.roomId}/rientro-registrato`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profiloToken: PROFILO_COLLEGATO.profiloToken }),
+      });
+      if (r.esito === "riagganciato" && await applicaIdentitaRiagganciata(r)) return;
+    } catch (e) { /* best-effort: si prosegue col Caso 1 */ }
+  }
+  // CASO 1: mostra la schermata "sei già seduto?".
+  mostraSchermo("schermo-riconoscimento");
+  await renderRosterRiconoscimento();
+}
+
+// Messaggi sulla schermata di riconoscimento: la classe .errore è nascosta
+// finché non le si aggiunge .mostra -- questi due helper garantiscono che il
+// testo sia davvero VISIBILE (un textContent da solo restava invisibile, era
+// la causa del "silenzio" dopo un rifiuto) e che il box torni nascosto quando
+// si ripulisce.
+function mostraErroreRiconoscimento(testo) {
+  const el = document.getElementById("errore-riconoscimento");
+  el.textContent = testo;
+  el.classList.add("mostra");
+}
+function nascondiErroreRiconoscimento() {
+  const el = document.getElementById("errore-riconoscimento");
+  el.textContent = "";
+  el.classList.remove("mostra");
+}
+
+// Roster della stanza come lista di scelte per il rientro (Caso 1).
+async function renderRosterRiconoscimento() {
+  const lista = document.getElementById("lista-rientro");
+  const attesa = document.getElementById("attesa-rientro");
+  nascondiErroreRiconoscimento();
+  attesa.textContent = "";
+  let session;
+  try {
+    session = await chiamaAPI(`/api/stanza/${STATO.roomId}/state`);
+  } catch (e) {
+    mostraErroreRiconoscimento("Non riesco a leggere la stanza. Riprova.");
+    return;
+  }
+  await aggiornaGradiPerRoster(session.giocatori, { forza: true });
+  if (!session.giocatori.length) {
+    lista.innerHTML = `<p class="spiega">Non c'è ancora nessuno seduto a questo tavolo: sei di sicuro nuovo, usa il bottone qui sotto.</p>`;
+    return;
+  }
+  lista.innerHTML = session.giocatori.map(g => {
+    const ruoloInfo = CONFIG.ruoli.find(r => r.id === g.ruolo);
+    const grado = g.profiloId != null ? GRADI_CACHE[g.profiloId] : null;
+    const etichetta = grado && grado !== "Bersagliere" ? `${grado} ${g.nome}` : g.nome;
+    return `<button class="rientro-scelta" data-id="${g.id}"><strong>${etichetta}</strong> <span class="ruolo-rientro">— ${ruoloInfo ? ruoloInfo.nome : g.ruolo}</span></button>`;
+  }).join("");
+  lista.querySelectorAll(".rientro-scelta").forEach(btn => {
+    btn.addEventListener("click", () => chiediRientro(btn.dataset.id));
+  });
+}
+
+// Stato del rientro in corso (Caso 1) e polling per reclamare il token.
+let bigliettoRientro = null;
+let versoRientro = null;
+let intervalloRientro = null;
+function avviaPollingRientro() {
+  if (intervalloRientro) return;
+  intervalloRientro = setInterval(pollReclamaRientro, 3000);
+}
+function fermaPollingRientro() {
+  if (intervalloRientro) { clearInterval(intervalloRientro); intervalloRientro = null; }
+}
+
+async function chiediRientro(versoGiocatoreId) {
+  const attesa = document.getElementById("attesa-rientro");
+  nascondiErroreRiconoscimento();
+  document.querySelectorAll(".rientro-scelta").forEach(b => b.disabled = true);
+  document.getElementById("btn-sono-nuovo").disabled = true;
+  try {
+    const r = await chiamaAPI(`/api/stanza/${STATO.roomId}/richiedi-rientro`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ versoGiocatoreId }),
+    });
+    bigliettoRientro = r.biglietto;
+    versoRientro = versoGiocatoreId;
+    attesa.textContent = "Abbiamo chiesto agli altri di confermare che sei tu. Aspetta un momento…";
+    avviaPollingRientro();
+  } catch (e) {
+    document.querySelectorAll(".rientro-scelta").forEach(b => b.disabled = false);
+    document.getElementById("btn-sono-nuovo").disabled = false;
+    mostraErroreRiconoscimento(e.status === 409
+      ? "In questa stanza c'è già una richiesta in corso. Aspetta che si chiuda e riprova."
+      : "Qualcosa è andato storto. Riprova.");
+  }
+}
+
+// Riabilita la schermata "sei già seduto?" dopo un esito terminale (rifiuto o
+// chiusura): l'attesa sparisce, i nomi tornano cliccabili, si può riprovare o
+// entrare come nuovo. NON tocca il messaggio d'errore (chi chiama ne mostra
+// uno persistente, diverso a seconda dell'esito).
+function riabilitaSchermataRientro() {
+  fermaPollingRientro();
+  bigliettoRientro = null;
+  versoRientro = null;
+  document.getElementById("attesa-rientro").textContent = "";
+  document.querySelectorAll(".rientro-scelta").forEach(b => b.disabled = false);
+  document.getElementById("btn-sono-nuovo").disabled = false;
+}
+
+async function pollReclamaRientro() {
+  if (!bigliettoRientro || !versoRientro) return;
+  let r;
+  try {
+    r = await chiamaAPI(`/api/stanza/${STATO.roomId}/reclama-rientro`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ versoGiocatoreId: versoRientro, biglietto: bigliettoRientro }),
+    });
+  } catch (e) { return; } // errore di rete transitorio: riprova al prossimo tick
+  if (r.stato === "in_attesa") return;
+  if (r.stato === "approvato") {
+    bigliettoRientro = null;
+    versoRientro = null;
+    await applicaIdentitaRiagganciata(r); // ferma il polling e va al gioco
+    return;
+  }
+  // Esiti terminali: messaggio CHIARO e PERSISTENTE (resta finché non si
+  // riprova), schermata riutilizzabile.
+  riabilitaSchermataRientro();
+  if (r.stato === "rifiutato") {
+    // Il diretto interessato ha detto "non sei tu".
+    mostraErroreRiconoscimento(
+      "Qualcuno ha detto che non sei tu.\n" +
+      "Se hai sbagliato nome, riprova e scegli quello giusto.\n" +
+      "Se il nome era giusto, chiedi agli altri di guardare meglio."
+    );
+  } else {
+    // "chiusa": la richiesta si è persa/scaduta o è stata sostituita da un'altra.
+    mostraErroreRiconoscimento(
+      "La richiesta si è chiusa senza risposta. Puoi riprovare a scegliere il tuo nome, o entrare come nuovo."
+    );
+  }
+}
+
+document.getElementById("btn-sono-nuovo").addEventListener("click", () => {
+  fermaPollingRientro();
+  bigliettoRientro = null;
+  versoRientro = null;
+  mostraSchermo("schermo-join");
+  renderProfiloCollegato();
+});
+
+// Avviso di sistema in-game (Caso 1 e Caso 3): renderizzato da
+// session.riconoscimentoPendente, NON dall'array chat. Mostra i bottoni giusti
+// a chi di dovere: "Sì" a chiunque tranne il richiedente; il "No" (veto forte)
+// solo al diretto interessato (rientro: il reclamato; comando: il comandante).
+function renderRiconoscimento(session) {
+  const box = document.getElementById("avviso-riconoscimento");
+  if (!box) return;
+  const p = session.riconoscimentoPendente;
+  if (!p || p.stato !== "in_attesa") { box.innerHTML = ""; return; }
+
+  const io = STATO.giocatoreId;
+  const reclamato = session.giocatori.find(g => g.id === p.versoGiocatoreId);
+  const nomeReclamato = reclamato ? nomeConGrado(reclamato) : "Qualcuno";
+  const ruoloReclamato = reclamato ? (CONFIG.ruoli.find(r => r.id === reclamato.ruolo)?.nome ?? reclamato.ruolo) : "";
+  const comandanteAttuale = session.giocatori.find(g => g.comandante === true);
+
+  const sonoIlReclamato = p.tipo === "rientro" && p.versoGiocatoreId === io;
+  const sonoIlComandante = p.tipo === "comando" && comandanteAttuale && comandanteAttuale.id === io;
+  const sonoIlRichiedenteComando = p.tipo === "comando" && p.versoGiocatoreId === io;
+
+  // Il richiedente del comando (autenticato, in gioco) vede solo l'attesa.
+  if (sonoIlRichiedenteComando) {
+    box.innerHTML = `<div class="avviso-sistema"><div class="avviso-testo">Hai chiesto di prendere il comando. Aspetta che qualcuno confermi che va bene.</div></div>`;
+    return;
+  }
+
+  let testo, puoConfermare, puoVetare;
+  if (p.tipo === "rientro") {
+    testo = `Qualcuno dice di essere <strong>${nomeReclamato}</strong> (${ruoloReclamato}). È lui?`;
+    puoConfermare = identitaValida() && !sonoIlReclamato; // il reclamato non si auto-conferma
+    puoVetare = sonoIlReclamato;                          // veto solo del diretto interessato
+  } else {
+    testo = `<strong>${nomeReclamato}</strong> vuole prendere il comando. Va bene?`;
+    puoConfermare = identitaValida();                    // chiunque tranne il richiedente (già escluso sopra)
+    puoVetare = sonoIlComandante;                         // veto solo del comandante attuale
+  }
+
+  if (!puoConfermare && !puoVetare) { box.innerHTML = ""; return; }
+
+  const bottoni = [];
+  if (puoConfermare) bottoni.push(`<button class="risposta" id="btn-conferma-ric">${p.tipo === "rientro" ? "Sì, è lui" : "Sì, va bene"}</button>`);
+  if (puoVetare) bottoni.push(`<button class="secondario" id="btn-veto-ric">No</button>`);
+  box.innerHTML = `<div class="avviso-sistema"><div class="avviso-testo">${testo}</div><div class="avviso-bottoni">${bottoni.join("")}</div><p class="errore" id="errore-ric"></p></div>`;
+
+  const errore = document.getElementById("errore-ric");
+  // .errore è display:none finché non riceve .mostra: scrivere solo textContent
+  // lascerebbe il messaggio invisibile (stesso bug chiuso con
+  // mostraErroreRiconoscimento sulla schermata di rientro).
+  const mostraErroreRic = testo => { errore.textContent = testo; errore.classList.add("mostra"); };
+  const confBtn = document.getElementById("btn-conferma-ric");
+  const vetoBtn = document.getElementById("btn-veto-ric");
+  if (confBtn) confBtn.addEventListener("click", async () => {
+    confBtn.disabled = true;
+    if (vetoBtn) vetoBtn.disabled = true;
+    try {
+      await chiamaAPIAutenticata(`/api/stanza/${STATO.roomId}/conferma-riconoscimento`, {}, mostraErroreRic);
+      await aggiornaSchermataGioco();
+    } catch (e) {
+      if (!e.sessioneNonValida) mostraErroreRic("Non è andata: forse qualcun altro ha già risposto.");
+    }
+  });
+  if (vetoBtn) vetoBtn.addEventListener("click", async () => {
+    vetoBtn.disabled = true;
+    if (confBtn) confBtn.disabled = true;
+    try {
+      await chiamaAPIAutenticata(`/api/stanza/${STATO.roomId}/rifiuta-riconoscimento`, {}, mostraErroreRic);
+      await aggiornaSchermataGioco();
+    } catch (e) {
+      if (!e.sessioneNonValida) mostraErroreRic("Non è andata: forse la richiesta è già chiusa.");
+    }
+  });
+}
+
+// Voce discreta e defilata "il comandante non risponde" (Caso 3): sempre
+// presente ma mai d'intralcio. Nascosta se sono io il comandante o se c'è una
+// richiesta di riconoscimento ATTIVA (in_attesa) -- una richiesta terminale non
+// ancora raccolta (es. un "rifiutato" di un altro rientro) non la nasconde.
+function renderRigaComandoDefilata(session) {
+  const box = document.getElementById("riga-comando-defilata");
+  if (!box) return;
+  const io = session.giocatori.find(g => g.id === STATO.giocatoreId);
+  const sonoComandante = io && io.comandante === true;
+  const p = session.riconoscimentoPendente;
+  const haRichiestaAttiva = p && p.stato === "in_attesa";
+  if (!identitaValida() || sonoComandante || haRichiestaAttiva) { box.innerHTML = ""; return; }
+  box.innerHTML = `<button class="link-comando-defilato" id="btn-comando-non-risponde">Il comandante non risponde</button>`;
+  document.getElementById("btn-comando-non-risponde").addEventListener("click", chiediComando);
+}
+
+// Esito della PROPRIA richiesta di comando (Caso 3), per il richiedente che è
+// in gioco: quando la sua richiesta non è più attiva, se è diventato comandante
+// va tutto bene (evidente dal pannello, nessun messaggio); se invece NON lo è
+// diventato, è stata rifiutata/chiusa -> messaggio esplicito, così non resta
+// senza risposta. `attesaComando` è un flag locale acceso alla richiesta.
+let attesaComando = false;
+function verificaEsitoComando(session) {
+  const box = document.getElementById("esito-comando");
+  if (!box || !attesaComando) return;
+  const p = session.riconoscimentoPendente;
+  const miaRichiestaAttiva =
+    p && p.tipo === "comando" && p.versoGiocatoreId === STATO.giocatoreId && p.stato === "in_attesa";
+  if (miaRichiestaAttiva) return; // ancora in attesa: nessun esito da mostrare
+  attesaComando = false;
+  const io = session.giocatori.find(g => g.id === STATO.giocatoreId);
+  if (io && io.comandante === true) {
+    box.innerHTML = ""; // approvata: sei comandante, già evidente dal pannello
+  } else {
+    box.innerHTML = `<p class="nota-esito-comando">La tua richiesta di prendere il comando non è stata accettata. Se serve, puoi riprovare dal link «Il comandante non risponde».</p>`;
+  }
+}
+
+async function chiediComando() {
+  const conferma = window.confirm(
+    "Vuoi provare a prendere tu il comando? Lo chiediamo agli altri giocatori, e qualcuno dovrà dire che va bene."
+  );
+  if (!conferma) return;
+  document.getElementById("esito-comando").innerHTML = ""; // ripulisci un esito precedente
+  try {
+    await chiamaAPIAutenticata(`/api/stanza/${STATO.roomId}/richiedi-comando`, {}, () => {});
+    attesaComando = true; // da ora seguiamo l'esito nel polling (vedi verificaEsitoComando)
+    await aggiornaSchermataGioco();
+  } catch (e) {
+    if (!e.sessioneNonValida) {
+      const box = document.getElementById("riga-comando-defilata");
+      if (box) box.innerHTML = `<p class="errore mostra" style="font-size:0.8rem;">Non è andata: forse c'è già una richiesta in corso. Riprova tra poco.</p>`;
+    }
   }
 }
 
@@ -2269,6 +2677,9 @@ async function aggiornaSchermataGioco() {
   applicaTexturaNodo(session2.nodoAttivo);
   setupChat();
   renderChat(session2.chat);
+  renderRiconoscimento(session2);
+  renderRigaComandoDefilata(session2);
+  verificaEsitoComando(session2);
 
   if (!session2.nodoAttivo) {
     renderSelezioneNodo();
@@ -2300,6 +2711,9 @@ function avviaPolling() {
       renderPromptCessione(session);
       applicaTexturaNodo(session.nodoAttivo);
       renderChat(session.chat);
+      renderRiconoscimento(session);
+      renderRigaComandoDefilata(session);
+      verificaEsitoComando(session);
 
       // Se questo giocatore stava aspettando che il comandante risolvesse
       // il suo testo libero ambiguo, e non c'è più nulla in attesa,

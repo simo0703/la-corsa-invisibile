@@ -126,6 +126,16 @@ export class GameSession {
         // stanza (vedi /proponi-cessione). A differenza dei token, NON e' un
         // segreto: sessionPubblica() lo lascia visibile, serve al client del
         // destinatario per sapere che deve mostrare il prompt di conferma.
+        riconoscimentoPendente: null, // Riconoscimento (vedi endpoint sotto): una
+        // richiesta alla volta di rientrare in partita dopo aver perso il token
+        // (tipo "rientro") o di prendere il comando quando il comandante e'
+        // sparito (tipo "comando"). Forma quando attivo:
+        //   { tipo, versoGiocatoreId, stato: "in_attesa"|"approvato"|"rifiutato",
+        //     biglietto, nuovoToken }
+        // biglietto e nuovoToken sono SEGRETI (solo per "rientro"): sessionPubblica()
+        // li spoglia, come fa per i token. tipo/versoGiocatoreId/stato restano
+        // visibili, servono al client per mostrare l'avviso di sistema (nome e
+        // ruolo li ricava dal roster via versoGiocatoreId, nessuna duplicazione).
         // Migrazione automatica: ogni nuovo campo va aggiunto qui E
         // nella funzione migrateState() sotto, altrimenti le sessioni
         // create prima dell'aggiornamento falliscono in silenzio.
@@ -186,6 +196,10 @@ export class GameSession {
       session.chat = [];
       changed = true;
     }
+    if (session.riconoscimentoPendente === undefined) {
+      session.riconoscimentoPendente = null;
+      changed = true;
+    }
     // profiloId e' un campo per-giocatore (dentro session.giocatori), non a
     // livello di sessione come gli altri qui sopra -- backfill esplicito a
     // null per i giocatori uniti PRIMA di questa modifica, cosi' il campo e'
@@ -211,10 +225,19 @@ export class GameSession {
   // /state per sapere che deve mostrare il prompt di conferma.
   sessionPubblica(session) {
     const { tokenCreazione, ...sessioneSenzaTokenCreazione } = session;
-    return {
+    const pubblica = {
       ...sessioneSenzaTokenCreazione,
       giocatori: session.giocatori.map(({ token, ...giocatorePubblico }) => giocatorePubblico),
     };
+    // riconoscimentoPendente e' visibile (serve al client per l'avviso di
+    // sistema), ma i suoi campi SEGRETI vanno tolti: `biglietto` (prova che sei
+    // tu il richiedente del rientro) e `nuovoToken` (il token da consegnare a
+    // rientro approvato). Stesso principio di token/tokenCreazione: mai in /state.
+    if (pubblica.riconoscimentoPendente) {
+      const { biglietto, nuovoToken, ...riconoscimentoPubblico } = pubblica.riconoscimentoPendente;
+      pubblica.riconoscimentoPendente = riconoscimentoPubblico;
+    }
+    return pubblica;
   }
 
   // Verifica che (giocatoreId, token) corrispondano a un giocatore reale
@@ -448,6 +471,225 @@ export class GameSession {
       await this.state.storage.put("session", session);
       return Response.json(this.sessionPubblica(session));
     }
+
+    // ===== RICONOSCIMENTO =====
+    // Tre casi per rimettere in gioco chi ha perso la prova d'identita' (il
+    // token di sessione) o per riprendere una partita bloccata da un comandante
+    // sparito. Regola comune: chi CHIEDE non puo' confermarsi da solo, e con
+    // una sola persona in stanza non c'e' auto-approvazione (l'unico ingannabile
+    // sarebbe proprio il legittimo proprietario, e il link della stanza gira).
+    // Riusa la struttura del pattern proponi/accetta della cessione: uno stato
+    // pendente in sessione + conferma di un terzo. La differenza forzata: il
+    // richiedente del CASO 1 non ha un token, quindi il token nuovo gli va
+    // consegnato tramite un "biglietto" segreto (vedi /richiedi- e /reclama-).
+
+    // CASO 2 -- registrato che rientra: prova crittografica, nessuna conferma.
+    // Va tentato PER PRIMO dal client, prima di offrire il caso 1. Se il
+    // profiloToken e' valido e in stanza c'e' gia' un record con quel profiloId,
+    // riemette subito un token nuovo (invalidando il vecchio) e lo restituisce
+    // nella risposta -- e' una richiesta gia' autenticata dalla prova crypto.
+    if (url.pathname.endsWith("/rientro-registrato") && request.method === "POST") {
+      const { profiloToken } = await request.json();
+      const session = await this.initState();
+      const profiloId = await this.verificaProfiloDaToken(profiloToken);
+      if (!profiloId) return Response.json({ esito: "nessun_match" });
+      const record = session.giocatori.find((g) => g.profiloId === profiloId);
+      if (!record) return Response.json({ esito: "nessun_match" });
+      const nuovoToken = crypto.randomUUID();
+      record.token = nuovoToken; // invalida il vecchio: la vecchia scheda non agisce piu'
+      await this.state.storage.put("session", session);
+      return Response.json({
+        esito: "riagganciato",
+        token: nuovoToken,
+        giocatoreId: record.id,
+        ...this.sessionPubblica(session),
+      });
+    }
+
+    // CASO 1 -- ospite che rientra: apre una richiesta di riconoscimento su un
+    // record esistente (versoGiocatoreId). Non e' autenticato (e' proprio il
+    // token che ha perso): riceve un `biglietto` segreto UNA SOLA VOLTA, con
+    // cui piu' tardi reclamera' il token nuovo (vedi /reclama-rientro). NIENTE
+    // auto-approvazione: serve sempre la conferma di un altro.
+    if (url.pathname.endsWith("/richiedi-rientro") && request.method === "POST") {
+      const { versoGiocatoreId } = await request.json();
+      const session = await this.initState();
+      const record = session.giocatori.find((g) => g.id === versoGiocatoreId);
+      if (!record) {
+        return new Response("Nessun giocatore con questo id nella stanza", { status: 400 });
+      }
+      if (session.riconoscimentoPendente && session.riconoscimentoPendente.stato === "in_attesa") {
+        return new Response("C'e' gia' una richiesta di riconoscimento in attesa", { status: 409 });
+      }
+      const biglietto = crypto.randomUUID();
+      session.riconoscimentoPendente = {
+        tipo: "rientro",
+        versoGiocatoreId,
+        stato: "in_attesa",
+        biglietto,
+      };
+      await this.state.storage.put("session", session);
+      return Response.json({ biglietto });
+    }
+
+    // CASO 1 -- il richiedente reclama, in polling, l'esito della sua richiesta,
+    // provando di essere lui con il `biglietto`. "in_attesa" -> aspetta ancora;
+    // "approvato" -> riceve il token nuovo e la richiesta si chiude; qualunque
+    // altra situazione (rifiutata, scaduta, biglietto che non combacia piu')
+    // -> "chiusa", senza distinguere i motivi (non si perde nulla a non farlo).
+    if (url.pathname.endsWith("/reclama-rientro") && request.method === "POST") {
+      const { versoGiocatoreId, biglietto } = await request.json();
+      const session = await this.initState();
+      const p = session.riconoscimentoPendente;
+      const combacia =
+        p && p.tipo === "rientro" && p.versoGiocatoreId === versoGiocatoreId && p.biglietto === biglietto;
+      if (!combacia) return Response.json({ stato: "chiusa" });
+      if (p.stato === "in_attesa") return Response.json({ stato: "in_attesa" });
+      if (p.stato === "rifiutato") {
+        // Il diretto interessato ha vetato: dillo esplicitamente al richiedente
+        // (distinto dal generico "chiusa"), poi chiudi la richiesta.
+        session.riconoscimentoPendente = null;
+        await this.state.storage.put("session", session);
+        return Response.json({ stato: "rifiutato" });
+      }
+      // approvato: consegna il token nuovo e chiude la richiesta.
+      const token = p.nuovoToken;
+      session.riconoscimentoPendente = null;
+      await this.state.storage.put("session", session);
+      return Response.json({
+        stato: "approvato",
+        token,
+        giocatoreId: versoGiocatoreId,
+        ...this.sessionPubblica(session),
+      });
+    }
+
+    // CASO 3 -- prendere il comando quando il comandante e' sparito. Il
+    // richiedente E' autenticato (e' seduto, ha solo il comandante irraggiungibile):
+    // apre la richiesta col proprio giocatoreId. NIENTE auto-approvazione.
+    if (url.pathname.endsWith("/richiedi-comando") && request.method === "POST") {
+      const { giocatoreId, token } = await request.json();
+      const session = await this.initState();
+      const auth = this.autenticaGiocatore(session, giocatoreId, token);
+      if (auth.errore) return auth.errore;
+      if (session.riconoscimentoPendente && session.riconoscimentoPendente.stato === "in_attesa") {
+        return new Response("C'e' gia' una richiesta di riconoscimento in attesa", { status: 409 });
+      }
+      if (auth.giocatore.comandante) {
+        return new Response("Sei gia' il comandante", { status: 400 });
+      }
+      session.riconoscimentoPendente = { tipo: "comando", versoGiocatoreId: giocatoreId, stato: "in_attesa" };
+      await this.state.storage.put("session", session);
+      return Response.json(this.sessionPubblica(session));
+    }
+
+    // CONFERMA (il "Si") -- valida sia per rientro sia per comando. Puo' venire
+    // da CHIUNQUE sia autenticato TRANNE il richiedente. Guardia stato ===
+    // "in_attesa": una richiesta gia' risolta non si riconferma. Il "Si"
+    // finalizza subito (rientro: token nuovo, vecchio invalidato; comando:
+    // comando trasferito), quindi vince chi arriva prima al Durable Object.
+    if (url.pathname.endsWith("/conferma-riconoscimento") && request.method === "POST") {
+      const { giocatoreId, token } = await request.json();
+      const session = await this.initState();
+      const auth = this.autenticaGiocatore(session, giocatoreId, token);
+      if (auth.errore) return auth.errore;
+      const p = session.riconoscimentoPendente;
+      if (!p || p.stato !== "in_attesa") {
+        return new Response("Nessuna richiesta di riconoscimento in attesa", { status: 400 });
+      }
+      if (giocatoreId === p.versoGiocatoreId) {
+        return new Response("Non puoi confermare la tua stessa richiesta", { status: 403 });
+      }
+
+      if (p.tipo === "rientro") {
+        const record = session.giocatori.find((g) => g.id === p.versoGiocatoreId);
+        if (!record) {
+          session.riconoscimentoPendente = null;
+          await this.state.storage.put("session", session);
+          return new Response("Il record da riagganciare non esiste piu'", { status: 409 });
+        }
+        const nuovoToken = crypto.randomUUID();
+        record.token = nuovoToken; // invalida il vecchio subito
+        p.stato = "approvato";
+        p.nuovoToken = nuovoToken; // il richiedente lo raccoglie con /reclama-rientro
+        await this.state.storage.put("session", session);
+        return Response.json(this.sessionPubblica(session));
+      }
+
+      // comando
+      const nuovo = session.giocatori.find((g) => g.id === p.versoGiocatoreId);
+      if (!nuovo) {
+        session.riconoscimentoPendente = null;
+        await this.state.storage.put("session", session);
+        return new Response("Il richiedente non esiste piu'", { status: 409 });
+      }
+      const comandanteAttuale = session.giocatori.find((g) => g.comandante);
+      if (comandanteAttuale) comandanteAttuale.comandante = false;
+      nuovo.comandante = true;
+      session.riconoscimentoPendente = null;
+      await this.state.storage.put("session", session);
+      return Response.json(this.sessionPubblica(session));
+    }
+
+    // RIFIUTO -- due poteri distinti, entrambi solo mentre la richiesta e'
+    // "in_attesa":
+    // - VETO FORTE del diretto interessato: batte qualunque "Si" non ancora
+    //   arrivato. Rientro -> chi tiene ANCORA un token valido per il record
+    //   reclamato (giocatoreId === versoGiocatoreId autenticato: se il token
+    //   fosse davvero perso nessuno potrebbe farlo, ed e' giusto cosi'). Comando
+    //   -> il comandante attuale autenticato.
+    // - ANNULLAMENTO del richiedente stesso: rientro con `biglietto`, comando
+    //   con la propria identita' (giocatoreId === versoGiocatoreId).
+    // Chiunque altro (un terzo estraneo) viene rifiutato con 403.
+    if (url.pathname.endsWith("/rifiuta-riconoscimento") && request.method === "POST") {
+      const { giocatoreId, token, biglietto } = await request.json();
+      const session = await this.initState();
+      const p = session.riconoscimentoPendente;
+      if (!p) {
+        return new Response("Nessuna richiesta di riconoscimento in attesa", { status: 400 });
+      }
+      if (p.stato !== "in_attesa") {
+        return new Response("La richiesta e' gia' stata risolta", { status: 409 });
+      }
+
+      if (p.tipo === "rientro") {
+        // Annullamento del richiedente STESSO (col biglietto): e' lui che
+        // rinuncia, quindi si chiude in silenzio (azzerato) -- non c'e' nessun
+        // "rifiutato" da fargli scoprire.
+        if (biglietto && biglietto === p.biglietto) {
+          session.riconoscimentoPendente = null;
+          await this.state.storage.put("session", session);
+          return Response.json(this.sessionPubblica(session));
+        }
+        // Veto del diretto interessato: deve autenticarsi come il record reclamato.
+        const auth = this.autenticaGiocatore(session, giocatoreId, token);
+        if (auth.errore) return auth.errore;
+        if (giocatoreId !== p.versoGiocatoreId) {
+          return new Response("Solo il diretto interessato puo' rifiutare questo rientro", { status: 403 });
+        }
+        // NON azzeriamo: lo stato "rifiutato" resta finche' il richiedente non
+        // lo legge con /reclama-rientro, cosi' scopre di essere stato rifiutato
+        // (non un generico "chiusa"). /reclama-rientro azzera alla lettura.
+        p.stato = "rifiutato";
+        await this.state.storage.put("session", session);
+        return Response.json(this.sessionPubblica(session));
+      }
+
+      // comando: veto del comandante attuale, o annullamento del richiedente.
+      const auth = this.autenticaGiocatore(session, giocatoreId, token);
+      if (auth.errore) return auth.errore;
+      const seiRichiedente = giocatoreId === p.versoGiocatoreId;
+      const seiComandante = auth.giocatore.comandante === true;
+      if (!seiRichiedente && !seiComandante) {
+        return new Response("Solo il comandante attuale o il richiedente possono chiudere questa richiesta", {
+          status: 403,
+        });
+      }
+      session.riconoscimentoPendente = null;
+      await this.state.storage.put("session", session);
+      return Response.json(this.sessionPubblica(session));
+    }
+    // ===== FINE RICONOSCIMENTO =====
 
     // Le chiavi accettate sono le risorse di squadra oppure "margine" --
     // stesso trattamento che "margine" gia' riceve nel ciclo di effetti di
