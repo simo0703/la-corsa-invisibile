@@ -7,6 +7,32 @@ export const GAME_CONFIG = {
   titolo: "La Corsa Invisibile",
   romanzoDiRiferimento: "Il ragazzo che correva nel tempo / I passi tornano",
 
+  // I due romanzi Bersaglieri da cui nasce il gioco: presentati come vetrina
+  // SOBRIA durante la partita (la zona libri a sinistra su desktop, in fondo
+  // su mobile -- vedi public/index.html). Contenuto specifico del gioco: vive
+  // QUI, mai nel motore. Il client legge titolo/volume/copertina/url e apre il
+  // link in una scheda nuova, cosi' il giocatore non perde mai la partita.
+  // Una url ancora segnaposto (contiene "[ASIN") viene resa dal client come
+  // card non cliccabile ("Presto disponibile"): nessun link rotto in
+  // produzione finche' l'ASIN reale non e' inserito.
+  libri: {
+    invito: "La storia da cui nasce il gioco.",
+    elenco: [
+      {
+        titolo: "Il ragazzo che correva nel tempo",
+        volume: "Volume 1",
+        copertina: "/img/libro-vol1.jpg",
+        url: "https://www.amazon.it/dp/B0GT4JSHNG",
+      },
+      {
+        titolo: "I passi tornano",
+        volume: "Volume 2",
+        copertina: "/img/libro-vol2.jpg",
+        url: "https://www.amazon.it/dp/B0H24R2C6J",
+      },
+    ],
+  },
+
   // Soglia del Margine: valore segnaposto, DA CONFERMARE insieme alla
   // definizione stessa del Margine (vedi commento in GameSession.js).
   // Al raggiungimento, scatta una complicazione e il margine si dimezza.

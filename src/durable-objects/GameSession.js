@@ -113,6 +113,11 @@ export class GameSession {
         storicoNodo: [], // { nodoId, iniziato_il, concluso_il, esitoFinale }
         aiUsageStanza: 0, // contatore generazioni AI usate in questa stanza
         interpretazionePendente: null, // { giocatoreId, richiestaId, testoLibero, candidati } o null
+        chat: [], // canale di squadra puramente umano ed effimero (vedi endpoint
+        // /chat sotto): array di { id, nome, giocatoreId, ruolo, testo, timestamp },
+        // cap agli ultimi 200, testo troncato a 500 lato server. Vive SOLO qui
+        // nello stato della sessione (mai su D1): muore con la stanza, e' voluto.
+        // Viaggia al client dentro sessionPubblica() col polling gia' esistente.
         tokenCreazione: null, // segreto impostato da POST /crea (vedi sotto): prova
         // "sei tu il creatore della stanza", consumato al primo /join che lo usa
         // con successo. Mai esposto al client (vedi sessionPubblica()).
@@ -175,6 +180,10 @@ export class GameSession {
     }
     if (session.cessioneComandantePendente === undefined) {
       session.cessioneComandantePendente = null;
+      changed = true;
+    }
+    if (session.chat === undefined) {
+      session.chat = [];
       changed = true;
     }
     // profiloId e' un campo per-giocatore (dentro session.giocatori), non a
@@ -641,6 +650,45 @@ export class GameSession {
       session.interpretazionePendente = null;
       await this.state.storage.put("session", session);
       return Response.json({ session: this.sessionPubblica(session), ...risultato });
+    }
+
+    // Chat di squadra: canale puramente umano (il Cronista NON scrive qui,
+    // resta nel flusso di narrazione) ed effimero (vive solo nello stato
+    // della sessione, mai su D1: muore con la stanza, e' voluto). Scrivere
+    // richiede identita' verificata come /scegli (vedi autenticaGiocatore()):
+    // chi non ha un token valido non puo' scrivere. Ogni messaggio salva
+    // id/nome/giocatoreId/ruolo/testo/timestamp -- il client oggi mostra solo
+    // nome + testo, ma ruolo e timestamp si salvano per poter evolvere l'UI
+    // senza migrare i dati. Il testo e' troncato a 500 caratteri QUI, lato
+    // server, senza fidarsi del client; la coda e' limitata agli ultimi 200
+    // (slice(-200) dopo ogni push). La chat viaggia al client dentro
+    // sessionPubblica() (GET /state), con lo stesso polling che gia' aggiorna
+    // il resto dello stato -- nessun WebSocket, nessun canale a parte, e i
+    // token restano esclusi (nel messaggio non c'e' nessun token).
+    if (url.pathname.endsWith("/chat") && request.method === "POST") {
+      const { testo, giocatoreId, token } = await request.json();
+      const session = await this.initState();
+
+      const auth = this.autenticaGiocatore(session, giocatoreId, token);
+      if (auth.errore) return auth.errore;
+
+      if (typeof testo !== "string" || testo.trim() === "") {
+        return new Response("Messaggio vuoto: niente da inviare", { status: 400 });
+      }
+      const testoPulito = testo.trim().slice(0, 500);
+
+      session.chat.push({
+        id: crypto.randomUUID(),
+        nome: auth.giocatore.nome,
+        giocatoreId: auth.giocatore.id,
+        ruolo: auth.giocatore.ruolo,
+        testo: testoPulito,
+        timestamp: new Date().toISOString(),
+      });
+      session.chat = session.chat.slice(-200);
+
+      await this.state.storage.put("session", session);
+      return Response.json(this.sessionPubblica(session));
     }
 
     return new Response("Not found", { status: 404 });

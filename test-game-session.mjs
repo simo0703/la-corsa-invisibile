@@ -805,5 +805,114 @@ console.log("\n--- GET /state mostra cessioneComandantePendente quando presente 
   );
 }
 
+console.log("\n--- /chat: invio di un messaggio (push) ---");
+{
+  const { gs } = nuovaSessione();
+  const join = await chiamata(gs, "/join", "POST", { nome: "Ada", ruolo: "esploratore" });
+  const giocatoreId = join.json.giocatori[0].id;
+  const token = join.json.token;
+
+  const r = await chiamata(gs, "/chat", "POST", { testo: "Ci siamo tutti?", giocatoreId, token });
+  verifica("POST /chat risponde 200", r.status === 200);
+  verifica("il messaggio viene aggiunto alla chat", r.json.chat.length === 1);
+
+  const m = r.json.chat[0];
+  verifica("il messaggio salva il testo", m.testo === "Ci siamo tutti?");
+  verifica("il messaggio salva il nome del giocatore", m.nome === "Ada");
+  verifica("il messaggio salva giocatoreId", m.giocatoreId === giocatoreId);
+  verifica("il messaggio salva il ruolo (per evolvere l'UI senza migrare i dati)", m.ruolo === "esploratore");
+  verifica("il messaggio ha un id assegnato", typeof m.id === "string" && m.id.length > 0);
+  verifica("il messaggio ha un timestamp", typeof m.timestamp === "string" && m.timestamp.length > 0);
+  verifica("il messaggio NON contiene il token", !("token" in m));
+
+  const stato = await chiamata(gs, "/state");
+  verifica("la chat compare in GET /state (arriva col polling gia' esistente)", stato.json.chat.length === 1);
+  verifica("GET /state con chat non espone comunque nessun token", !contieneChiaveToken(stato.json));
+}
+
+console.log("\n--- /chat: cap agli ultimi 200 messaggi ---");
+{
+  const { gs } = nuovaSessione();
+  const join = await chiamata(gs, "/join", "POST", { nome: "Prolisso", ruolo: "custode" });
+  const giocatoreId = join.json.giocatori[0].id;
+  const token = join.json.token;
+
+  let ultimo;
+  for (let i = 0; i < 205; i++) {
+    ultimo = await chiamata(gs, "/chat", "POST", { testo: "msg " + i, giocatoreId, token });
+  }
+  verifica("dopo 205 invii la chat resta a 200 messaggi", ultimo.json.chat.length === 200);
+  verifica("il cap conserva gli ULTIMI messaggi (slice(-200)): l'ultimo e' \"msg 204\"", ultimo.json.chat[199].testo === "msg 204");
+  verifica("i primi messaggi vengono scartati: il piu' vecchio rimasto e' \"msg 5\"", ultimo.json.chat[0].testo === "msg 5");
+}
+
+console.log("\n--- /chat: troncamento del testo a 500 caratteri lato server ---");
+{
+  const { gs } = nuovaSessione();
+  const join = await chiamata(gs, "/join", "POST", { nome: "Fiume", ruolo: "fanfara" });
+  const giocatoreId = join.json.giocatori[0].id;
+  const token = join.json.token;
+
+  const testoLungo = "a".repeat(600);
+  const r = await chiamata(gs, "/chat", "POST", { testo: testoLungo, giocatoreId, token });
+  verifica("un testo di 600 caratteri viene troncato a 500 (non ci si fida del client)", r.json.chat[0].testo.length === 500);
+
+  const vuoto = await chiamata(gs, "/chat", "POST", { testo: "   ", giocatoreId, token });
+  verifica("un messaggio di soli spazi risponde 400 e non viene salvato", vuoto.status === 400);
+  const statoDopoVuoto = await chiamata(gs, "/state");
+  verifica("il messaggio vuoto non aumenta la chat (resta 1)", statoDopoVuoto.json.chat.length === 1);
+}
+
+console.log("\n--- /chat: scrivere richiede identita' verificata (come /scegli) ---");
+{
+  const { gs } = nuovaSessione();
+  const join = await chiamata(gs, "/join", "POST", { nome: "Tizio", ruolo: "incursore" });
+  const giocatoreId = join.json.giocatori[0].id;
+
+  const senzaToken = await chiamata(gs, "/chat", "POST", { testo: "ciao", giocatoreId });
+  verifica("/chat senza token risponde 400", senzaToken.status === 400);
+
+  const tokenSbagliato = await chiamata(gs, "/chat", "POST", { testo: "ciao", giocatoreId, token: "token-inventato" });
+  verifica("/chat con token sbagliato risponde 401", tokenSbagliato.status === 401);
+
+  const idIgnoto = await chiamata(gs, "/chat", "POST", { testo: "ciao", giocatoreId: "id-inventato", token: "qualcosa" });
+  verifica("/chat con un giocatoreId sconosciuto risponde 400", idIgnoto.status === 400);
+
+  const stato = await chiamata(gs, "/state");
+  verifica("nessun tentativo non autenticato ha scritto in chat", stato.json.chat.length === 0);
+}
+
+console.log("\n--- migrateState: una stanza creata PRIMA della chat riceve chat=[] ---");
+{
+  const { gs, storage } = nuovaSessione();
+  const join = await chiamata(gs, "/join", "POST", { nome: "Veterana", ruolo: "esploratore" });
+  const giocatoreId = join.json.giocatori[0].id;
+  const token = join.json.token;
+
+  // Simula un record scritto prima dell'introduzione della chat: rimuoviamo
+  // esplicitamente il campo dallo storage, come sarebbe una stanza reale
+  // creata prima di questa modifica.
+  const sessionePresente = await storage.get("session");
+  delete sessionePresente.chat;
+  await storage.put("session", sessionePresente);
+  verifica(
+    "il record manipolato non ha davvero il campo chat (preparazione del test)",
+    !("chat" in (await storage.get("session")))
+  );
+
+  const { json } = await chiamata(gs, "/state");
+  verifica("dopo la migrazione la stanza vecchia ha chat=[] (non piu' assente)", Array.isArray(json.chat) && json.chat.length === 0);
+
+  const sessioneDopo = await storage.get("session");
+  verifica("la migrazione della chat e' stata persistita su storage", Array.isArray(sessioneDopo.chat));
+
+  // La stanza migrata deve accettare un nuovo messaggio senza rompersi.
+  const dopoInvio = await chiamata(gs, "/chat", "POST", { testo: "primo messaggio dopo la migrazione", giocatoreId, token });
+  verifica(
+    "una stanza migrata accetta un nuovo messaggio senza errori",
+    dopoInvio.status === 200 && dopoInvio.json.chat.length === 1
+  );
+}
+
 console.log(`\n${falliti === 0 ? "Tutti i test passati." : `${falliti} test falliti.`}`);
 process.exit(falliti === 0 ? 0 : 1);

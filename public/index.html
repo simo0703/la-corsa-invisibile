@@ -684,6 +684,180 @@
     margin: 6px 0 0;
   }
 
+  /* Chat di squadra: pannello dedicato, SEPARATO e indipendente dal Cronista
+     (che vive nel flusso del nodo, in #area-nodo). Bordo brass come la
+     scheda personale, per distinguerlo dal pannello del comandante (crimson):
+     due registri visivamente distinti, non un flusso unico. La lista dei
+     messaggi ha altezza massima e scorre da sola, cosi' una partita lunga
+     (fino al cap di 200 messaggi lato server) non allunga all'infinito la
+     pagina ne' rompe il layout. */
+  .pannello-chat {
+    background: var(--bg-panel);
+    border: 1px solid var(--brass);
+    border-radius: 4px;
+    padding: 14px 16px;
+    /* La spaziatura verticale (mobile) la gestisce la .zona-chat che lo
+       contiene: qui niente margine, cosi' su desktop il pannello si allinea
+       in cima alla propria colonna. */
+    margin-top: 0;
+  }
+  .pannello-chat .titolo-chat {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.9rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--brass);
+    margin-bottom: 10px;
+  }
+  .chat-messaggi {
+    max-height: 260px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding-right: 4px;
+  }
+  .chat-vuota {
+    color: var(--text-faint);
+    font-size: 0.85rem;
+    font-style: italic;
+  }
+  .chat-msg {
+    font-size: 0.9rem;
+    line-height: 1.4;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+  .chat-msg .chat-nome {
+    font-family: var(--font-display);
+    font-weight: 600;
+    color: var(--brass);
+    margin-right: 6px;
+  }
+  .chat-msg .chat-testo { color: var(--text); }
+  .chat-invio { display: flex; gap: 8px; margin-bottom: 0; }
+  .chat-invio input {
+    flex: 1;
+    background: var(--bg-panel-raised);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    padding: 8px 10px;
+  }
+  .chat-invio input:disabled { opacity: 0.5; cursor: not-allowed; }
+  .chat-invio button { white-space: nowrap; }
+
+  /* --- Layout a tre zone (libri | gioco | chat) ---
+     Base = mobile, colonna singola: le zone sono semplici blocchi impilati
+     nell'ordine del DOM (gioco → chat → libri). Le copertine restano cosi'
+     in fondo, dopo la chat, senza mai intralciare il gioco. La griglia a tre
+     colonne si attiva SOLO da desktop in giu' (media query piu' sotto). */
+  .zona-chat { margin-top: 26px; }
+  .zona-libri {
+    margin-top: 26px;
+    background: rgba(var(--bg-rgb), 0.75);
+    border-radius: 6px;
+    padding: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-content: start;
+    /* Mobile (riga): card allineate in cima, cosi' due copertine di altezza
+       diversa non si stirano per pareggiarsi. Su desktop (colonna) questo
+       diventa 'stretch' nella media query, per riempire la colonna stretta. */
+    align-items: flex-start;
+  }
+  .libri-invito {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: 0.8rem;
+    font-style: italic;
+    color: var(--text-muted);
+    letter-spacing: 0.02em;
+  }
+  /* Card sobria: copertina + titolo + volume + invito breve all'acquisto.
+     L'intera card e' il link (si apre in scheda nuova, vedi renderLibri).
+     Se l'ASIN manca ancora, renderLibri la emette come <div> non cliccabile
+     con la classe --disabilitato: nessun link rotto. */
+  .libro-card {
+    flex: 1 1 140px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    text-decoration: none;
+    color: inherit;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 10px;
+    transition: border-color 0.2s ease;
+  }
+  a.libro-card:hover { border-color: var(--brass); }
+  .libro-card--disabilitato { opacity: 0.55; }
+  /* Nessuna altezza/aspect-ratio imposta: width:100% + height:auto lascia a
+     ogni copertina le SUE proporzioni reali (vol.1 e' ~1:1.42, vol.2 ~1:1.50,
+     non uguali). Niente object-fit:cover, che ritaglierebbe i titoli. Le card
+     si allineano in cima (vedi align-items sulla .zona-libri), non stirando
+     le immagini. */
+  .libro-cover {
+    width: 100%;
+    height: auto;
+    border-radius: 3px;
+    display: block;
+    background: var(--bg-panel-raised);
+  }
+  .libro-info { display: flex; flex-direction: column; gap: 3px; }
+  .libro-titolo {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.85rem;
+    line-height: 1.2;
+    color: var(--text);
+  }
+  .libro-volume {
+    font-size: 0.7rem;
+    color: var(--text-faint);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .libro-acquista {
+    margin-top: 2px;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.78rem;
+    color: var(--brass);
+    letter-spacing: 0.03em;
+  }
+
+  /* Da desktop in su: la sezione di gioco esce dal vincolo di 640px del .wrap
+     (breakout centrato sul viewport) e diventa una griglia a tre colonne.
+     Le colonne sono assegnate esplicitamente per id/classe, cosi' l'ordine
+     del DOM (pensato per il mobile) non conta: libri a sinistra, gioco al
+     centro, chat a destra. */
+  @media (min-width: 1080px) {
+    #schermo-gioco {
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(1180px, calc(100vw - 40px));
+      max-width: none;
+      margin: 0;
+      display: grid;
+      grid-template-columns: 210px minmax(0, 1fr) 300px;
+      gap: 18px;
+      align-items: start;
+    }
+    .zona-libri { grid-column: 1; grid-row: 1; margin-top: 0; flex-wrap: nowrap; flex-direction: column; align-items: stretch; }
+    .zona-gioco { grid-column: 2; grid-row: 1; }
+    .zona-chat  { grid-column: 3; grid-row: 1; margin-top: 0; }
+    .zona-libri .libro-card { flex: 0 0 auto; }
+    /* Nella colonna stretta di sinistra la lista chat puo' respirare di piu' */
+    .zona-chat .chat-messaggi { max-height: 420px; }
+  }
+
   .caricamento {
     text-align: center;
     color: var(--text-faint);
@@ -742,30 +916,53 @@
   </section>
 
   <!-- SCHERMATA 3: gioco -->
+  <!-- Layout a tre zone su desktop (libri | gioco | chat), mono-colonna su
+       mobile. L'ordine nel DOM è gioco → chat → libri: così su mobile (nessuna
+       griglia) le copertine restano IN FONDO, dopo la chat, senza mai coprire
+       il gioco. Su desktop la griglia riassegna le colonne (libri a sinistra,
+       chat a destra) a prescindere dall'ordine del DOM. -->
   <section id="schermo-gioco" class="schermo">
-    <div class="tavolo-vista" id="tavolo-vista"></div>
+    <div class="zona-gioco">
+      <div class="tavolo-vista" id="tavolo-vista"></div>
 
-    <div class="contenuto-scuro">
-      <div id="prompt-cessione-comando"></div>
+      <div class="contenuto-scuro">
+        <div id="prompt-cessione-comando"></div>
 
-      <div class="barra-stanza">
-        <span class="codice-stanza" id="testo-codice-stanza">stanza —</span>
-        <button class="copia" id="btn-copia-link">Copia link stanza</button>
+        <div class="barra-stanza">
+          <span class="codice-stanza" id="testo-codice-stanza">stanza —</span>
+          <button class="copia" id="btn-copia-link">Copia link stanza</button>
+        </div>
+
+        <div class="risorse" id="box-risorse"></div>
+
+        <div class="squadra">
+          <div class="etichetta">La squadra</div>
+          <div class="lista" id="lista-giocatori"></div>
+        </div>
+
+        <div id="scheda-personale"></div>
+
+        <div id="area-nodo"></div>
+
+        <div id="pannello-comandante"></div>
       </div>
-
-      <div class="risorse" id="box-risorse"></div>
-
-      <div class="squadra">
-        <div class="etichetta">La squadra</div>
-        <div class="lista" id="lista-giocatori"></div>
-      </div>
-
-      <div id="scheda-personale"></div>
-
-      <div id="area-nodo"></div>
-
-      <div id="pannello-comandante"></div>
     </div>
+
+    <aside class="zona-chat">
+      <div class="pannello-chat" id="pannello-chat">
+        <div class="titolo-chat">Chat della squadra</div>
+        <div class="chat-messaggi" id="chat-messaggi"></div>
+        <form class="chat-invio" id="chat-invio">
+          <input type="text" id="chat-input" maxlength="500" autocomplete="off"
+                 placeholder="Scrivi alla squadra…" />
+          <button type="submit" class="secondario" id="chat-btn-invia">Invia</button>
+        </form>
+        <p class="errore" id="chat-errore"></p>
+      </div>
+    </aside>
+
+    <!-- Vetrina dei romanzi: popolata da renderLibri() con CONFIG.libri -->
+    <aside class="zona-libri" id="zona-libri"></aside>
   </section>
 
   <div class="caricamento" id="caricamento">un momento…</div>
@@ -1000,6 +1197,42 @@ async function caricaConfig() {
   ).join("");
 }
 
+// Vetrina dei romanzi (zona libri). I dati vengono da CONFIG.libri
+// (game-config.js), sorgente FIDATA: uso innerHTML come per le altre parti
+// che leggono la config (a differenza della chat, che e' testo utente).
+// Contenuto statico: si costruisce una volta sola dopo caricaConfig().
+// Ogni card e' un link che si apre in una scheda NUOVA (target="_blank" +
+// rel="noopener"), cosi' il giocatore non lascia mai la partita in corso.
+// Una url ancora segnaposto (contiene "[ASIN") diventa una card NON
+// cliccabile ("Presto disponibile"): mai un link rotto in produzione.
+function renderLibri(libri) {
+  const zona = document.getElementById("zona-libri");
+  if (!zona) return;
+  const elenco = (libri && Array.isArray(libri.elenco)) ? libri.elenco : [];
+  if (elenco.length === 0) {
+    zona.innerHTML = "";
+    return;
+  }
+
+  const invito = libri.invito ? `<div class="libri-invito">${libri.invito}</div>` : "";
+
+  const cards = elenco.map((l) => {
+    const asinMancante = !l.url || l.url.includes("[ASIN");
+    const img = `<img class="libro-cover" src="${l.copertina}" alt="Copertina: ${l.titolo}" loading="lazy" />`;
+    const info = `
+      <div class="libro-info">
+        <div class="libro-titolo">${l.titolo}</div>
+        ${l.volume ? `<div class="libro-volume">${l.volume}</div>` : ""}
+        <div class="libro-acquista">${asinMancante ? "Presto disponibile" : "Acquista →"}</div>
+      </div>`;
+    return asinMancante
+      ? `<div class="libro-card libro-card--disabilitato">${img}${info}</div>`
+      : `<a class="libro-card" href="${l.url}" target="_blank" rel="noopener">${img}${info}</a>`;
+  }).join("");
+
+  zona.innerHTML = invito + cards;
+}
+
 function trovaNodo(nodoId) {
   return CONFIG.nodiTemporali.find(n => n.id === nodoId);
 }
@@ -1009,6 +1242,7 @@ async function avvia() {
   caricaStato();
   caricaProfiloCollegato();
   await caricaConfig();
+  renderLibri(CONFIG.libri);
 
   const params = new URLSearchParams(window.location.search);
   const stanzaUrl = params.get("stanza");
@@ -1919,6 +2153,103 @@ function renderPannelloComandante(session) {
   });
 }
 
+// Chat di squadra. Il client MOSTRA solo nome + testo (ruolo e timestamp
+// arrivano nel payload ma restano inutilizzati per ora, per poter evolvere
+// l'UI senza migrare i dati). I messaggi sono testo scritto dagli utenti:
+// vanno inseriti via textContent, MAI via innerHTML, per non aprire un buco
+// di iniezione (a differenza dei nomi di ruolo/nodo, che vengono dalla
+// config fidata). La lista scorre da sola; se il giocatore ha scrollato su
+// per rileggere, un nuovo messaggio in arrivo dal polling non lo trascina
+// giu' a forza (si riaggancia in fondo solo se era gia' vicino al fondo).
+function renderChat(chat) {
+  const box = document.getElementById("chat-messaggi");
+  if (!box) return;
+  const messaggi = Array.isArray(chat) ? chat : [];
+
+  const vicinoAlFondo = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+
+  box.innerHTML = "";
+  if (messaggi.length === 0) {
+    const vuota = document.createElement("div");
+    vuota.className = "chat-vuota";
+    vuota.textContent = "Ancora nessun messaggio.";
+    box.appendChild(vuota);
+  } else {
+    for (const m of messaggi) {
+      const riga = document.createElement("div");
+      riga.className = "chat-msg";
+      const nome = document.createElement("span");
+      nome.className = "chat-nome";
+      nome.textContent = m.nome;
+      const testo = document.createElement("span");
+      testo.className = "chat-testo";
+      testo.textContent = m.testo;
+      riga.appendChild(nome);
+      riga.appendChild(testo);
+      box.appendChild(riga);
+    }
+  }
+
+  if (vicinoAlFondo) box.scrollTop = box.scrollHeight;
+
+  // Solo chi ha un'identita' valida (giocatoreId + token) puo' scrivere: il
+  // server rifiuterebbe comunque un invio senza token, meglio disabilitare
+  // l'input e dirlo con un placeholder che lasciare cliccare a vuoto.
+  const input = document.getElementById("chat-input");
+  if (input) {
+    const puoScrivere = identitaValida();
+    input.disabled = !puoScrivere;
+    input.placeholder = puoScrivere
+      ? "Scrivi alla squadra…"
+      : "Unisciti alla squadra per scrivere";
+  }
+}
+
+// Handler di invio agganciato UNA SOLA VOLTA (il form e' statico nell'HTML,
+// non ricreato a ogni render): un flag evita di attaccarlo di nuovo ai tick
+// di polling successivi.
+let chatInizializzata = false;
+function setupChat() {
+  if (chatInizializzata) return;
+  const form = document.getElementById("chat-invio");
+  if (!form) return;
+  chatInizializzata = true;
+
+  const input = document.getElementById("chat-input");
+  const btn = document.getElementById("chat-btn-invia");
+  const erroreBox = document.getElementById("chat-errore");
+  const mostraErroreChat = (t) => { erroreBox.textContent = t; };
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    erroreBox.textContent = "";
+    const testo = input.value.trim();
+    if (!testo) return;
+
+    input.disabled = true;
+    btn.disabled = true;
+    try {
+      const session = await chiamaAPIAutenticata(
+        `/api/stanza/${STATO.roomId}/chat`,
+        { testo },
+        mostraErroreChat
+      );
+      input.value = "";
+      renderChat(session.chat);
+      const box = document.getElementById("chat-messaggi");
+      if (box) box.scrollTop = box.scrollHeight; // dopo un invio propr, sempre in fondo
+    } catch (err) {
+      if (!err.sessioneNonValida) mostraErroreChat("Messaggio non inviato. Riprova.");
+    } finally {
+      btn.disabled = false;
+      // identitaValida() ridecide se l'input torna scrivibile (resta disabilitato
+      // se la sessione e' caduta: renderChat sul prossimo tick lo confermera').
+      input.disabled = !identitaValida();
+      if (!input.disabled) input.focus();
+    }
+  });
+}
+
 async function aggiornaSchermataGioco() {
   document.getElementById("testo-codice-stanza").textContent = "stanza " + STATO.roomId.slice(0, 8);
 
@@ -1936,6 +2267,8 @@ async function aggiornaSchermataGioco() {
   renderPannelloComandante(session2);
   renderPromptCessione(session2);
   applicaTexturaNodo(session2.nodoAttivo);
+  setupChat();
+  renderChat(session2.chat);
 
   if (!session2.nodoAttivo) {
     renderSelezioneNodo();
@@ -1966,6 +2299,7 @@ function avviaPolling() {
       renderPannelloComandante(session);
       renderPromptCessione(session);
       applicaTexturaNodo(session.nodoAttivo);
+      renderChat(session.chat);
 
       // Se questo giocatore stava aspettando che il comandante risolvesse
       // il suo testo libero ambiguo, e non c'è più nulla in attesa,
