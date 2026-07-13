@@ -1,12 +1,21 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 13 luglio 2026 (ultimo commit su main `a33880c`, deploy
-automatico Cloudflare avviato). Interventi di questa sessione (13 luglio),
-tutti pushati su main: titolo del pannello comandante in avorio a contrasto
-WCAG AA (`1caefcb`), messaggi 401/403 distinti per il comandante
-(`0a0bc88`), asse `richiestaId` abilitato nel contesto del Cronista
-(`a33880c`). La sessione precedente, 12 luglio, aveva chiuso i tre filoni
-post-Fase 4: UI di accesso reale, token di sessione per il profilo,
+Aggiornato al: 13 luglio 2026, sera (in produzione fino a `23c402e`; in
+locale, non ancora pushati: `3e14e22` e questo aggiornamento del log).
+Interventi della sessione serale del 13 luglio: **Riconoscimento** — rientro
+in partita e presa di comando (`1d9b592`), **anti-ripetizione del Cronista**
+(`23c402e`), **decisione di design su `bonusContesto`** + commenti allineati
+al 1d6 (`3e14e22`), **verifica dal vivo di `POSTI_TAVOLO`** (nessun file
+toccato) — vedi le prime quattro voci del changelog.
+**Buco noto**: i commit `9119409` (chat di squadra, layout a tre zone,
+colonna dei romanzi) e `c0fabb2` (ribilanciamento del tiro: 1d6 per tutti,
+competenze non principali a 2) sono in produzione ma non hanno ancora una
+voce qui; alcune parti vecchie del log citano ancora il dado 1d4 o "le
+altre partono da 1" — come da nota tecnica sotto, fidati del codice.
+La sessione mattutina del 13 luglio aveva chiuso: titolo del pannello
+comandante WCAG AA (`1caefcb`), messaggi 401/403 distinti (`0a0bc88`),
+asse `richiestaId` del Cronista (`a33880c`); quella del 12 luglio i tre
+filoni post-Fase 4: UI di accesso reale, token di sessione per il profilo,
 riconoscimento del grado nel gameplay — vedi "Punto di ripresa" sotto.
 
 Questo file serve a non perdersi tra una sessione di lavoro e l'altra: raccoglie cosa
@@ -177,6 +186,8 @@ ripetere lo stesso frammento a distanza ravvicinata), ma non è tracciato in
 che rigiocano più volte lo stesso nodo/risposta e notano ripetizioni),
 si aggiunge come nuovo campo di stato con la relativa modifica a
 `initState()`/`migrateState()`, come da regola del progetto.
+**SUPERATA il 13/07/2026**: fatto esattamente così (commit `23c402e`,
+`session.storicoFrammenti` con migrazione) — vedi la voce nel changelog.
 
 **Nota tecnica su questo file**: per un periodo il repository ha avuto una versione
 vecchia di questo log (ferma al Passo 1) caricata per sbaglio insieme ad altri file.
@@ -802,24 +813,29 @@ oggi contiene un `index.html` minimo).
       - Il titolo ha un velo locale `rgba(var(--bg-rgb), 0.25)` che serve
         SOLO a garantire WCAG AA sopra le texture: è la prima riga da
         rivedere se dal vivo il titolo risultasse spento.
-      - **RESTA APERTO**: verifica dal vivo delle coordinate
-        `POSTI_TAVOLO` (mai aggiustate dopo averle viste in browser) e il
-        giudizio d'insieme della schermata a occhio dell'autore.
+      - **CHIUSA il 13/07/2026 la verifica dal vivo di `POSTI_TAVOLO`**:
+        coordinate confermate così come stimate, nessun ritocco necessario
+        (vedi la voce dedicata nel changelog). Resta il giudizio d'insieme
+        della schermata con un nodo attivo (texture) a occhio dell'autore.
       - Nota ambiente (invariata): lo screenshot del pannello di preview
         va in timeout sulle schermate con sfondo tavolo, sia con immagini
         da 8-10 MB sia da ~250 KB — non dipende dal peso, è un limite del
         pannello di anteprima di queste sessioni.
-- [ ] **Flusso di rientro assente** (PRIORITÀ: da affrontare prima di un
+- [x] **Flusso di rientro assente** (PRIORITÀ: da affrontare prima di un
       playtest con un tavolo vero): un giocatore che perde il token di
       sessione è fuori dalla partita — non esiste una rotta di
       ri-autenticazione, ricaricare la pagina riporta alla stessa identità
       invalida, e un secondo `/join` nella stessa stanza è bloccato dal
       client di proposito (creerebbe un secondo giocatore). Con un tavolo
       vero è quasi certo che qualcuno chiuda la scheda o perda il token.
-      Emerso durante il lavoro sui messaggi 401/403 (vedi sopra): è il
-      motivo per cui il testo del 401 si limita a constatare, senza
-      promettere un rientro.
-- [ ] **Il Cronista può ripetersi alla lettera** (PRIORITÀ: prima del
+      Emerso durante il lavoro sui messaggi 401/403 (vedi sopra).
+      **CHIUSO il 13/07/2026 con il Riconoscimento** (commit `1d9b592`, in
+      produzione): tre casi — rientro ospite con biglietto e conferma di un
+      terzo, rientro registrato con prova crittografica, presa di comando —
+      con veto forte del diretto interessato e mai auto-conferma; vedi la
+      voce nel changelog. Il testo del 401 ora promette il rientro
+      ("Ricarica la pagina per rientrare") perché il flusso esiste davvero.
+- [x] **Il Cronista può ripetersi alla lettera** (PRIORITÀ: prima del
       playtest): il motore SA fare anti-ripetizione (`scegliFrammento`
       esclude gli id nello storico recente, e `componiNarrazione`
       restituisce `frammentiUsati`), ma nessuno lo alimenta —
@@ -830,6 +846,10 @@ oggi contiene un `index.html` minimo).
       `richiestaId`. Richiede uno stato di sessione
       (`session.storicoFrammenti`) con migrazione in
       `initState()`/`migrateState()`, come da regola del progetto.
+      **CHIUSO il 13/07/2026** (commit `23c402e`, in produzione) esattamente
+      con quello stato di sessione: finestra scorrevole unica a 12 id,
+      rilascio progressivo nel motore al posto del ripiego tutto-o-niente,
+      azzeramento al cambio nodo — vedi la voce nel changelog.
 - [ ] **Frammenti di scena per `1848-milano`** (lavoro di CONTENUTO, non
       tecnico): ora che l'asse `richiestaId` esiste (vedi punto chiuso in
       "Cosa manca" sopra), si possono scrivere frammenti dedicati a
@@ -845,6 +865,134 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**13/07/2026 — Decisione di design: `bonusContesto` non si usa nei contenuti + commenti allineati al ribilanciamento 1d6**
+File modificati: `src/game-config.js`, `src/lib/risoluzione.js` (solo
+commenti, nessun cambio di comportamento — commit `3e14e22`, locale al
+momento di questa voce).
+- **Origine**: verifica "alla virgola" del capitolo 4 del regolamento
+  cartaceo contro il motore (testo in chat, fuori repo). Esito: nessuna
+  discrepanza sul gioco di oggi — partenze 3/2, Ancoraggio di nessuno,
+  soglie 8+/5-7/≤4, probabilità faccia per faccia ("il mestiere raddoppia
+  le riuscite piene e dimezza i fallimenti") tutte esatte. Unica fragilità
+  trovata: il capitolo promette "non esistono modificatori… le difficoltà
+  stanno dentro la storia, non dentro i numeri", ma il motore supporta
+  `bonusContesto` (+1 situazionale su una risposta) — mai usato da nessun
+  nodo reale, però il commento nel config invitava a usarlo.
+- **DECISIONE DI DESIGN (vincolante)**: NON usare `bonusContesto` nei
+  contenuti dei nodi. Le difficoltà stanno nella storia, non nei numeri
+  (regolamento, cap. 4, "Una regola che non c'è"), e il gioco deve restare
+  identico dal vivo con carta e dado. Il meccanismo resta nel motore per
+  compatibilità, ma i nodi non devono dichiararlo. Sostituisce
+  l'orientamento del Passo 20 (che lo aveva introdotto per inseguimenti/
+  terreno non rivelato): nessun contenuto esistente cambia, il campo non
+  era mai stato usato. L'unico modificatore online resta il bonus di grado
+  (+1 da profilo, coperto nel regolamento dall'inciso sull'esperienza).
+- **Commenti 1d4 stantii corretti** in `risoluzione.js` (`tiraDado` diceva
+  ancora "default 1d4" e parlava dell'override di dado per ruolo come cosa
+  viva): ora dicono 1d6 per tutti, override supportato ma non usato da
+  nessun ruolo. I valori erano già giusti (arrivano dal config): solo prosa.
+- Batteria completa 756/756 su due run (25 file), comportamento invariato.
+- Nota di processo: un task in background parallelo su questi stessi
+  commenti è stato archiviato senza integrare nulla (superato da `3e14e22`).
+
+---
+
+**13/07/2026 — `POSTI_TAVOLO` verificate dal vivo: coordinate confermate così come stimate**
+File modificati: nessuno.
+- Chiuso l'ultimo pezzo degli esperimenti visivi mai visto dal vivo (vedi
+  punto in "Cosa manca"): stanza usa e getta in produzione con 8 giocatori
+  Posto1..Posto8 (il massimo; ordine di ingresso = ordine dei posti, ruoli
+  a rotazione), nessun nodo avviato per una disposizione pulita.
+- **Vincolo scoperto**: `tavolo-vista` vive dentro `schermo-gioco`, quindi
+  il tavolo lo vede solo chi è seduto — e con la stanza piena l'autore è
+  entrato tramite il Riconoscimento stesso (richiesta su Posto1 dalla
+  schermata "Sei già seduto?", conferma automatizzata via HTTP con il token
+  di Posto2): dogfooding involontario del flusso appena deployato, riuscito.
+- **Esito a occhio dell'autore: le percentuali stimate restano quelle**
+  (1 alto-sx 14/15, 2 alto-dx 86/15, 3-4 lato sx 4/38-68, 5-6 lato dx
+  96/38-68, 7 basso-sx 14/89, 8 basso-dx 86/89) — nessun ritocco, il
+  commento "da aggiustare guardando il risultato vero" in `POSTI_TAVOLO`
+  può considerarsi soddisfatto senza modifiche.
+
+---
+
+**13/07/2026 — Anti-ripetizione del Cronista: finestra di sessione a 12 id e rilascio progressivo (commit `23c402e`, in produzione)**
+File modificati: `src/lib/narratore-simulato.js`,
+`src/durable-objects/GameSession.js`; nuovo `test-cronista-storico.mjs`.
+- Chiude il punto "Il Cronista può ripetersi alla lettera" (priorità
+  pre-playtest, vedi "Cosa manca").
+- **Motore** (`scegliFrammento`): il vecchio ripiego tutto-o-niente (se
+  escludendo i recenti non resta nessun candidato, ignora l'INTERO storico)
+  sostituito da un **rilascio progressivo a suffisso**: si rilasciano gli id
+  più vecchi uno alla volta finché almeno un candidato torna disponibile.
+  Garanzia: con ≥2 candidati, il frammento usato per ultimo non può MAI
+  essere riscelto al tiro immediatamente successivo. Storico vuoto =
+  comportamento identico a prima. La forma a suffisso regge anche gli id
+  ripetuti nello storico (es. `[Y,X,Y]`: il più recente resta escluso).
+- **Stato di sessione**: `session.storicoFrammenti`, finestra scorrevole
+  UNICA di sessione (ultimi 12 id = ~4 esiti), migrazione in
+  `initState()`/`migrateState()` come da regola; il call-site raccoglie i
+  `frammentiUsati` (prima scartati) e li accoda troncando a 12.
+- **Azzeramento al cambio nodo** (`/avvia-nodo`): gli id dei frammenti sono
+  univoci solo per slot/pool, quindi tra pool di nodi diversi potrebbero
+  collidere; e narrativamente il nuovo nodo riparte pulito.
+- Test: **+19 asserzioni** (`test-cronista-storico.mjs`: alternanza stretta
+  su tiri consecutivi, finestra mai >12, azzeramento, retrocompatibilità
+  con sessioni senza il campo); batteria 756/756 su due run. Verificato in
+  produzione post-deploy: due tiri consecutivi su `1848-milano` producono
+  aperture diverse e lo storico si popola di 3 id per tiro.
+
+---
+
+**13/07/2026 — Riconoscimento: rientro in partita e presa di comando (commit `1d9b592`, in produzione)**
+File modificati: `src/durable-objects/GameSession.js`,
+`public/index.html`; nuovo `test-riconoscimento.mjs`.
+- Chiude "Flusso di rientro assente" (priorità pre-playtest, vedi "Cosa
+  manca"). Riusa il pattern proponi/conferma della cessione del comando:
+  stato pendente in sessione (`riconoscimentoPendente`, uno alla volta) +
+  conferma di un terzo, con migrazione in `initState()`/`migrateState()`.
+- **Tre casi**:
+  - **CASO 1, ospite che rientra**: schermata "Sei già seduto a questo
+    tavolo?" col roster; il richiedente (non autenticato: è proprio il
+    token che ha perso) riceve un `biglietto` segreto UNA SOLA VOLTA e
+    reclama l'esito in polling (`/reclama-rientro`); serve la conferma di
+    un ALTRO giocatore autenticato; ad approvazione il token del record
+    viene riemesso (il vecchio si invalida subito).
+  - **CASO 2, registrato che rientra**: `/rientro-registrato` con
+    profiloToken = prova crittografica, riaggancio immediato senza
+    conferma di nessuno. Il client lo tenta PER PRIMO.
+  - **CASO 3, presa di comando**: "il comandante non risponde" (voce
+    defilata in schermata di gioco); richiesta autenticata del giocatore
+    seduto, conferma di un terzo, trasferimento del flag comandante.
+- **Regole di sicurezza decise**: MAI auto-conferma (il richiedente non
+  può confermarsi, 403; con una sola persona in stanza non si rientra, per
+  design: il link della stanza gira). **VETO FORTE del diretto
+  interessato**: per il rientro solo chi detiene ANCORA un token valido
+  per il record reclamato può rifiutare (chiunque altro: 403); per il
+  comando solo il comandante attuale; il richiedente può annullare la
+  propria richiesta. Lo stato "rifiutato" resta finché il richiedente non
+  lo legge — mai silenzio verso chi ha chiesto.
+- **Messaggi di sistema fuori dalla chat**: l'avviso ("Qualcuno dice di
+  essere X. È lui?") è renderizzato da `riconoscimentoPendente` — spogliato
+  dei segreti (`biglietto`, `nuovoToken`) in `sessionPubblica()` — NON è
+  una voce dell'array `chat`. Bottoni mostrati solo a chi di dovere.
+- **Rifinitura post-prova dal vivo**: la classe `.errore` senza `.mostra`
+  rendeva invisibili alcuni esiti (il rifiuto al richiedente, gli errori
+  dei bottoni Sì/No): chiusi TUTTI i percorsi muti — ogni esito ora
+  produce un messaggio visibile.
+- Il messaggio del 401 ora indica causa e via d'uscita ("forse hai ripreso
+  la partita da un altro dispositivo. Ricarica la pagina per rientrare") e
+  il client scarta l'identità morta tenendo il roomId: il reload passa dal
+  Riconoscimento.
+- Verifiche: batteria 737/737 su due run (+66 asserzioni di
+  `test-riconoscimento.mjs`); simulazione HTTP dal vivo 20/20 (tre client:
+  auto-conferma vietata, veto forte, esito leggibile dal richiedente,
+  richiesta ri-apribile dopo il rifiuto, conflitto veto/conferma quasi
+  simultanei serializzato dal Durable Object col perdente su 400/409);
+  smoke test in produzione post-deploy 9/9; prova visiva umana superata.
+
+---
 
 **12/07/2026 — Velo del pannello comandante alleggerito (0.82 → 0.58): la texture ora si vede**
 File modificati: `public/index.html` (un solo valore CSS + commento).
