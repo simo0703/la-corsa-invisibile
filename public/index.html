@@ -649,7 +649,14 @@
     font-size: 0.9rem;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--crimson-bright);
+    color: var(--text);
+    /* Velo locale: sulle texture di nodo il velo 0.58 del pannello non basta
+       a garantire WCAG AA sui punti piu' chiari (min 3.61:1 su
+       texture-1836-torino); questo 0.25 in piu' porta il caso peggiore a
+       5.22:1 su tutte e 5 le texture. Sullo sfondo solido e' impercettibile. */
+    background: rgba(var(--bg-rgb), 0.25);
+    border-bottom: 2px solid var(--crimson-bright);
+    padding-bottom: 8px;
     margin-bottom: 18px;
   }
   .pannello-comandante .sezione { margin-bottom: 20px; }
