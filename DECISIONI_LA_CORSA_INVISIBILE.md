@@ -738,18 +738,58 @@ oggi contiene un `index.html` minimo).
 - [ ] Rifinire dal vivo i due esperimenti visivi (texture nodi + sfondo
       tavolo/badge, entrambi marcati "primo passaggio" nel codice):
       posizioni di `POSTI_TAVOLO` mai aggiustate dopo averle viste in
-      browser; opacità/leggibilità del velo sulle texture dei pannelli
-      (`.situazione-box`/`.pannello-comandante`) verificata solo via
-      `getComputedStyle`, **mai con una vera controprova visiva** — il
-      pannello di preview è andato in timeout su schermate con sfondo tavolo
-      sia con le immagini originali (8-10 MB) sia con quelle ottimizzate
-      (~250 KB): il peso non sembra essere la causa reale, da capire in una
-      sessione futura con un ambiente di preview diverso o uno screenshot
-      fatto dall'utente stesso.
+      browser. Opacità/leggibilità del velo: verificata visivamente il
+      12/07 tramite compositi ricostruiti (vedi changelog "Velo del
+      pannello comandante alleggerito") — restano da giudicare a occhio
+      dell'autore su schermo vero il titolo crimson del pannello (contrasto
+      debole sui punti chiari della texture) e l'insieme della schermata.
+      Nota ambiente: lo screenshot del pannello di preview va in timeout
+      sulle schermate con sfondo tavolo, sia con immagini da 8-10 MB sia
+      da ~250 KB — non dipende dal peso, è un limite del pannello di
+      anteprima di queste sessioni.
 
 ---
 
 ## Changelog tecnico
+
+**12/07/2026 — Velo del pannello comandante alleggerito (0.82 → 0.58): la texture ora si vede**
+File modificati: `public/index.html` (un solo valore CSS + commento).
+- Segnalato dall'autore: la texture del nodo attivo era ben visibile in
+  `.situazione-box` ma quasi invisibile in `.pannello-comandante`.
+  **Indagine confermata: non era un bug** — `getComputedStyle` dal vivo
+  mostrava la texture correttamente applicata anche lì. Due cause
+  strutturali, entrambe misurate: (1) il pannello è quasi quadrato
+  (541×563) contro un'immagine 16:9, quindi `cover` la ingrandisce/ritaglia
+  quasi il doppio rispetto alla striscia larga di `.situazione-box`
+  (rapporto 4.3:1); (2) il 29,3% dell'area del pannello è comunque coperta
+  dai controlli del form (select, textarea, input) con sfondo solido
+  `--bg-panel`, opachi a prescindere dal velo.
+- **Correzione scelta dall'autore tra 3 opzioni proposte**: solo la 1
+  (velo più leggero, 0.58 invece di 0.82, SOLO su `.pannello-comandante`;
+  `.situazione-box` resta a 0.82). La 2 (sfondi semi-trasparenti per i
+  controlli del form dentro il pannello) esplicitamente accantonata dopo la
+  verifica: la texture è già ben visibile con la sola correzione 1, e la 2
+  avrebbe ridotto la leggibilità senza necessità.
+- **Prima vera controprova visiva ottenuta** (chiudendo in parte il punto
+  aperto in "Cosa manca"): lo screenshot del pannello di preview resta in
+  timeout (problema dell'ambiente, non del peso immagini), ma il composito
+  esatto texture+velo (stessa geometria, stesso `cover`, stesso rgba) è
+  stato ricostruito con canvas nel browser reale e con sharp in locale e
+  guardato a occhio — a 0.82 quasi tinta unita, a 0.58 pergamena
+  chiaramente leggibile (pieghe, macchie, grana).
+- **Leggibilità misurata sui pixel reali dietro ai testi** (velo 0.58,
+  texture 1836-torino): valore del margine (`--text`) contrasto 8.07:1
+  (sopra WCAG AA 4.5:1); note del comandante e select del nodo su sfondo
+  solido opaco, invariati (13.7:1). **Punto debole noto, segnalato
+  all'autore**: il titolo "Pannello del comandante" (`--crimson-bright`)
+  scende a 1.66:1 sui punti chiari della pergamena (era già solo 3.61:1
+  sul fondo solido: il crimson su marrone è debole di suo) — etichetta
+  decorativa, non contenuto; da giudicare a occhio, eventualmente da
+  scurire con un chip/ombra in un passaggio futuro se disturba.
+- `POSTI_TAVOLO` (percentuali dei posti) resta l'unica parte degli
+  esperimenti visivi mai vista dal vivo.
+
+---
 
 **12/07/2026 — Ottimizzazione peso immagini: tavolo-sfondo + 5 texture nodi, PNG → JPEG**
 File modificati: `public/index.html`, `src/game-config.js` (solo un commento);

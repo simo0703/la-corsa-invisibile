@@ -615,17 +615,26 @@
 
   /* --- Pannello del comandante --- */
   /* ESPERIMENTO VISIVO (primo passaggio, da valutare): stessa texture del
-     nodo attivo di .situazione-box sopra, stesso velo, stessa variabile
+     nodo attivo di .situazione-box sopra, stessa variabile
      --texture-nodo-attivo -- vedi il commento lì per i dettagli. Nota: il
      div con id="pannello-comandante" in HTML è solo un contenitore vuoto
      (il suo innerHTML viene sostituito da renderPannelloComandante()); la
      texture va su QUESTA classe (l'elemento .pannello-comandante vero e
      proprio, con bordo crimson), non sul contenitore -- altrimenti
-     resterebbe nascosta dietro lo sfondo solido di questo elemento. */
+     resterebbe nascosta dietro lo sfondo solido di questo elemento.
+     Velo più leggero (0.58 invece di 0.82 come .situazione-box): verificato
+     che qui la texture risultava quasi invisibile, per due motivi propri
+     di questo pannello, non un bug -- (1) è alto e stretto (~quasi
+     quadrato) contro un'immagine larga 16:9, quindi "cover" la ingrandisce/
+     ritaglia quasi il doppio rispetto a .situazione-box; (2) quasi un
+     terzo della sua area è comunque coperta dai controlli del form
+     (select del nodo, textarea delle note), opachi a prescindere dal velo.
+     Un velo più leggero compensa parzialmente entrambi gli effetti sulla
+     porzione di pannello dove la texture resta visibile. */
   .pannello-comandante {
     background-color: var(--bg-panel);
     background-image:
-      linear-gradient(rgba(var(--bg-rgb), 0.82), rgba(var(--bg-rgb), 0.82)),
+      linear-gradient(rgba(var(--bg-rgb), 0.58), rgba(var(--bg-rgb), 0.58)),
       var(--texture-nodo-attivo, none);
     background-size: cover;
     background-position: center;
