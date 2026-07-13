@@ -39,10 +39,11 @@ export function creaCompetenzeIniziali(ruoloId, distribuzioneExtra = {}) {
   return competenze;
 }
 
-// Tira il dado correttivo (default 1d4, il valore configurato in
-// GAME_CONFIG.risoluzione.dadoFacce). `facce` può essere sovrascritto dal
-// chiamante -- serve ai ruoli che hanno un dado diverso per la propria
-// competenza principale (vedi `ruolo.dadoFacce` in game-config.js).
+// Tira il dado correttivo (default 1d6, il valore configurato in
+// GAME_CONFIG.risoluzione.dadoFacce -- uguale per tutti dal ribilanciamento
+// del tiro). `facce` può essere sovrascritto dal chiamante: il meccanismo
+// resta per compatibilità (GameSession sa ancora leggere `ruolo.dadoFacce`
+// sulla competenza principale), ma nessun ruolo lo usa più.
 export function tiraDado(facce = GAME_CONFIG.risoluzione.dadoFacce) {
   return 1 + Math.floor(Math.random() * facce);
 }

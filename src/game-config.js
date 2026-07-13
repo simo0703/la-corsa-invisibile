@@ -153,13 +153,12 @@ export const GAME_CONFIG = {
   // dichiarare `bonusContesto: { competenza: "<id>", valore: <n> }` per
   // aggiungere `valore` al punteggio di quella competenza SOLO per questo
   // tiro, quando `competenza` coincide con la `competenzaRichiesta` della
-  // stessa risposta (altrimenti viene ignorato). Applicato MANUALMENTE da
-  // chi scrive il nodo -- non c'è rilevamento automatico del contesto di
-  // scena -- quindi va aggiunto a mano sulle risposte che rappresentano
-  // narrativamente un inseguimento, una fuga, o l'attraversamento/
-  // esplorazione di un terreno non ancora rivelato nella scena (pensato
-  // per il bonus Cadenza dell'Esploratore, ma il campo è generico: funziona
-  // per qualunque competenza).
+  // stessa risposta (altrimenti viene ignorato).
+  // DECISIONE DI DESIGN (luglio 2026): NON usare bonusContesto nei contenuti
+  // dei nodi. Il principio del gioco è che le difficoltà stanno nella storia,
+  // non nei numeri (vedi regolamento, cap. 4, "Una regola che non c'è"), e il
+  // gioco deve restare identico dal vivo con carta e dado. Il meccanismo
+  // resta nel motore per compatibilità, ma i nodi non devono dichiararlo.
   nodiTemporali: [
     {
       id: "1836-torino",
