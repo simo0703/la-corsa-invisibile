@@ -81,20 +81,22 @@ export const GAME_CONFIG = {
   // più basse, con un piccolo pool di punti extra da distribuire liberamente.
   creazionePersonaggio: {
     valorePrincipale: 3,
-    valoreAltre: 1,
+    valoreAltre: 2,
     puntiExtra: 3,
     valoreMassimo: 5,
   },
 
-  // Formula di risoluzione: punteggio competenza + un dado piccolo che
-  // corregge senza mai dominare (max 4 punti su un punteggio che arriva a 5).
-  // `dadoFacce` qui è il valore di DEFAULT per qualunque ruolo/competenza.
-  // Un ruolo può sovrascriverlo per la propria competenza principale con un
-  // campo `dadoFacce` sull'oggetto ruolo stesso (vedi "esploratore" sotto):
-  // si applica SOLO quando la risposta richiede quella competenza
-  // principale, altrimenti resta questo dado di default.
+  // Formula di risoluzione: punteggio competenza + 1d6, uguale per TUTTI i
+  // ruoli su QUALUNQUE competenza. Con le soglie 5/8, il d6 (ampiezza 6) è
+  // l'unico dado che tiene vive tutte e tre le fasce con i punteggi 3
+  // (principale) / 2 (altre): il vecchio 1d4 (ampiezza 4) non poteva coprire
+  // la finestra fallimento(≤4)↔pieno(≥8), che richiede ampiezza 5.
+  // `dadoFacce` qui è il valore di DEFAULT. Il motore (GameSession.js) sa
+  // ancora leggere un campo `dadoFacce` sull'oggetto ruolo per sovrascriverlo
+  // sulla competenza principale, ma dopo il ribilanciamento NESSUN ruolo lo
+  // usa: il d6 è di tutti.
   risoluzione: {
-    dadoFacce: 4,
+    dadoFacce: 6,
     sogliaSuccessoPieno: 8,
     sogliaSuccessoParziale: 5,
   },
@@ -112,11 +114,6 @@ export const GAME_CONFIG = {
       ispirazione: "7° Reggimento — Celeritate ac virtute",
       focus: "Muoversi rapidamente, scoprire pericoli nascosti, vedere prima.",
       competenzaPrincipale: "cadenza",
-      // Override del dado di risoluzione, solo quando il tiro usa la
-      // propria competenza principale (Cadenza): 1d6 invece del default
-      // 1d4 (vedi `risoluzione.dadoFacce` sopra). Cadenza base resta 3,
-      // invariata: il range di un tiro normale passa da 4-7 a 4-9.
-      dadoFacce: 6,
     },
     {
       id: "fanfara",

@@ -123,8 +123,8 @@ console.log("\n--- /join ---");
   verifica("il giocatore viene aggiunto", json.giocatori.length === 1);
   verifica("il giocatore ha un id assegnato", typeof json.giocatori[0].id === "string" && json.giocatori[0].id.length > 0);
   verifica(
-    "le competenze vengono assegnate in base al ruolo (Esploratore: Cadenza principale a 3)",
-    json.giocatori[0].competenze.cadenza === 3 && json.giocatori[0].competenze.precisione === 1
+    "le competenze vengono assegnate in base al ruolo (Esploratore: Cadenza principale a 3, secondarie a 2)",
+    json.giocatori[0].competenze.cadenza === 3 && json.giocatori[0].competenze.precisione === 2
   );
   verifica(
     "senza tokenCreazione (nessun /crea chiamato prima), il giocatore NON diventa comandante",

@@ -223,10 +223,11 @@ console.log("\n--- robustezza: contenuto malformato non manda in crash il motore
 
 console.log("\n--- robustezza: competenza mancante nel record del giocatore (vecchie sessioni) trattata come 0 ---");
 {
-  // Ruolo "custode", non "esploratore": il Custode non ha un dadoFacce di
-  // ruolo (resta sul default 1d4), quindi il totale resta sempre <5 come
-  // richiede questo test. Con l'Esploratore (1d6 su Cadenza) sarebbe
-  // flaky: un dado di 5 o 6 darebbe "parziale" invece di "fallimento".
+  // Il punto di questo test è la robustezza: una competenza mancante nel
+  // record del giocatore viene trattata come 0. Con il dado 1d6 (uguale per
+  // tutti) 0 + 1d6 = 1-6, quindi l'esito è fallimento (1-4) o parziale (5-6),
+  // MAI pieno: verifichiamo competenza === 0 (il vero punto) e che l'esito
+  // non sia "pieno", senza pinnare un tier esatto che dipenderebbe dal dado.
   const { gs, storage } = nuovaSessione();
   const { giocatoreId, token } = await joinComandante(gs, "Prova", "custode");
   await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "test-nodo-tiro", giocatoreId, token });
@@ -236,52 +237,57 @@ console.log("\n--- robustezza: competenza mancante nel record del giocatore (vec
 
   const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
   verifica(
-    "punteggio mancante trattato come 0 (totale = dado, sempre <5 -> fallimento)",
-    json.tiro !== null && json.tiro.esito === "fallimento" && json.tiro.competenza === 0
+    "punteggio mancante trattato come 0 (competenza === 0; con 0 + 1d6 l'esito non è mai pieno)",
+    json.tiro !== null && json.tiro.esito !== "pieno" && json.tiro.competenza === 0
   );
 }
 
-console.log("\n--- dadoFacce di ruolo: si applica solo quando competenzaRichiesta è la competenzaPrincipale del ruolo ---");
+console.log("\n--- Dado 1d6 per tutti: sia sulla principale sia su una competenza non propria sono vive tutte e tre le fasce ---");
 {
-  // Esploratore (competenzaPrincipale: cadenza, dadoFacce: 6): con Cadenza
-  // 3 reale, non forzata, su molti tentativi deve comparire "pieno" --
-  // impossibile con il vecchio dado di default (1d4, 3+4=7 sotto la soglia
-  // di 8). Copertura generica (nodo di prova); il contenuto narrativo
-  // reale è verificato a parte in test-scegli-1836-torino.mjs.
-  const tierVisti = new Set();
-  for (let i = 0; i < 60; i++) {
-    const { gs, giocatoreId, token } = await sessionePronta(); // ruolo esploratore, competenza reale (3)
-    const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
-    tierVisti.add(json.tiro?.esito);
-  }
-  verifica(
-    "su 60 tentativi, Esploratore con Cadenza 3 reale vede almeno un tier \"pieno\" (dado 1d6 di ruolo)",
-    tierVisti.has("pieno")
-  );
-}
-{
-  // Custode (competenzaPrincipale: spiritoDiCorpo, nessun dadoFacce): con
-  // Cadenza 3 reale su NODO_DI_PROVA (che richiede comunque "cadenza", non
-  // la competenza principale del Custode), il dado resta il default 1d4 --
-  // "pieno" non deve mai comparire in altrettanti tentativi.
-  const { gs, storage } = nuovaSessione();
-  const { giocatoreId, token } = await joinComandante(gs, "Prova", "custode");
-  await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "test-nodo-tiro", giocatoreId, token });
-  await impostaCompetenza(storage, giocatoreId, "cadenza", 3);
+  // Dopo il ribilanciamento il dado è 1d6 per QUALUNQUE ruolo e QUALUNQUE
+  // competenza (nessun override di ruolo). Verifichiamo, coi punteggi REALI
+  // assegnati a /join (principale 3, altre 2) e senza forzare nulla, che
+  // entrambi i profili di tiro aprano tutte e tre le fasce:
+  //   - principale  3 + 1d6 = 4-9  -> fallimento (d6=1), parziale, pieno (d6=5,6)
+  //   - non-propria 2 + 1d6 = 3-8  -> fallimento (d6=1,2), parziale, pieno (d6=6)
+  // La fascia più rara in entrambi i casi ha probabilità 1/6; su 120
+  // tentativi la probabilità di non vederla mai è (5/6)^120 ≈ 2e-10:
+  // stabile, non fragile. Il pieno (totale 8-9) è irraggiungibile col
+  // vecchio 1d4: la sua sola comparsa dimostra che il dado è davvero 1d6.
 
-  let vistoPieno = false;
-  for (let i = 0; i < 60; i++) {
-    const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
-    if (json.tiro?.esito === "pieno") vistoPieno = true;
-    // resetta lo stato per rigiocare la stessa risposta al tentativo successivo
-    const session = await storage.get("session");
-    session.richiestaAttivaId = "test-richiesta-tiro";
-    session.richiestaIndice = 0;
-    await storage.put("session", session);
+  // Esegue `tentativi` tiri della risposta 0 di test-nodo-tiro (richiede
+  // "cadenza") con un giocatore del ruolo dato, punteggi reali di /join,
+  // e restituisce l'insieme dei tier osservati. Riusa una sola sessione,
+  // riaprendo la richiesta dopo ogni scelta (la risposta ha prossima: null).
+  async function tierOsservati(ruolo, tentativi) {
+    const { gs, storage } = nuovaSessione();
+    const { giocatoreId, token } = await joinComandante(gs, "Prova", ruolo);
+    await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "test-nodo-tiro", giocatoreId, token });
+    const tier = new Set();
+    for (let i = 0; i < tentativi; i++) {
+      const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
+      tier.add(json.tiro?.esito);
+      const session = await storage.get("session");
+      session.richiestaAttivaId = "test-richiesta-tiro";
+      session.richiestaIndice = 0;
+      await storage.put("session", session);
+    }
+    return tier;
   }
+
+  // Esploratore tira Cadenza = la SUA principale (punteggio reale 3): 3+1d6.
+  const principale = await tierOsservati("esploratore", 120);
   verifica(
-    "su 60 tentativi, Custode con Cadenza 3 (competenza non principale) non vede mai \"pieno\": resta sul dado di default 1d4",
-    !vistoPieno
+    "principale (Esploratore, Cadenza 3 reale + 1d6): compaiono tutte e tre le fasce (fallimento, parziale, pieno)",
+    principale.has("fallimento") && principale.has("parziale") && principale.has("pieno")
+  );
+
+  // Custode tira Cadenza = competenza NON propria (punteggio reale 2, la
+  // nuova secondaria): 2+1d6. Stesso dado d6, nessun override di ruolo.
+  const nonPropria = await tierOsservati("custode", 120);
+  verifica(
+    "non-propria (Custode, Cadenza 2 reale + 1d6): compaiono tutte e tre le fasce (fallimento, parziale, pieno)",
+    nonPropria.has("fallimento") && nonPropria.has("parziale") && nonPropria.has("pieno")
   );
 }
 

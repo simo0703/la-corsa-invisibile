@@ -16,7 +16,7 @@ console.log("--- Creazione competenze ---");
 
 const esploratore = creaCompetenzeIniziali("esploratore");
 verifica("l'Esploratore parte con Cadenza a 3 (principale)", esploratore.cadenza === 3);
-verifica("l'Esploratore parte con Precisione a 1 (secondaria)", esploratore.precisione === 1);
+verifica("l'Esploratore parte con Precisione a 2 (secondaria)", esploratore.precisione === 2);
 verifica("l'Esploratore ha tutte le 5 competenze", Object.keys(esploratore).length === 5);
 
 const incursoreConcentrato = creaCompetenzeIniziali("incursore", { precisione: 2, ancoraggio: 1 });
@@ -25,8 +25,8 @@ verifica(
   incursoreConcentrato.precisione === 5
 );
 verifica(
-  "l'Incursore con extra su Ancoraggio arriva a 2 (1 + 1, secondaria)",
-  incursoreConcentrato.ancoraggio === 2
+  "l'Incursore con extra su Ancoraggio arriva a 3 (2 + 1, secondaria)",
+  incursoreConcentrato.ancoraggio === 3
 );
 
 let erroreCatturato = false;
@@ -65,7 +65,7 @@ verifica(
   altaSfortunata.totale > bassaFortunata.totale
 );
 
-console.log("\n--- Dado per ruolo (Esploratore, Cadenza: 1d6 invece del default 1d4) ---");
+console.log("\n--- Risoluzione con 1d6 (il dado di tutti): confini del range e comparsa dei tier ---");
 
 // tiraDado(facce) rispetta il numero di facce passato, senza toccare il
 // default globale (usato da tutti gli altri ruoli/competenze).
@@ -83,50 +83,51 @@ console.log("\n--- Dado per ruolo (Esploratore, Cadenza: 1d6 invece del default 
   verifica("tiraDado(6) su 200 tentativi tocca anche gli estremi 1 e 6", vistoEstremoBasso && vistoEstremoAlto);
 }
 
-// Confini esatti forzando il dado: Cadenza base dell'Esploratore (3) con
-// 1d6 va da 4 (dado 1) a 9 (dado 6) -- il range "normale" della classe.
+// Confini esatti forzando il dado: un punteggio 3 (una competenza principale)
+// con 1d6 va da 4 (dado 1) a 9 (dado 6) -- il range "normale" di un tiro sulla
+// propria principale, uguale per qualunque ruolo (il d6 è di tutti).
 {
   const min = risolviAzione(3, 1, 6);
   const max = risolviAzione(3, 6, 6);
-  verifica("Esploratore, Cadenza 3 + 1d6: minimo del range è 4", min.totale === 4);
-  verifica("Esploratore, Cadenza 3 + 1d6: massimo del range è 9", max.totale === 9);
+  verifica("principale 3 + 1d6: minimo del range è 4", min.totale === 4);
+  verifica("principale 3 + 1d6: massimo del range è 9", max.totale === 9);
   verifica("il minimo (4) è sotto la soglia parziale (5): fallimento", min.esito === "fallimento");
   verifica("il massimo (9) supera la soglia piena (8): pieno", max.esito === "pieno");
 }
 
-// Con il bonus condizionale (+1, vedi bonusContesto in game-config.js) il
-// punteggio effettivo passa da 3 a 4: il range si sposta a 5-10.
+// Con un bonus di +1 (bonusContesto o bonus di grado) il punteggio effettivo
+// di una competenza principale passa da 3 a 4: il range si sposta a 5-10.
 {
   const min = risolviAzione(4, 1, 6);
   const max = risolviAzione(4, 6, 6);
-  verifica("Esploratore, Cadenza 3 + bonus 1 + 1d6: minimo del range è 5", min.totale === 5);
-  verifica("Esploratore, Cadenza 3 + bonus 1 + 1d6: massimo del range è 10", max.totale === 10);
+  verifica("principale 3 + bonus 1 + 1d6: minimo del range è 5", min.totale === 5);
+  verifica("principale 3 + bonus 1 + 1d6: massimo del range è 10", max.totale === 10);
   verifica("con il bonus, il minimo (5) raggiunge già la soglia parziale: mai fallimento", min.esito !== "fallimento");
 }
 
-// Su molti tentativi con la Cadenza base (3, nessun punteggio extra) e il
-// dado dell'Esploratore, il tier "pieno" deve comparire (impossibile con
-// il vecchio 1d4, dove 3+4=7 restava sotto la soglia di 8).
+// Su molti tentativi con un punteggio 3 (una competenza principale) e il
+// dado 1d6 -- ora il dado di tutti -- il tier "pieno" deve comparire: era
+// impossibile col vecchio 1d4, dove 3+4=7 restava sotto la soglia di 8.
 {
   const tierVisti = new Set();
   for (let i = 0; i < 100; i++) {
     tierVisti.add(risolviAzione(3, null, 6).esito);
   }
   verifica(
-    "su 100 tentativi con Cadenza 3 e dado 1d6 compare almeno una volta il tier \"pieno\"",
+    "su 100 tentativi con punteggio 3 e dado 1d6 compare almeno una volta il tier \"pieno\"",
     tierVisti.has("pieno")
   );
 }
 
-// Il resto del motore (risolviAzione senza terzo argomento) non cambia:
-// resta sul dado di default configurato in GAME_CONFIG.risoluzione.dadoFacce (1d4).
+// risolviAzione senza terzo argomento usa il dado di default configurato in
+// GAME_CONFIG.risoluzione.dadoFacce, ora 1d6 per tutti (ribilanciamento).
 {
-  let semprePari = true;
+  let sempreNelRange = true;
   for (let i = 0; i < 100; i++) {
     const r = risolviAzione(3);
-    if (r.totale < 4 || r.totale > 7) semprePari = false;
+    if (r.totale < 4 || r.totale > 9) sempreNelRange = false;
   }
-  verifica("senza facce esplicite, risolviAzione(3) resta nel vecchio range 4-7 (dado di default 1d4)", semprePari);
+  verifica("senza facce esplicite, risolviAzione(3) resta nel range 4-9 (dado di default 1d6)", sempreNelRange);
 }
 
 console.log(`\n${falliti === 0 ? "TUTTI I TEST PASSATI" : `${falliti} TEST FALLITI`}`);
