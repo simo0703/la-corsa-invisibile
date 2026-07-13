@@ -1,10 +1,12 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 12 luglio 2026 (fine sessione, dopo il ciclo di lavoro
-successivo alla Fase 4: UI di accesso reale — 4 passi, sistema di token
-di sessione per il profilo — 3 passi, riconoscimento del grado nel
-gameplay — 2 punti. Tutti e tre i filoni COMPLETI e pushati su main,
-ultimo commit `2e32b12`, deploy automatico Cloudflare avviato)
+Aggiornato al: 13 luglio 2026 (dopo due interventi committati e pushati su
+main: titolo del pannello comandante in avorio a contrasto WCAG AA, commit
+`1caefcb`, e messaggi 401/403 distinti per il comandante, commit `0a0bc88`
+— ultimo commit su main, deploy automatico Cloudflare avviato. La sessione
+precedente, 12 luglio, aveva chiuso i tre filoni post-Fase 4: UI di accesso
+reale, token di sessione per il profilo, riconoscimento del grado nel
+gameplay — vedi "Punto di ripresa" sotto)
 
 Questo file serve a non perdersi tra una sessione di lavoro e l'altra: raccoglie cosa
 è stato deciso, cosa è ancora un'ipotesi da confermare, e cosa manca. Va aggiornato
@@ -720,33 +722,72 @@ oggi contiene un `index.html` minimo).
       nella proposta di cessione del comando (commit `2e32b12`, unico
       punto reale dove il gioco si rivolge a un giocatore per nome in un
       testo scritto durante la partita)
-- [ ] Messaggio d'errore più preciso per i 401/403 legittimi (punto 2
-      discusso dopo il fix del commit `7d6996f`, non ancora implementato):
-      oggi `chiamaAPIAutenticata()` in `public/index.html` mostra lo stesso
-      "La tua sessione su questo dispositivo non è più valida" per QUALUNQUE
-      401 o 403, sia per un token davvero corrotto sia per un 403 legittimo
-      (es. un giocatore che non è comandante prova ad avviare un nodo o
-      cambiare le risorse — caso normale, non un errore di sessione). Il
-      banner di conferma del commit `7d6996f` copre solo il caso della
-      sovrascrittura silenziosa di identità nella stessa stanza: non tocca
-      né distingue questo caso. Serve differenziare almeno "non sei tu il
-      comandante" (403) da "token non valido/sessione da rifare" (401) con
-      due messaggi separati, senza toccare `GameSession.js`.
+- [x] Messaggio d'errore più preciso per i 401/403 legittimi (punto
+      discusso dopo il fix del commit `7d6996f`) — **CHIUSO il 13/07/2026**
+      (commit `0a0bc88`, solo `public/index.html`, `GameSession.js` non
+      toccato come richiesto). Riassunto delle scelte:
+      - 401 e 403 distinti lato client — il server già li distingueva
+        (`autenticaGiocatore` → 401 token non valido, `autenticaComandante`
+        → 403 non comandante), verificato prima di intervenire: nessuna
+        modifica server necessaria;
+      - 401 = "La tua sessione non è più valida su questo dispositivo."
+        Il testo NON promette un rientro, perché il flusso di rientro non
+        esiste (vedi il nuovo punto "Flusso di rientro assente" in fondo a
+        questa lista);
+      - 403 differenziato per contesto di chiamata (`'comandante' |
+        'nodo'`): dal pannello comandante "Il comando non è più tuo.";
+        dalla selezione nodo, che tutti i giocatori vedono, "Questa azione
+        spetta al comandante.";
+      - seconda riga "Al comando: [nome]." dalla variabile
+        `NOME_COMANDANTE_CORRENTE`, alimentata dal roster già in transito
+        nel polling (6s): nessuna chiamata di rete in più, nessun campo
+        nuovo nel payload;
+      - **nota sul conteggio dei test, per evitare equivoci futuri**:
+        l'"intera suite" citata nel changelog è di **23 file** `test-*.mjs`
+        (conteggio di file, corretto); le 3 suite principali elencate in
+        `CLAUDE.md` (risoluzione, narratore-simulato, game-session) sono un
+        sottoinsieme e contano 154 asserzioni (22+20+112). Verifica del
+        13/07/2026: **l'intera batteria (23 file, 641 asserzioni) è
+        verde, 0 FAIL** — valida retroattivamente anche i commit
+        `1caefcb` e `0a0bc88`, che prima del push erano stati verificati
+        solo sulle 3 suite principali di `CLAUDE.md`.
 - [x] Peso delle immagini (texture nodi + sfondo tavolo) — fatto: da ~19 MB
       totali per schermata a ~1,3 MB (PNG → JPEG, 1600px, qualità 85), vedi
       changelog "Ottimizzazione peso immagini"
 - [ ] Rifinire dal vivo i due esperimenti visivi (texture nodi + sfondo
-      tavolo/badge, entrambi marcati "primo passaggio" nel codice):
-      posizioni di `POSTI_TAVOLO` mai aggiustate dopo averle viste in
-      browser. Opacità/leggibilità del velo: verificata visivamente il
-      12/07 tramite compositi ricostruiti (vedi changelog "Velo del
-      pannello comandante alleggerito") — restano da giudicare a occhio
-      dell'autore su schermo vero il titolo crimson del pannello (contrasto
-      debole sui punti chiari della texture) e l'insieme della schermata.
-      Nota ambiente: lo screenshot del pannello di preview va in timeout
-      sulle schermate con sfondo tavolo, sia con immagini da 8-10 MB sia
-      da ~250 KB — non dipende dal peso, è un limite del pannello di
-      anteprima di queste sessioni.
+      tavolo/badge, entrambi marcati "primo passaggio" nel codice) —
+      **PARZIALMENTE CHIUSO il 13/07/2026**:
+      - **RISOLTO il titolo del pannello comandante** (commit `1caefcb`):
+        ora in avorio `--text` #ece4d6 (riusato dalla palette, nessun
+        colore nuovo) + filetto crimson #c94538 di 2px sotto il titolo.
+        Contrasto 14.33:1 su fondo solido e minimo 5.22:1 nel caso
+        peggiore (pixel più chiaro) su tutte e cinque le texture di nodo,
+        misurato pixel-per-pixel con sharp — sopra WCAG AA (4.5:1) ovunque.
+      - **Correzione di un dato annotato in precedenza** (changelog "Velo
+        del pannello comandante alleggerito"): il contrasto di partenza
+        del titolo crimson era **3.78:1 sul fondo solido** (col velo 0.58;
+        3.61:1 sul `--bg-panel` puro), NON 1.66:1 — l'1.66 era misurato
+        contro i punti chiari della texture, non contro il fondo.
+      - Il titolo ha un velo locale `rgba(var(--bg-rgb), 0.25)` che serve
+        SOLO a garantire WCAG AA sopra le texture: è la prima riga da
+        rivedere se dal vivo il titolo risultasse spento.
+      - **RESTA APERTO**: verifica dal vivo delle coordinate
+        `POSTI_TAVOLO` (mai aggiustate dopo averle viste in browser) e il
+        giudizio d'insieme della schermata a occhio dell'autore.
+      - Nota ambiente (invariata): lo screenshot del pannello di preview
+        va in timeout sulle schermate con sfondo tavolo, sia con immagini
+        da 8-10 MB sia da ~250 KB — non dipende dal peso, è un limite del
+        pannello di anteprima di queste sessioni.
+- [ ] **Flusso di rientro assente** (PRIORITÀ: da affrontare prima di un
+      playtest con un tavolo vero): un giocatore che perde il token di
+      sessione è fuori dalla partita — non esiste una rotta di
+      ri-autenticazione, ricaricare la pagina riporta alla stessa identità
+      invalida, e un secondo `/join` nella stessa stanza è bloccato dal
+      client di proposito (creerebbe un secondo giocatore). Con un tavolo
+      vero è quasi certo che qualcuno chiuda la scheda o perda il token.
+      Emerso durante il lavoro sui messaggi 401/403 (vedi sopra): è il
+      motivo per cui il testo del 401 si limita a constatare, senza
+      promettere un rientro.
 
 ---
 
