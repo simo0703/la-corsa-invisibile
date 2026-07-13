@@ -178,5 +178,80 @@ console.log("\n--- risposte SENZA tiro: il Cronista non le tocca mai, anche col 
   );
 }
 
+console.log("\n--- GameSession: il contesto passato al Cronista include richiestaId ---");
+{
+  // Pool-spia: non compone davvero, cattura il contesto che GameSession
+  // costruisce e restituisce un frammento minimo valido per slot (il motore
+  // esige almeno un candidato per slot, altrimenti lancia). Serve solo per
+  // ispezionare cosa finisce nel contesto. `contesto` è lo stesso oggetto
+  // per tutti e tre gli slot (vedi componiNarrazione), quindi l'ultima
+  // cattura basta.
+  let contestoCatturato = null;
+  const poolSpia = {
+    ottieniFrammenti(slot, contesto) {
+      contestoCatturato = contesto;
+      return [{ id: `spia-${slot}`, testo: "x" }];
+    },
+  };
+  registraPool("1836-torino", () => Promise.resolve({ ottieniFrammenti: poolSpia.ottieniFrammenti }));
+
+  const { gs, storage, giocatoreId, token } = await sessionePronta();
+  await impostaCompetenza(storage, giocatoreId, "cadenza", 20); // forza un tiro
+  await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
+
+  verifica(
+    "il contesto del Cronista contiene richiestaId",
+    contestoCatturato !== null && "richiestaId" in contestoCatturato
+  );
+  verifica(
+    "richiestaId vale l'id della richiesta attiva che ha generato il tiro (decalogo-ginnastica)",
+    contestoCatturato && contestoCatturato.richiestaId === "decalogo-ginnastica"
+  );
+
+  // Ripristina il pool reale per non lasciare lo spia registrato.
+  registraPool("1836-torino", () => Promise.resolve({ ottieniFrammenti: poolReale.ottieniFrammenti }));
+}
+
+console.log("\n--- loader: la colonna richiestaId funziona da condizione, senza modifiche al loader ---");
+{
+  // Markdown minimale con DUE frammenti nello stesso slot: uno baseline
+  // (condizionato solo su esito, come le tabelle "Baseline per esito" vere)
+  // e uno dedicato a una singola richiesta (colonna richiestaId). Dimostra
+  // che l'asse è già operativo per il solo fatto che il loader tratta ogni
+  // colonna sconosciuta come condizione — nessun frammento .md reale lo usa.
+  const md = [
+    "## Slot: apertura",
+    "",
+    "| id | esito | testo |",
+    "|---|---|---|",
+    "| base | pieno | Testo baseline, nessun vincolo di richiesta. |",
+    "",
+    "| id | richiestaId | testo |",
+    "|---|---|---|",
+    "| dedicato | decalogo-ginnastica | Testo dedicato a questa richiesta. |",
+  ].join("\n");
+  const pool = creaPool(md);
+
+  const conMatch = pool
+    .ottieniFrammenti("apertura", { esito: "pieno", richiestaId: "decalogo-ginnastica" })
+    .map((f) => f.id);
+  const altraRichiesta = pool
+    .ottieniFrammenti("apertura", { esito: "pieno", richiestaId: "milano-barricata" })
+    .map((f) => f.id);
+
+  verifica(
+    "il frammento condizionato su richiestaId è candidato per la richiesta giusta",
+    conMatch.includes("dedicato")
+  );
+  verifica(
+    "lo stesso frammento NON è candidato per un'altra richiesta",
+    !altraRichiesta.includes("dedicato")
+  );
+  verifica(
+    "il frammento baseline (senza colonna richiestaId) resta candidato per entrambe le richieste",
+    conMatch.includes("base") && altraRichiesta.includes("base")
+  );
+}
+
 console.log(`\n${falliti === 0 ? "Tutti i test passati." : `${falliti} test falliti.`}`);
 process.exit(falliti === 0 ? 0 : 1);

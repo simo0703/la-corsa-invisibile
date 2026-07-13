@@ -702,6 +702,14 @@ export class GameSession {
           esito: tiro.esito,
           competenzaId: risposta.competenzaRichiesta,
           ruoloId: giocatore.ruolo,
+          // Id della richiesta che ha generato questo tiro: dato opaco per
+          // il motore (come competenzaId/ruoloId), asse su cui un frammento
+          // di un .md puo' condizionarsi per non mescolarsi con quelli di
+          // un'altra scena dello stesso nodo. Oggi nessun frammento lo usa:
+          // e' solo abilitazione, l'asse resta inerte finche' una colonna
+          // "richiestaId" non compare in un pool. Stesso id gia' usato qui
+          // sotto per storicoScelte.
+          richiestaId: richiestaAttiva.id,
           margine: { valore: session.margine, soglia: GAME_CONFIG.margineSoglia ?? null, delta: margineDeltaAzione },
           variabili: { ruolo: ruoloGiocatore?.nomeConArticolo ?? giocatore.ruolo },
           storicoFrammenti: [],
