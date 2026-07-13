@@ -52,9 +52,12 @@ import { assegnaXpCompletamentoNodo, otteniCompetenzeBonificate, verificaTokenSe
 // scritto in game-config.js -- fallback silenzioso, stesso trattamento di
 // un nodo che semplicemente non ha ancora il suo pool. Quando il Cronista
 // compone un testo, SOSTITUISCE quello statico (non lo affianca).
-// contesto.storicoFrammenti resta sempre [] per ora (decisione: nessun
-// nuovo campo di stato finché non emerge un bisogno reale — vedi il log
-// delle decisioni).
+// contesto.storicoFrammenti è alimentato da session.storicoFrammenti (finestra
+// scorrevole degli ultimi 12 id): abilita l'anti-ripetizione del motore (vedi
+// scegliFrammento in narratore-simulato.js). Dopo ogni composizione i
+// frammentiUsati vengono accodati e lo storico troncato a 12; viene azzerato
+// al cambio nodo (/avvia-nodo), perché gli id sono univoci solo per slot/pool
+// e potrebbero collidere tra pool di nodi diversi.
 //
 // Interprete di testo libero (interprete-libero/): il testo libero SI
 // AFFIANCA ai bottoni delle risposte, non li sostituisce. Il matching gira
@@ -111,6 +114,10 @@ export class GameSession {
         richiestaAttivaId: null, // id della richiesta corrente (supporta ramificazioni)
         storicoScelte: [], // { richiestaId, risposteTesto, esito, giocatoreId, tiro, timestamp }
         storicoNodo: [], // { nodoId, iniziato_il, concluso_il, esitoFinale }
+        storicoFrammenti: [], // id dei frammenti del Cronista usati di recente
+        // (finestra scorrevole, ultimi 12): passato a componiNarrazione come
+        // contesto.storicoFrammenti per l'anti-ripetizione. Azzerato al cambio
+        // nodo (vedi /avvia-nodo). Vedi anche il commento di testa del file.
         aiUsageStanza: 0, // contatore generazioni AI usate in questa stanza
         interpretazionePendente: null, // { giocatoreId, richiestaId, testoLibero, candidati } o null
         chat: [], // canale di squadra puramente umano ed effimero (vedi endpoint
@@ -198,6 +205,10 @@ export class GameSession {
     }
     if (session.riconoscimentoPendente === undefined) {
       session.riconoscimentoPendente = null;
+      changed = true;
+    }
+    if (session.storicoFrammenti === undefined) {
+      session.storicoFrammenti = [];
       changed = true;
     }
     // profiloId e' un campo per-giocatore (dentro session.giocatori), non a
@@ -728,6 +739,11 @@ export class GameSession {
       session.nodoAttivo = nodoId;
       session.richiestaIndice = 0;
       session.richiestaAttivaId = primaRichiesta ? primaRichiesta.id : null;
+      // Il nuovo nodo riparte con l'anti-ripetizione pulita: gli id dei
+      // frammenti sono univoci solo per slot/pool, quindi tra pool di nodi
+      // diversi potrebbero collidere; e narrativamente ogni nodo comincia da
+      // zero, non deve "ricordare" i frammenti del nodo precedente.
+      session.storicoFrammenti = [];
       session.storicoNodo.push({
         nodoId,
         iniziato_il: new Date().toISOString(),
@@ -988,7 +1004,7 @@ export class GameSession {
     if (tiro) {
       const pool = await trovaPoolPerNodo(session.nodoAttivo);
       if (pool) {
-        const { testo } = componiNarrazione(pool, {
+        const { testo, frammentiUsati } = componiNarrazione(pool, {
           esito: tiro.esito,
           competenzaId: risposta.competenzaRichiesta,
           ruoloId: giocatore.ruolo,
@@ -1002,9 +1018,13 @@ export class GameSession {
           richiestaId: richiestaAttiva.id,
           margine: { valore: session.margine, soglia: GAME_CONFIG.margineSoglia ?? null, delta: margineDeltaAzione },
           variabili: { ruolo: ruoloGiocatore?.nomeConArticolo ?? giocatore.ruolo },
-          storicoFrammenti: [],
+          storicoFrammenti: session.storicoFrammenti,
         });
         testoEsito = testo;
+        // Finestra scorrevole: accoda gli id appena usati e tieni solo gli
+        // ultimi 12, così il prossimo tiro evita di ripeterli (anti-ripetizione
+        // del Cronista, vedi scegliFrammento in narratore-simulato.js).
+        session.storicoFrammenti = [...session.storicoFrammenti, ...frammentiUsati].slice(-12);
       }
     }
 

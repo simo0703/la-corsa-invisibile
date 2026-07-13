@@ -81,16 +81,28 @@ export function fasciaMargine(valore, soglia) {
 }
 
 // Sceglie un frammento tra i candidati, con selezione pesata (peso di
-// default 1) e tentativo di evitare quelli usati di recente. Se escludendo
-// gli id recenti non resterebbe più nessun candidato, l'esclusione viene
-// ignorata (meglio ripetersi che bloccarsi).
+// default 1) evitando quelli usati di recente. storicoRecente è ordinato dal
+// più VECCHIO (indice 0) al più RECENTE (in coda). Rilascio progressivo: si
+// parte escludendo tutti gli id recenti; se così non resta nessun candidato
+// si rilasciano gli id più vecchi uno alla volta (restringendo la finestra a
+// un suffisso sempre più corto di storicoRecente), finché almeno un candidato
+// torna disponibile. Il più recente è quindi l'ultimo a essere rilasciato:
+// con ≥2 candidati il frammento usato per ultimo non può mai essere riscelto
+// al tiro immediatamente successivo. Con storico vuoto non si esclude nulla e
+// il comportamento è identico a prima. (Il ciclo arriva al più a i =
+// storicoRecente.length, dove il suffisso è vuoto e pool == candidati: la
+// terminazione con almeno un candidato è sempre garantita.)
 export function scegliFrammento(candidati, storicoRecente = []) {
   if (!Array.isArray(candidati) || candidati.length === 0) {
     throw new Error("scegliFrammento: nessun candidato fornito");
   }
 
-  const escludendo = candidati.filter((f) => !storicoRecente.includes(f.id));
-  const pool = escludendo.length > 0 ? escludendo : candidati;
+  let pool = [];
+  for (let i = 0; i <= storicoRecente.length; i += 1) {
+    const esclusi = new Set(storicoRecente.slice(i));
+    pool = candidati.filter((f) => !esclusi.has(f.id));
+    if (pool.length > 0) break;
+  }
 
   const pesoTotale = pool.reduce((somma, f) => somma + (f.peso ?? 1), 0);
   let soglia = Math.random() * pesoTotale;
