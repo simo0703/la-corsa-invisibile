@@ -112,6 +112,14 @@ export class GameSession {
         nodoAttivo: null, // id di uno dei nodiTemporali in game-config.js
         richiestaIndice: 0, // fallback per compatibilita': posizione in sequenza
         richiestaAttivaId: null, // id della richiesta corrente (supporta ramificazioni)
+        esitoCorrente: null, // "vista corrente" dell'esito appena prodotto, nello
+        // STATO CONDIVISO cosi' che anche chi NON ha agito possa ridisegnare la
+        // schermata dell'esito (oggi lo stesso dato torna anche nella risposta
+        // HTTP dell'attore; il rendering condiviso arriva in un passo futuro).
+        // Forma quando presente (vedi applicaRisposta): { richiestaId, esito,
+        // tiro, competenzaId, complicazione, esitoNodo, prossimaRichiestaId }.
+        // NON contiene token ne' segreti ne' dati privati di un giocatore.
+        // Azzerato al cambio nodo (vedi /avvia-nodo).
         storicoScelte: [], // { richiestaId, risposteTesto, esito, giocatoreId, tiro, timestamp }
         storicoNodo: [], // { nodoId, iniziato_il, concluso_il, esitoFinale }
         storicoFrammenti: [], // id dei frammenti del Cronista usati di recente
@@ -209,6 +217,10 @@ export class GameSession {
     }
     if (session.storicoFrammenti === undefined) {
       session.storicoFrammenti = [];
+      changed = true;
+    }
+    if (session.esitoCorrente === undefined) {
+      session.esitoCorrente = null;
       changed = true;
     }
     // profiloId e' un campo per-giocatore (dentro session.giocatori), non a
@@ -744,6 +756,9 @@ export class GameSession {
       // diversi potrebbero collidere; e narrativamente ogni nodo comincia da
       // zero, non deve "ricordare" i frammenti del nodo precedente.
       session.storicoFrammenti = [];
+      // Nuovo nodo: nessun esito da mostrare ancora (la vista corrente
+      // dell'esito appartiene al nodo appena lasciato). Azzerata.
+      session.esitoCorrente = null;
       session.storicoNodo.push({
         nodoId,
         iniziato_il: new Date().toISOString(),
@@ -1084,6 +1099,24 @@ export class GameSession {
       }
       await this.assegnaXpNodoCompletato(session);
     }
+
+    // Vista corrente dell'esito nello STATO CONDIVISO: gli stessi dati che
+    // tornano qui sotto nella risposta HTTP dell'attore, ma salvati sulla
+    // sessione cosi' che anche chi NON ha agito possa ridisegnarli (in questo
+    // passo e' solo il dato: il front-end non lo legge ancora). Costruita qui
+    // e non al push di storicoScelte perche' complicazione, esitoNodo e
+    // prossimaRichiesta si conoscono solo a questo punto. prossimaRichiesta e'
+    // salvata come solo id (come richiestaAttivaId): l'oggetto si ricostruisce
+    // da game-config quando servira'. Nessun token, segreto o dato privato.
+    session.esitoCorrente = {
+      richiestaId: richiestaAttiva.id,
+      esito: testoEsito,
+      tiro,
+      competenzaId: risposta.competenzaRichiesta ?? null,
+      complicazione,
+      esitoNodo,
+      prossimaRichiestaId: prossimaRichiesta ? prossimaRichiesta.id : null,
+    };
 
     // competenzaId: quale competenza ha deciso il tiro (null se nessun
     // tiro). Serve al client per mostrare il nome leggibile nel dettaglio
