@@ -14,7 +14,12 @@
 // resta DAL VIVO (nessun DOM sotto Node): vedi il changelog.
 
 import { GAME_CONFIG } from "./src/game-config.js";
-import { richiestaAttivaDaSessione, deveMostrareEsito } from "./public/vista-esito.js";
+import {
+  richiestaAttivaDaSessione,
+  deveMostrareEsito,
+  chiaveRifiuto,
+  deveMostrareRifiuto,
+} from "./public/vista-esito.js";
 
 let falliti = 0;
 function verifica(descrizione, condizione) {
@@ -102,6 +107,40 @@ console.log("\n--- deveMostrareEsito ---");
   verifica(
     "esito con testo, scacciato un ALTRO id: mostra il pannello",
     deveMostrareEsito({ richiestaId: "r2", esito: "Il ramo severo si apre." }, "r1") === true
+  );
+}
+
+console.log("\n--- chiaveRifiuto (Difetto #6) ---");
+{
+  verifica("null se nessun rifiuto", chiaveRifiuto(null) === null);
+  verifica(
+    "combina richiestaId + timestamp",
+    chiaveRifiuto({ richiestaId: "decalogo-ginnastica", timestamp: "2026-07-14T10:00:00.000Z" }) ===
+      "decalogo-ginnastica:2026-07-14T10:00:00.000Z"
+  );
+  verifica(
+    "due rifiuti sullo stesso momento ma timestamp diversi hanno chiavi diverse",
+    chiaveRifiuto({ richiestaId: "r", timestamp: "t1" }) !== chiaveRifiuto({ richiestaId: "r", timestamp: "t2" })
+  );
+}
+
+console.log("\n--- deveMostrareRifiuto (Difetto #6) ---");
+{
+  const rifiuto = { richiestaId: "decalogo-ginnastica", giocatoreNome: "Bruno", testoProposta: "corro come il vento", timestamp: "2026-07-14T10:00:00.000Z" };
+  verifica("rifiuto null: niente avviso", deveMostrareRifiuto(null, null) === false);
+  verifica("rifiuto undefined: niente avviso", deveMostrareRifiuto(undefined, null) === false);
+  verifica(
+    "proposta vuota: niente avviso",
+    deveMostrareRifiuto({ richiestaId: "r", testoProposta: "", timestamp: "t" }, null) === false
+  );
+  verifica("rifiuto con proposta, mai scacciato: mostra l'avviso", deveMostrareRifiuto(rifiuto, null) === true);
+  verifica(
+    "rifiuto già scacciato (stessa chiave): niente avviso",
+    deveMostrareRifiuto(rifiuto, chiaveRifiuto(rifiuto)) === false
+  );
+  verifica(
+    "un rifiuto NUOVO sullo stesso momento (timestamp diverso) torna a mostrarsi",
+    deveMostrareRifiuto({ ...rifiuto, timestamp: "2026-07-14T10:05:00.000Z" }, chiaveRifiuto(rifiuto)) === true
   );
 }
 

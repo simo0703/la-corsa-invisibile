@@ -550,6 +550,33 @@
   #pannello-esito:empty { display: none; }
   #pannello-esito { margin-bottom: 18px; }
 
+  /* Avviso di rifiuto (Difetto #6): fatto minore, deliberatamente PIU' SOBRIO
+     del pannello esito -- niente card rialzata, solo una riga con un filo a
+     sinistra color brass smorzato. Nascosto quando vuoto. */
+  #avviso-rifiuto:empty { display: none; }
+  #avviso-rifiuto { margin-bottom: 18px; }
+  .avviso-rifiuto-box {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--brass);
+    border-radius: 0 4px 4px 0;
+    padding: 12px 16px;
+  }
+  .avviso-rifiuto-testo {
+    margin: 0;
+    flex: 1;
+    min-width: 220px;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+  .avviso-rifiuto-box button { white-space: nowrap; }
+
   .esito-box {
     background: var(--bg-panel-raised);
     border: 1px solid var(--brass);
@@ -1028,6 +1055,11 @@
            scacciabile con CONTINUA. Popolato da aggiornaPannelloEsito() dallo
            stato condiviso (session.esitoCorrente); vuoto = nascosto. -->
       <div id="pannello-esito"></div>
+      <!-- Avviso di rifiuto (Difetto #6): quando il comandante non accoglie
+           una proposta di testo libero. Fatto MINORE, visivamente distinto dal
+           pannello esito. Popolato da aggiornaAvvisoRifiuto() dallo stato
+           condiviso (session.rifiutoCorrente); vuoto = nascosto. -->
+      <div id="avviso-rifiuto"></div>
       <div class="tavolo-vista" id="tavolo-vista"></div>
 
       <div class="contenuto-scuro">
@@ -2110,6 +2142,14 @@ let momentoRenderizzato = null;
 // chiude una volta sola: senza deduplica, ogni push col medesimo esito di fine
 // nodo rifarebbe la query gradi finché l'esito resta a schermo).
 let ultimoEsitoNodoGradiForzati = null;
+// Ultimo avviso di rifiuto (Difetto #6) già scacciato su QUESTO dispositivo,
+// come chiave richiestaId+timestamp (vedi chiaveRifiuto): un broadcast
+// successivo non lo ripropone, ma un rifiuto NUOVO (timestamp diverso) sì.
+let ultimoRifiutoScacciato = null;
+// Testo libero da ripristinare nel campo alla prossima renderRichiesta: usato
+// per il PROPONENTE la cui proposta è stata rifiutata, così il campo torna
+// attivo con la frase già dentro, pronta da correggere (Difetto #6, punto 3).
+let testoLiberoDaRipristinare = null;
 
 // Azzera lo stato locale del tavolo condiviso quando si (ri)entra in una
 // partita. I richiestaId sono stabili tra stanze diverse (id di game-config,
@@ -2121,6 +2161,8 @@ function resettaTavoloCondiviso() {
   ultimaRichiestaScacciata = null;
   momentoRenderizzato = null;
   ultimoEsitoNodoGradiForzati = null;
+  ultimoRifiutoScacciato = null;
+  testoLiberoDaRipristinare = null;
 }
 
 // Il momento da mostrare a tutti, ricavato dallo stato del server: selezione
@@ -2171,6 +2213,14 @@ async function ridisegnaDaStato(session) {
     ? "selezione"
     : `richiesta:${momento.nodoAttivo}:${momento.richiesta.id}`;
   const sbloccaInterpretazione = inAttesaDiInterpretazione && !session.interpretazionePendente;
+  // PROPONENTE rifiutato (Difetto #6, punto 3): se ero IO in attesa e la
+  // pendente si è chiusa con un rifiuto sullo stesso momento, preparo il
+  // ripristino del mio testo nel campo (lo consuma renderRichiesta qui sotto),
+  // così torna attivo con la frase già dentro, pronta da correggere.
+  if (sbloccaInterpretazione && momento.tipo === "richiesta"
+      && session.rifiutoCorrente && session.rifiutoCorrente.richiestaId === momento.richiesta.id) {
+    testoLiberoDaRipristinare = session.rifiutoCorrente.testoProposta;
+  }
   if (chiave !== momentoRenderizzato || sbloccaInterpretazione) {
     momentoRenderizzato = chiave;
     if (momento.tipo === "selezione") {
@@ -2183,6 +2233,8 @@ async function ridisegnaDaStato(session) {
 
   // PANNELLO ESITO: sopra il tavolo, scacciabile (non più navigazione locale).
   aggiornaPannelloEsito(session);
+  // AVVISO DI RIFIUTO: sopra il tavolo, distinto dall'esito (Difetto #6).
+  aggiornaAvvisoRifiuto(session);
 }
 
 // Pannello dell'esito appena prodotto, mostrato SOPRA il tavolo e comune a
@@ -2250,6 +2302,44 @@ function aggiornaPannelloEsito(session) {
     // Solo locale: segna questo esito come scacciato e ridisegna dall'ultimo
     // stato ricevuto. Nessuna chiamata al server (il momento nuovo è già sotto).
     ultimaRichiestaScacciata = e.richiestaId;
+    ridisegnaDaStato(ULTIMA_SESSIONE);
+  });
+}
+
+// Avviso di rifiuto (Difetto #6): il comandante non ha accolto una proposta di
+// testo libero. Fatto MINORE (il momento resta aperto), mostrato sopra il
+// tavolo con uno stile sobrio, distinto dal pannello esito. Comune a tutti (dal
+// broadcast di session.rifiutoCorrente), scacciabile localmente senza toccare
+// il server; un broadcast successivo non lo ripropone. giocatoreNome e
+// testoProposta sono testo utente → textContent, mai innerHTML (come la chat),
+// per non aprire un buco di iniezione.
+function aggiornaAvvisoRifiuto(session) {
+  const box = document.getElementById("avviso-rifiuto");
+  if (!box) return;
+  const r = session.rifiutoCorrente;
+  if (!r) {
+    // Nessun rifiuto corrente: niente da scacciare, azzera la memoria così un
+    // rifiuto successivo (anche sullo stesso momento) tornerà a mostrarsi.
+    ultimoRifiutoScacciato = null;
+    box.innerHTML = "";
+    return;
+  }
+  if (!window.VistaEsito.deveMostrareRifiuto(r, ultimoRifiutoScacciato)) {
+    box.innerHTML = "";
+    return;
+  }
+  box.innerHTML = `
+    <div class="avviso-rifiuto-box">
+      <p class="avviso-rifiuto-testo"></p>
+      <button class="secondario" id="btn-chiudi-rifiuto">Ho capito</button>
+    </div>`;
+  // Testo utente (nome + proposta) via textContent: niente innerHTML.
+  box.querySelector(".avviso-rifiuto-testo").textContent =
+    `Il comandante non ha accolto la proposta di ${r.giocatoreNome}: "${r.testoProposta}". Il momento resta aperto.`;
+  document.getElementById("btn-chiudi-rifiuto").addEventListener("click", () => {
+    // Solo locale: segna questo rifiuto come scacciato e ridisegna dall'ultimo
+    // stato ricevuto. Nessuna chiamata al server.
+    ultimoRifiutoScacciato = window.VistaEsito.chiaveRifiuto(r);
     ridisegnaDaStato(ULTIMA_SESSIONE);
   });
 }
@@ -2354,6 +2444,15 @@ function renderRichiesta(richiesta, nodoAttivo) {
   const inputTestoLibero = document.getElementById("input-testo-libero");
   const btnInviaTestoLibero = document.getElementById("btn-invia-testo-libero");
   const messaggioTestoLibero = document.getElementById("messaggio-testo-libero");
+
+  // Difetto #6, punto 3: se sto rientrando come proponente la cui proposta è
+  // stata rifiutata, ripristino la mia frase nel campo (impostata da
+  // ridisegnaDaStato) e le do il focus — pronta da correggere, non da riscrivere.
+  if (testoLiberoDaRipristinare != null) {
+    inputTestoLibero.value = testoLiberoDaRipristinare;
+    testoLiberoDaRipristinare = null;
+    inputTestoLibero.focus();
+  }
 
   function mostraMessaggioTestoLibero(testo, classe) {
     messaggioTestoLibero.textContent = testo;
@@ -2654,13 +2753,19 @@ function renderPannelloComandante(session) {
     document.getElementById("btn-annulla-interpretazione").addEventListener("click", async () => {
       erroreComandante.classList.remove("mostra");
       try {
-        await chiamaAPIAutenticata(
+        // Rifiuto della proposta: la risposta porta la sessione con
+        // rifiutoCorrente popolato. Ridisegno da quella (NON aggiornaSchermataGioco,
+        // che forzerebbe un secondo re-render del momento): così, se il comandante
+        // ha rifiutato la PROPRIA proposta, il guard di momentoRenderizzato evita
+        // che l'eco del socket cancelli il testo appena ripristinato nel campo
+        // (Difetto #6).
+        const risultato = await chiamaAPIAutenticata(
           `/api/stanza/${STATO.roomId}/risolvi-interpretazione`,
           { annulla: true },
           mostraErroreComandante,
           "comandante" // pannello del comandante
         );
-        await aggiornaSchermataGioco();
+        await ridisegnaDaStato(risultato.session);
       } catch (e) {
         if (!e.sessioneNonValida) mostraErroreComandante("Qualcosa è andato storto. Riprova.");
       }

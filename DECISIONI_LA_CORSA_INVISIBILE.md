@@ -1,20 +1,18 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 14 luglio 2026, sera. **In produzione fino a `bf58d64`**
-(nodo 1836-torino completo: librerie testo libero dei 4 momenti + frammenti
-di scena del Cronista). **In locale, NON ancora pushati** (deploy automatico
-sul push a `main`, attende autorizzazione): i TRE commit del lavoro WebSocket
-`98596e6` (Passo 1/3, `esitoCorrente`), `e2f9870` (Passo 2/3, canale WS di
-sola notizia) e il commit del Passo 3/3 (front-end consumatore dello stato
-condiviso) — vedi la prima voce del changelog. Batteria di test corrente:
-**29 file `test-*.mjs`, 863 asserzioni, 0 FAIL** — verificata due volte il
-14/07/2026 (i 28 file preesistenti restano 847; il nuovo
-`test-vista-esito.mjs` aggiunge 16).
-**PUNTO DI RIPRESA IMMEDIATO**: la trilogia WebSocket (Passi 1-2-3) è
-**COMPLETA in locale**, propagazione real-time verificata dal vivo (due schede,
-polling spento, chat consegnata solo via socket; pannello esito scacciabile;
-riconnessione). Resta **solo l'autorizzazione a pushare** (i tre commit
-insieme → deploy automatico). Vedi la voce "Verso il WebSocket" nel changelog.
+Aggiornato al: 14 luglio 2026, sera. **In produzione fino a `5066667`**: la
+**trilogia WebSocket (Passi 1-2-3)** è stata pushata su `main` e verificata dal
+vivo sul Worker reale (`wss://` su HTTPS, broadcast dopo un'azione). Il tavolo
+condiviso è live: esito/avanzamento del nodo si propagano in tempo reale.
+**In locale, NON ancora pushato** (deploy automatico sul push a `main`, attende
+autorizzazione): un commit per il **Difetto #6** (il rifiuto del comandante non
+è più muto: `session.rifiutoCorrente` + avviso condiviso + pre-fill del
+proponente) — vedi la prima voce del changelog. Batteria di test corrente:
+**30 file `test-*.mjs`, 892 asserzioni, 0 FAIL** — verificata due volte il
+14/07/2026 (28 file storici = 847; `test-vista-esito.mjs` 25; nuovo
+`test-rifiuto-comandante.mjs` 20).
+**PUNTO DI RIPRESA IMMEDIATO**: Difetto #6 fatto e verificato dal vivo, **in
+attesa di autorizzazione al push**. Vedi la voce "Difetto #6" nel changelog.
 Interventi della sessione serale del 13 luglio: **Riconoscimento** — rientro
 in partita e presa di comando (`1d9b592`), **anti-ripetizione del Cronista**
 (`23c402e`), **decisione di design su `bonusContesto`** + commenti allineati
@@ -1029,6 +1027,59 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**14/07/2026 — Difetto #6: il rifiuto del comandante non è più muto (FATTO, commit locale)**
+File toccati: `src/durable-objects/GameSession.js`, `public/index.html`,
+`public/vista-esito.js`; nuovo `test-rifiuto-comandante.mjs`; esteso
+`test-vista-esito.mjs`. `index.js`, autenticazione/token/Riconoscimento e il
+flusso di accettazione: **non toccati**. Il canale WebSocket resta di sola
+notifica. **In locale, non pushato** (attende autorizzazione).
+
+- **PROBLEMA**: quando il comandante annullava una proposta di testo libero
+  (`/risolvi-interpretazione` con `annulla: true`), la frase evaporava e
+  nessuno — men che meno il proponente — veniva informato.
+- **SERVER**: nuovo campo di stato condiviso `session.rifiutoCorrente =
+  { richiestaId, giocatoreNome, testoProposta, timestamp }`, popolato nel ramo
+  `annulla` leggendo il proponente dal roster (fallback "Un giocatore" se il
+  record non c'è più). Nessun segreto → viaggia in `sessionPubblica`/`/state`
+  come `esitoCorrente`. Migrazione in `initState()`+`migrateState()`. **Ciclo
+  di vita** (stessa regola di `esitoCorrente`): azzerato in `applicaRisposta`
+  (scelta/risoluzione sullo stesso momento), nel ramo "manuale" di
+  `/interpreta` (nuova proposta), e in `/avvia-nodo` (cambio nodo). Sempre via
+  `salvaSessione` → il broadcast parte da solo.
+- **CLIENT**: `ridisegnaDaStato` chiama `aggiornaAvvisoRifiuto`, che mostra un
+  avviso SOBRIO sopra il tavolo (`#avviso-rifiuto`, filo brass, distinto dal
+  pannello esito perché è un fatto minore) con «Il comandante non ha accolto la
+  proposta di {nome}: "{testo}". Il momento resta aperto.» — nome/testo via
+  `textContent` (testo utente, mai `innerHTML`). Scacciamento con
+  `ultimoRifiutoScacciato` = `richiestaId:timestamp` (bottone "Ho capito", nessuna
+  chiamata al server; un broadcast successivo non lo ripropone; un rifiuto
+  NUOVO con timestamp diverso sì).
+- **PROPONENTE**: se ero io in attesa (`inAttesaDiInterpretazione`) e la pendente
+  si chiude con un rifiuto sullo stesso momento, `ridisegnaDaStato` mette
+  `session.rifiutoCorrente.testoProposta` in `testoLiberoDaRipristinare`, che
+  `renderRichiesta` inserisce nel campo (con focus): torna correggibile, non da
+  riscrivere. L'handler "Nessuno di questi" ora usa `ridisegnaDaStato(risultato.
+  session)` invece di `aggiornaSchermataGioco` (che forzava un secondo
+  re-render): così, nel caso limite comandante=proponente, l'eco del socket non
+  cancella il testo appena ripristinato (guard di `momentoRenderizzato`).
+- **Logica pura condivisa/testata** in `public/vista-esito.js`:
+  `chiaveRifiuto` e `deveMostrareRifiuto` (mostra/non-mostra avviso), come le
+  funzioni dell'esito.
+- **Test**: `test-rifiuto-comandante.mjs` (20 asserzioni: popolato al rifiuto,
+  in `/state`, solo 4 campi, azzerato nei tre casi, e NON scatta quando il
+  comandante accoglie un candidato); `test-vista-esito.mjs` esteso (16→25).
+  Batteria: **30 file, 892 OK, 0 FAIL** (due volte).
+- **Verificato dal vivo** (`wrangler dev`): proposta "corro" → rifiuto dal
+  pannello → `rifiutoCorrente` nello stato, avviso sopra il tavolo, campo
+  pre-compilato con "corro" e riattivato, momento ancora aperto; "Ho capito"
+  nasconde senza chiamare il server; una chat successiva (broadcast) non
+  ripropone l'avviso scacciato. **Da provare ancora dal vivo**: la propagazione
+  a un client proponente DIVERSO dal comandante (qui provata con
+  comandante=proponente per il limite del localStorage condiviso tra schede;
+  il meccanismo di propagazione è lo stesso già verificato per la chat).
+
+---
 
 **14/07/2026 — Verso il WebSocket: propagazione real-time agli altri giocatori (Passi 1-2-3 FATTI)**
 File toccati: `src/durable-objects/GameSession.js` (Passi 1-2),

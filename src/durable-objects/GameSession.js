@@ -120,6 +120,14 @@ export class GameSession {
         // tiro, competenzaId, complicazione, esitoNodo, prossimaRichiestaId }.
         // NON contiene token ne' segreti ne' dati privati di un giocatore.
         // Azzerato al cambio nodo (vedi /avvia-nodo).
+        rifiutoCorrente: null, // avviso condiviso quando il comandante RIFIUTA
+        // una proposta di testo libero (Difetto #6): forma { richiestaId,
+        // giocatoreNome, testoProposta, timestamp }. Nessun segreto -- la
+        // proposta era gia' destinata al tavolo -- quindi viaggia in
+        // sessionPubblica come esitoCorrente. Stessa regola di vita di
+        // esitoCorrente: azzerato quando il momento viene risolto o arriva una
+        // nuova proposta/scelta sullo stesso momento (vedi applicaRisposta e il
+        // ramo "manuale" di /interpreta), e al cambio nodo (vedi /avvia-nodo).
         storicoScelte: [], // { richiestaId, risposteTesto, esito, giocatoreId, tiro, timestamp }
         storicoNodo: [], // { nodoId, iniziato_il, concluso_il, esitoFinale }
         storicoFrammenti: [], // id dei frammenti del Cronista usati di recente
@@ -221,6 +229,10 @@ export class GameSession {
     }
     if (session.esitoCorrente === undefined) {
       session.esitoCorrente = null;
+      changed = true;
+    }
+    if (session.rifiutoCorrente === undefined) {
+      session.rifiutoCorrente = null;
       changed = true;
     }
     // profiloId e' un campo per-giocatore (dentro session.giocatori), non a
@@ -822,6 +834,9 @@ export class GameSession {
       // Nuovo nodo: nessun esito da mostrare ancora (la vista corrente
       // dell'esito appartiene al nodo appena lasciato). Azzerata.
       session.esitoCorrente = null;
+      // Idem l'eventuale avviso di rifiuto: appartiene al momento del nodo
+      // appena lasciato (Difetto #6).
+      session.rifiutoCorrente = null;
       session.storicoNodo.push({
         nodoId,
         iniziato_il: new Date().toISOString(),
@@ -935,6 +950,9 @@ export class GameSession {
             };
           }),
         };
+        // Una nuova proposta sullo stesso momento supera l'eventuale avviso di
+        // un rifiuto precedente (Difetto #6): il tavolo guarda ora questa.
+        session.rifiutoCorrente = null;
         await this.salvaSessione(session);
         return Response.json({ esito: "manuale", session: this.sessionPubblica(session) });
       }
@@ -963,6 +981,20 @@ export class GameSession {
       }
 
       if (annulla) {
+        // Il comandante rifiuta la proposta: non deve piu' evaporare in
+        // silenzio (Difetto #6). Prima di svuotare la pendente, ne salviamo una
+        // "vista del rifiuto" nello STATO CONDIVISO, cosi' il broadcast informa
+        // tutto il tavolo (e il proponente ritrova la propria frase). Nessun
+        // segreto: la proposta era gia' pubblica. Il nome del proponente si
+        // legge dal roster (il record potrebbe non esistere piu': fallback).
+        const pendente = session.interpretazionePendente;
+        const proponente = session.giocatori.find((g) => g.id === pendente.giocatoreId);
+        session.rifiutoCorrente = {
+          richiestaId: pendente.richiestaId,
+          giocatoreNome: proponente ? proponente.nome : "Un giocatore",
+          testoProposta: pendente.testoLibero,
+          timestamp: new Date().toISOString(),
+        };
         session.interpretazionePendente = null;
         await this.salvaSessione(session);
         return Response.json({ session: this.sessionPubblica(session) });
@@ -1180,6 +1212,11 @@ export class GameSession {
       esitoNodo,
       prossimaRichiestaId: prossimaRichiesta ? prossimaRichiesta.id : null,
     };
+    // Il momento e' stato risolto (scelta a bottone, interprete automatico, o
+    // candidato scelto dal comandante): un eventuale avviso di rifiuto su
+    // questo momento e' ormai superato (Difetto #6). Vale sia per una scelta
+    // sullo stesso momento sia per la risoluzione vera e propria.
+    session.rifiutoCorrente = null;
 
     // competenzaId: quale competenza ha deciso il tiro (null se nessun
     // tiro). Serve al client per mostrare il nome leggibile nel dettaglio

@@ -38,3 +38,23 @@ export function deveMostrareEsito(esitoCorrente, ultimaRichiestaScacciata) {
   if (typeof esitoCorrente.esito !== "string" || esitoCorrente.esito === "") return false;
   return esitoCorrente.richiestaId !== ultimaRichiestaScacciata;
 }
+
+// Chiave di identità di un avviso di rifiuto (Difetto #6): richiestaId +
+// timestamp. Il timestamp la rende unica per OGNI rifiuto, così un secondo
+// rifiuto sullo stesso momento (dopo che il proponente ha riprovato) è un
+// avviso nuovo, non "già scacciato". Restituisce null se non c'è rifiuto.
+export function chiaveRifiuto(rifiutoCorrente) {
+  if (!rifiutoCorrente) return null;
+  return `${rifiutoCorrente.richiestaId}:${rifiutoCorrente.timestamp}`;
+}
+
+// Decide se mostrare l'avviso di rifiuto della proposta di testo libero, data
+// la vista condivisa `rifiutoCorrente` e l'ultimo rifiuto già scacciato su
+// QUESTO dispositivo. Mostra se: il rifiuto esiste, ha un testo di proposta
+// (una stringa non vuota) e non è già stato scacciato qui (chiave diversa
+// dall'ultima scacciata).
+export function deveMostrareRifiuto(rifiutoCorrente, ultimoRifiutoScacciato) {
+  if (!rifiutoCorrente) return false;
+  if (typeof rifiutoCorrente.testoProposta !== "string" || rifiutoCorrente.testoProposta === "") return false;
+  return chiaveRifiuto(rifiutoCorrente) !== ultimoRifiutoScacciato;
+}
