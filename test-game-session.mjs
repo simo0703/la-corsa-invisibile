@@ -67,6 +67,20 @@ async function impostaCompetenza(storage, giocatoreId, competenzaId, valore) {
   await storage.put("session", session);
 }
 
+// Colpo secco (Decisione #22): il dado 1 è sempre fallimento, quindi un
+// punteggio alto da solo non rende più deterministico il tier "pieno".
+// Blocca il dado sul valore massimo (Math.random fissato) per la durata
+// della singola chiamata, poi ripristina il caso.
+async function conDadoMassimo(fn) {
+  const originale = Math.random;
+  Math.random = () => 0.999; // tiraDado: 1 + floor(0.999 * 6) = 6
+  try {
+    return await fn();
+  } finally {
+    Math.random = originale;
+  }
+}
+
 // Scorciatoia per chiamare gs.fetch() come farebbe il Worker, con un path
 // e un body opzionali, restituendo direttamente il JSON già parsato.
 async function chiamata(gs, path, method = "GET", body = null) {
@@ -455,7 +469,8 @@ console.log("\n--- Ramificazione: percorso aggressivo verso decalogo-vaira-sever
   const { gs, storage } = nuovaSessione();
   const { giocatoreId, token } = await joinComandante(gs);
   // Dal Passo 9 questa risposta ha un tiro (competenzaRichiesta: "cadenza");
-  // punteggio forzato molto alto per rendere il tier deterministico ("pieno").
+  // punteggio forzato molto alto + dado bloccato al massimo per rendere il
+  // tier deterministico ("pieno") anche col colpo secco (dado 1 = fallimento).
   await impostaCompetenza(storage, giocatoreId, "cadenza", 20);
   await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino", giocatoreId, token });
 
@@ -463,7 +478,9 @@ console.log("\n--- Ramificazione: percorso aggressivo verso decalogo-vaira-sever
   // Tier "pieno": cadenza +3, margine +1 (niente spiritoDiCorpo);
   // prossima: "decalogo-vaira-severo" a prescindere dal tier (dipende dalla
   // scelta fatta, non da come va il tiro).
-  const primaScelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
+  const primaScelta = await conDadoMassimo(() =>
+    chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token })
+  );
   verifica("il tiro sul punteggio forzato è \"pieno\"", primaScelta.json.tiro && primaScelta.json.tiro.esito === "pieno");
   verifica("applica l'effetto su cadenza (tier pieno)", primaScelta.json.session.risorseDiSquadra.cadenza === 3);
   verifica("il tier pieno non tocca spiritoDiCorpo", primaScelta.json.session.risorseDiSquadra.spiritoDiCorpo === 0);
@@ -519,7 +536,7 @@ console.log("\n--- Ramificazione: percorso aggressivo verso decalogo-vaira-sever
   );
 }
 
-console.log("\n--- Soglia del margine: la complicazione scatta e il margine si dimezza ---");
+console.log("\n--- Soglia del margine: la complicazione scatta e il margine si azzera (Decisione #23) ---");
 {
   const { gs, storage } = nuovaSessione();
   const { giocatoreId, token } = await joinComandante(gs);
@@ -543,8 +560,8 @@ console.log("\n--- Soglia del margine: la complicazione scatta e il margine si d
     scelta.json.complicazione === "Il margine è esaurito: qualcosa si è rotto nel piano, e la squadra deve reagire."
   );
   verifica(
-    "il margine si dimezza sulla soglia configurata (floor(5/2) = 2), non sul valore raggiunto",
-    scelta.json.session.margine === 2
+    "dopo la complicazione il margine si azzera (0, non piu' floor(5/2) = 2 -- Decisione #23)",
+    scelta.json.session.margine === 0
   );
 }
 

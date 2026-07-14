@@ -676,6 +676,47 @@ oggi contiene un `index.html` minimo).
     soglia raggiunta") era un'ipotesi errata, mai esistita nel codice.
     Annullata.
 
+22. **Colpo secco (deciso e implementato il 14/07/2026)**: se il dado
+    mostra 1, l'esito è SEMPRE "fallimento", qualunque siano punteggio
+    base, bonus di grado e totale — per ogni tiro, di ogni ruolo, su ogni
+    competenza (`risolviAzione` in `src/lib/risoluzione.js`). Il totale
+    resta calcolato e riportato come prima: serve al log del tiro e al
+    delta di margine del fallimento (+3). **Motivo**: senza questa regola,
+    base 4 + 1d6 non poteva mai fallire (0,0% misurato dalla Sim B del
+    playtest zero) — il bonus di grado spegneva la tensione ai giocatori
+    più avanzati. Regola annunciata anche nei manuali (regolamento cap. 4,
+    guida rapida) e nei PDF rigenerati. Nei test, il tier "pieno" non è
+    più forzabile col solo punteggio: i blocchi che lo richiedono bloccano
+    anche il dado (`conDadoMassimo`, Math.random fissato per la singola
+    chiamata).
+
+23. **Azzeramento del Margine (deciso e implementato il 14/07/2026)**:
+    quando il Margine raggiunge la soglia, dopo la complicazione torna a
+    **0**, non più a `floor(soglia/2) = 2` (`GameSession.applicaRisposta`).
+    Il testo `margineComplicazioneTesto` resta identico, e l'ordine delle
+    operazioni pure (incremento → Cronista → controllo soglia →
+    azzeramento): il Cronista continua a vedere il valore PIENO nel turno
+    dello scoppio, quindi la fascia "critico" resta viva (~52% delle
+    chiamate a regime, misura del 14/07). **Motivo**: col dimezzamento gli
+    scoppi successivi arrivavano ogni ~1,9 tiri (misura Sim B) — guai a
+    raffica — e il tono del Cronista restava schiacciato verso l'alto;
+    con l'azzeramento la distanza sale a ~2,9 tiri e tutte le fasce
+    tornano in gioco.
+
+24. **Bersaglio contenuti: 6-8 risposte a tiro per nodo (deciso il
+    14/07/2026)**: con colpo secco + azzeramento, 6-8 tiri per nodo
+    producono ≈2 complicazioni a nodo (primo scoppio ~3° tiro, successivi
+    ogni ~2,9 — misure Sim B). È il criterio del lavoro di conversione
+    delle risposte fisse a tiro reale, prossimo cantiere (vedi "Cosa
+    manca").
+
+25. **puntiExtra: variante (b) DECISA, implementazione rinviata (deciso il
+    14/07/2026)**: i 3 punti extra si distribuiranno al `/join`, con un
+    massimo di +1 per ciascuna competenza NON principale (misura Sim B:
+    porta le competenze deboli dal 33% al 17% di fallimento senza gonfiare
+    la specialità). L'implementazione va in un cantiere dedicato — serve
+    la UI di distribuzione. Non è più un'ipotesi aperta.
+
 ---
 
 ## Ipotesi in attesa di conferma (NON dare per deciso)
@@ -729,7 +770,9 @@ oggi contiene un `index.html` minimo).
 - [ ] Tarare le soglie provvisorie dell'interprete (`sogliaAlta: 0.6`,
       `margineDistacco: 0.15` in `GameSession.js`) su testo libero reale
       scritto da persone vere, non solo su frasi di test scritte a mano
-- [ ] Convertire altre risposte fisse a tiro reale — `1848-milano` ne ha
+- [ ] Convertire altre risposte fisse a tiro reale — **bersaglio: 6-8
+      risposte a tiro per nodo (Decisione #24, ≈2 complicazioni a nodo)**.
+      `1848-milano` ne ha
       ora due (Cadenza su `milano-barricata`, Precisione su
       `milano-ferito`, quest'ultima aggiunta per dare finalmente
       all'Incursore un'occasione di tirare sulla propria specialità); gli
@@ -781,8 +824,14 @@ oggi contiene un `index.html` minimo).
       margine alto = male; nome mostrato "Tensione", nome interno `margine`).
       Nessuna riconciliazione da fare: il codice era giusto, era il log a
       sbagliare
-- [ ] Taratura al playtest zero: se soglia 5 e passi 1/2/3 del Margine sono
-      ben calibrati (misurare quante volte trabocca in un nodo)
+- [x] Taratura al playtest zero — **fatta il 14/07/2026** con le simulazioni
+      Sim A (partita reale in produzione) e Sim B (Monte Carlo offline):
+      ne sono uscite le Decisioni #22 (colpo secco), #23 (azzeramento del
+      Margine), #24 (bersaglio 6-8 risposte a tiro per nodo) e #25
+      (puntiExtra variante b)
+- [ ] puntiExtra, variante (b): UI di distribuzione al `/join` (3 punti,
+      max +1 per competenza non principale) — decisione presa (#25),
+      cantiere dedicato ancora da aprire
 - [x] Un nodo scritto come esempio con ramificazione reale — fatto nel Passo 2
       (`decalogo-vaira-severo` in `1836-torino`)
 - [ ] Collegare davvero l'AI alla generazione degli esiti (con il tetto per sessione)

@@ -67,6 +67,20 @@ async function impostaCompetenza(storage, giocatoreId, competenzaId, valore) {
   await storage.put("session", session);
 }
 
+// Colpo secco (Decisione #22): il dado 1 è sempre fallimento, quindi un
+// punteggio alto da solo non rende più deterministico il tier "pieno".
+// Blocca il dado sul valore massimo (Math.random fissato) per la durata
+// della singola chiamata, poi ripristina il caso.
+async function conDadoMassimo(fn) {
+  const originale = Math.random;
+  Math.random = () => 0.999; // tiraDado: 1 + floor(0.999 * 6) = 6
+  try {
+    return await fn();
+  } finally {
+    Math.random = originale;
+  }
+}
+
 // Fa /crea + /join con un tokenCreazione valido, cosi' il giocatore
 // risultante e' davvero comandante (serve per compiere /avvia-nodo, azione
 // riservata -- vedi autenticaComandante() in GameSession.js).
@@ -84,11 +98,13 @@ async function sessionePronta() {
   return { gs, storage, giocatoreId, token };
 }
 
-console.log("--- tier pieno (punteggio forzato molto alto) ---");
+console.log("--- tier pieno (punteggio forzato molto alto + dado bloccato: colpo secco escluso) ---");
 {
   const { gs, storage, giocatoreId, token } = await sessionePronta();
   await impostaCompetenza(storage, giocatoreId, "cadenza", 20);
-  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
+  const { json } = await conDadoMassimo(() =>
+    chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token })
+  );
   verifica("il tiro è \"pieno\"", json.tiro && json.tiro.esito === "pieno");
   verifica(
     "effetti del tier pieno: cadenza +3, margine +1, spiritoDiCorpo invariato",

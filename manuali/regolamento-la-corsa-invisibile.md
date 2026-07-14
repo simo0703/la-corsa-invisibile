@@ -91,6 +91,8 @@ Tutto qui. L'Incursore che tenta un'azione di Precisione parte da 3, perché la 
 | **da 5 a 7** | **Riuscita a metà** | L'azione riesce, ma con un prezzo: una complicazione, un ritardo, qualcosa che si rompe o si perde. |
 | **4 o meno** | **Fallimento** | L'azione non riesce, e succede qualcosa di brutto. La storia va avanti lo stesso — non si riprova. |
 
+**C'è una sola eccezione, e vale per tutti:** se il dado mostra 1, l'azione va male comunque, anche se la somma dei punti basterebbe a superare il gradino. Non importa quanto sei esperto: un 1 è sempre un fallimento. Anche il veterano, ogni tanto, inciampa.
+
 **Un esempio completo.** La squadra deve attraversare una passerella sotto tiro, e serve Cadenza. Decide di mandare l'Esploratore: la Cadenza è il suo mestiere, parte da 3. Tira il dado, esce 4. Totale: 3 + 4 = **7** → riuscita a metà: attraversa, ma perde lo zaino nel fiume.
 
 **Lo stesso esempio, con un altro.** L'Esploratore però è ferito, e tocca alla Fanfara, per cui la Cadenza non è il mestiere: parte da 2. Tira il dado, esce 4 anche a lei. Totale: 2 + 4 = **6** → sempre riuscita a metà, ma guarda cosa è cambiato: con quello stesso dado, all'Esploratore sarebbe bastato un 5 per la riuscita piena; alla Fanfara serve un 6. Ecco, in numeri, cosa vuol dire "chi è del mestiere ci riesce più spesso".

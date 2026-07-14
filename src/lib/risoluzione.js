@@ -56,8 +56,16 @@ export function risolviAzione(punteggioCompetenza, tiroDadoForzato = null, facce
   const totale = punteggioCompetenza + dado;
   const { sogliaSuccessoPieno, sogliaSuccessoParziale } = GAME_CONFIG.risoluzione;
 
+  // Colpo secco (Decisione #22 nel log): un dado che mostra 1 è SEMPRE un
+  // fallimento, qualunque siano punteggio base e bonus. Senza questa regola,
+  // base 4 + 1d6 non poteva mai fallire (0,0% misurato dalla Sim B del
+  // playtest zero): il bonus di grado spegneva la tensione ai giocatori più
+  // avanzati. Il totale resta calcolato e riportato come prima: serve al
+  // log del tiro e agli effetti del tier (il fallimento porta il suo delta
+  // di margine, +3, come ogni altro).
   let esito;
-  if (totale >= sogliaSuccessoPieno) esito = "pieno";
+  if (dado === 1) esito = "fallimento";
+  else if (totale >= sogliaSuccessoPieno) esito = "pieno";
   else if (totale >= sogliaSuccessoParziale) esito = "parziale";
   else esito = "fallimento";
 

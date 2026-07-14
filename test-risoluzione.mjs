@@ -97,12 +97,30 @@ console.log("\n--- Risoluzione con 1d6 (il dado di tutti): confini del range e c
 
 // Con un bonus di +1 (bonusContesto o bonus di grado) il punteggio effettivo
 // di una competenza principale passa da 3 a 4: il range si sposta a 5-10.
+// Dal colpo secco (Decisione #22) il minimo 5 NON è più un parziale
+// garantito: il dado 1 è SEMPRE un fallimento, qualunque sia il totale —
+// senza questa regola, base 4 + 1d6 non poteva mai fallire (0,0% misurato
+// dalla Sim B del playtest zero) e il grado spegneva la tensione.
 {
   const min = risolviAzione(4, 1, 6);
   const max = risolviAzione(4, 6, 6);
   verifica("principale 3 + bonus 1 + 1d6: minimo del range è 5", min.totale === 5);
   verifica("principale 3 + bonus 1 + 1d6: massimo del range è 10", max.totale === 10);
-  verifica("con il bonus, il minimo (5) raggiunge già la soglia parziale: mai fallimento", min.esito !== "fallimento");
+  verifica(
+    "colpo secco: dado 1 con base 4 (grado) è fallimento anche se il totale (5) supererebbe la soglia parziale",
+    min.esito === "fallimento"
+  );
+}
+
+console.log("\n--- Colpo secco (Decisione #22): il dado 1 è sempre un fallimento ---");
+{
+  const veterano = risolviAzione(30, 1, 6); // base alta arbitraria
+  verifica("dado 1 con base altissima (30): il totale resta calcolato e riportato (31)", veterano.totale === 31 && veterano.dado === 1);
+  verifica("dado 1 con base altissima (30): l'esito è comunque fallimento", veterano.esito === "fallimento");
+  const nonUno = risolviAzione(3, 2, 6);
+  verifica("il colpo secco vale SOLO per l'1: dado 2 con base 3 (totale 5) resta parziale", nonUno.esito === "parziale");
+  const pienoNormale = risolviAzione(4, 6, 6);
+  verifica("con dado diverso da 1 decidono le soglie come prima: base 4 + dado 6 = pieno", pienoNormale.esito === "pieno");
 }
 
 // Su molti tentativi con un punteggio 3 (una competenza principale) e il

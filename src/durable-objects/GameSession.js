@@ -1040,14 +1040,20 @@ export class GameSession {
     });
 
     // Complicazione da margine: soglia configurabile in game-config.js.
-    // Al superamento, segnaliamo la complicazione e riportiamo il margine
-    // a meta' soglia (attenuazione, non azzeramento) -- punto da confermare.
+    // Al superamento, segnaliamo la complicazione e AZZERIAMO il margine
+    // (Decisione #23 nel log: col vecchio dimezzamento a meta' soglia gli
+    // scoppi successivi arrivavano ogni ~1,9 tiri, misura Sim B del playtest
+    // zero -- guai a raffica; con l'azzeramento ~2,9 tiri e tutte le fasce
+    // del Cronista tornano in gioco). NOTA sull'ordine: questo controllo
+    // avviene DOPO la chiamata al Cronista qui sopra, che quindi vede ancora
+    // il valore pieno (fascia "critico" nel turno dello scoppio) -- non
+    // spostare questo blocco prima della composizione della narrazione.
     let complicazione = null;
     const soglia = GAME_CONFIG.margineSoglia ?? null;
     if (soglia !== null && session.margine >= soglia) {
       complicazione = GAME_CONFIG.margineComplicazioneTesto
         ?? "Il margine e' esaurito: qualcosa va storto.";
-      session.margine = Math.floor(soglia / 2);
+      session.margine = 0;
     }
 
     // Prossima richiesta: attenzione, tre casi distinti.

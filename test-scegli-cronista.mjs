@@ -73,6 +73,22 @@ async function impostaCompetenza(storage, giocatoreId, competenzaId, valore) {
   await storage.put("session", session);
 }
 
+// Colpo secco (Decisione #22): il dado 1 è sempre fallimento, quindi un
+// punteggio alto da solo non rende più deterministico il tier "pieno".
+// Blocca il dado sul valore massimo (Math.random fissato) per la durata
+// della singola chiamata, poi ripristina il caso. Dentro la finestra anche
+// la selezione pesata del Cronista diventa deterministica: innocuo, sceglie
+// comunque un candidato valido.
+async function conDadoMassimo(fn) {
+  const originale = Math.random;
+  Math.random = () => 0.999; // tiraDado: 1 + floor(0.999 * 6) = 6
+  try {
+    return await fn();
+  } finally {
+    Math.random = originale;
+  }
+}
+
 // Fa /crea + /join con un tokenCreazione valido, cosi' il giocatore
 // risultante e' davvero comandante (serve per compiere /avvia-nodo, azione
 // riservata -- vedi autenticaComandante() in GameSession.js).
@@ -117,8 +133,10 @@ console.log("\n--- registro: il caricatore reale di 1836-torino fallisce sotto N
 console.log("\n--- GameSession: senza pool disponibile, /scegli usa il testo statico (fallback) ---");
 {
   const { gs, storage, giocatoreId, token } = await sessionePronta();
-  await impostaCompetenza(storage, giocatoreId, "cadenza", 20); // forza "pieno"
-  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
+  await impostaCompetenza(storage, giocatoreId, "cadenza", 20); // punteggio alto
+  const { json } = await conDadoMassimo(() =>
+    chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token })
+  ); // dado bloccato: "pieno" deterministico anche col colpo secco
   verifica("il tiro è \"pieno\"", json.tiro.esito === "pieno");
   verifica("senza pool, l'esito resta il testo statico per tier", json.esito === TESTO_PIENO_STATICO);
 }
@@ -135,8 +153,10 @@ registraPool("1836-torino", () => Promise.resolve({ ottieniFrammenti: poolReale.
 console.log("\n--- GameSession: con il pool reale iniettato, /scegli usa il testo del Cronista ---");
 {
   const { gs, storage, giocatoreId, token } = await sessionePronta();
-  await impostaCompetenza(storage, giocatoreId, "cadenza", 20); // forza "pieno"
-  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
+  await impostaCompetenza(storage, giocatoreId, "cadenza", 20); // punteggio alto
+  const { json } = await conDadoMassimo(() =>
+    chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token })
+  ); // dado bloccato: "pieno" deterministico anche col colpo secco
   verifica("il tiro è ancora \"pieno\" (il pool non cambia il tiro)", json.tiro.esito === "pieno");
   verifica("l'esito NON è più il testo statico: è stato sostituito", json.esito !== TESTO_PIENO_STATICO);
   verifica("l'esito composto è una stringa non vuota", typeof json.esito === "string" && json.esito.length > 0);
@@ -207,6 +227,42 @@ console.log("\n--- GameSession: il contesto passato al Cronista include richiest
     "richiestaId vale l'id della richiesta attiva che ha generato il tiro (decalogo-ginnastica)",
     contestoCatturato && contestoCatturato.richiestaId === "decalogo-ginnastica"
   );
+
+  // Ripristina il pool reale per non lasciare lo spia registrato.
+  registraPool("1836-torino", () => Promise.resolve({ ottieniFrammenti: poolReale.ottieniFrammenti }));
+}
+
+console.log("\n--- scoppio del Margine: il Cronista vede il valore PIENO, poi si azzera (Decisione #23) ---");
+{
+  // Ordine delle operazioni in applicaRisposta: incremento del margine ->
+  // chiamata al Cronista -> controllo soglia -> azzeramento. Il contesto
+  // passato al Cronista nel turno dello scoppio deve quindi contenere ancora
+  // il valore pieno (qui 4 + 3 = 7, fascia "critico"), mentre la sessione
+  // restituita al client ha gia' il margine azzerato.
+  let contestoCatturato = null;
+  const poolSpia = {
+    ottieniFrammenti(slot, contesto) {
+      contestoCatturato = contesto;
+      return [{ id: `spia-scoppio-${slot}`, testo: "x" }];
+    },
+  };
+  registraPool("1836-torino", () => Promise.resolve({ ottieniFrammenti: poolSpia.ottieniFrammenti }));
+
+  const { gs, storage, giocatoreId, token } = await sessionePronta();
+  await impostaCompetenza(storage, giocatoreId, "cadenza", -10); // forza "fallimento" (margine +3)
+  // Porta il margine a 4 a mano: col +3 del fallimento arriva a 7 >= soglia 5.
+  const sessionePresente = await storage.get("session");
+  sessionePresente.margine = 4;
+  await storage.put("session", sessionePresente);
+
+  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
+  verifica("il tiro è \"fallimento\" (punteggio forzato)", json.tiro && json.tiro.esito === "fallimento");
+  verifica(
+    "il contesto del Cronista contiene il valore PIENO del margine (7), prima dell'azzeramento",
+    contestoCatturato && contestoCatturato.margine && contestoCatturato.margine.valore === 7
+  );
+  verifica("la complicazione scatta (7 >= soglia 5)", json.complicazione !== null);
+  verifica("dopo lo scoppio il margine è azzerato (0, non piu' dimezzato a 2)", json.session.margine === 0);
 
   // Ripristina il pool reale per non lasciare lo spia registrato.
   registraPool("1836-torino", () => Promise.resolve({ ottieniFrammenti: poolReale.ottieniFrammenti }));

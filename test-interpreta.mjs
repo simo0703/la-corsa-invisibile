@@ -83,6 +83,20 @@ async function impostaCompetenza(storage, giocatoreId, competenzaId, valore) {
   await storage.put("session", session);
 }
 
+// Colpo secco (Decisione #22): il dado 1 è sempre fallimento, quindi un
+// punteggio alto da solo non rende più deterministico il tier "pieno".
+// Blocca il dado sul valore massimo (Math.random fissato) per la durata
+// della singola chiamata, poi ripristina il caso.
+async function conDadoMassimo(fn) {
+  const originale = Math.random;
+  Math.random = () => 0.999; // tiraDado: 1 + floor(0.999 * 6) = 6
+  try {
+    return await fn();
+  } finally {
+    Math.random = originale;
+  }
+}
+
 // Iniezione portabile della libreria reale (letta da fs, non dall'import
 // del .md che sotto Node non si risolve). Registrata una volta, vale per
 // tutto il file: ogni test crea una sessione nuova, il registro è un
@@ -106,13 +120,16 @@ async function sessionePronta() {
 console.log("--- /interpreta: esito \"automatica\" ---");
 {
   const { gs, storage, giocatoreId, token } = await sessionePronta();
-  await impostaCompetenza(storage, giocatoreId, "cadenza", 20); // forza tier "pieno"
-  const { status, json } = await chiamata(gs, "/interpreta", "POST", {
-    testoLibero: "vado più veloce che posso",
-    richiestaId: "decalogo-ginnastica",
-    giocatoreId,
-    token,
-  });
+  await impostaCompetenza(storage, giocatoreId, "cadenza", 20); // punteggio alto
+  // dado bloccato al massimo: "pieno" deterministico anche col colpo secco
+  const { status, json } = await conDadoMassimo(() =>
+    chiamata(gs, "/interpreta", "POST", {
+      testoLibero: "vado più veloce che posso",
+      richiestaId: "decalogo-ginnastica",
+      giocatoreId,
+      token,
+    })
+  );
   verifica("risponde 200", status === 200);
   verifica(
     "stessa forma di risposta di /scegli (session, esito, prossimaRichiesta, esitoNodo, complicazione, tiro)",

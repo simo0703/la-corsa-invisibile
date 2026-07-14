@@ -22,6 +22,7 @@
 - **8 o più** → **riuscita piena**: riesce come volevi.
 - **da 5 a 7** → **riuscita a metà**: riesce, ma con un prezzo (lo inventa il narratore).
 - **4 o meno** → **fallimento**: va storto, e la storia prosegue — non si riprova mai.
+- **Se il dado mostra 1, è sempre un fallimento.**
 
 *Esempio: serve Cadenza, va l'Esploratore (è il suo mestiere): 3 + dado. Esce 4 → totale 7 → riuscita a metà: passa, ma perde lo zaino.*
 

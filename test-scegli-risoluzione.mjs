@@ -74,6 +74,20 @@ async function impostaCompetenza(storage, giocatoreId, competenzaId, valore) {
   await storage.put("session", session);
 }
 
+// Colpo secco (Decisione #22): il dado 1 è sempre fallimento, quindi un
+// punteggio alto da solo non rende più deterministico il tier "pieno".
+// Blocca il dado sul valore massimo (Math.random fissato) per la durata
+// della singola chiamata, poi ripristina il caso.
+async function conDadoMassimo(fn) {
+  const originale = Math.random;
+  Math.random = () => 0.999; // tiraDado: 1 + floor(0.999 * 6) = 6
+  try {
+    return await fn();
+  } finally {
+    Math.random = originale;
+  }
+}
+
 // Nodo di prova: una risposta con tiro (indice 0) e una a effetto fisso
 // (indice 1), per verificare che le due forme convivano nello stesso nodo.
 const NODO_DI_PROVA = {
@@ -156,40 +170,49 @@ console.log("\n--- punteggio molto basso: il tiro è sempre fallimento ---");
   verifica("il testo mostrato è quello del tier fallimento", json.esito === "Esito fallimento di prova");
 }
 
-console.log("\n--- punteggio molto alto: il tiro è sempre pieno ---");
+console.log("\n--- punteggio molto alto + dado bloccato al massimo: il tiro è pieno ---");
 {
+  // Col colpo secco un punteggio alto da solo non basta più (il dado 1
+  // resterebbe fallimento): blocchiamo anche il dado per il tier "pieno".
   const { gs, storage, giocatoreId, token } = await sessionePronta();
-  await impostaCompetenza(storage, giocatoreId, "cadenza", 20); // totale sempre >=8
-  const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
+  await impostaCompetenza(storage, giocatoreId, "cadenza", 20);
+  const { json } = await conDadoMassimo(() =>
+    chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token })
+  );
   verifica("il tiro registra esito pieno", json.tiro !== null && json.tiro.esito === "pieno");
   verifica("vengono applicati gli effettiPerEsito.pieno (cadenza +3)", json.session.risorseDiSquadra.cadenza === 3);
   verifica("il testo mostrato è quello del tier pieno", json.esito === "Esito pieno di prova");
 }
 
-console.log("\n--- coerenza interna su molti tentativi (punteggio a cavallo tra parziale e pieno) ---");
+console.log("\n--- coerenza interna su molti tentativi (punteggio 4: tutti e tre i tier possibili) ---");
 {
-  // Con punteggio 4 e dado 1d4: totale in [5,8] -> sempre parziale o pieno,
-  // mai fallimento. In 40 tentativi la probabilità di non vedere MAI un
-  // parziale è (1/4)^40, trascurabile: se il codice è corretto, entrambi i
-  // tier compaiono.
+  // Con punteggio 4 e 1d6: dado 1 -> fallimento (colpo secco, anche se il
+  // totale 5 supererebbe la soglia); dado 2-3 -> totale 6-7, parziale;
+  // dado 4-6 -> totale 8-10, pieno. Il fallimento deve comparire SOLO con
+  // il dado a 1, e gli effetti/testo devono seguire il tier estratto.
   const esitiVisti = new Set();
   let coerenteSempre = true;
   for (let i = 0; i < 40; i++) {
     const { gs, storage, giocatoreId, token } = await sessionePronta();
     await impostaCompetenza(storage, giocatoreId, "cadenza", 4);
     const { json } = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
-    if (!json.tiro || (json.tiro.esito !== "parziale" && json.tiro.esito !== "pieno")) {
-      coerenteSempre = false;
-    }
+    if (!json.tiro) coerenteSempre = false;
     esitiVisti.add(json.tiro?.esito);
 
-    const cadenzaAttesa = json.tiro.esito === "pieno" ? 3 : 1;
+    // colpo secco: fallimento se e solo se il dado mostra 1
+    if ((json.tiro.esito === "fallimento") !== (json.tiro.dado === 1)) coerenteSempre = false;
+
+    const cadenzaAttesa = { pieno: 3, parziale: 1, fallimento: -1 }[json.tiro.esito];
     if (json.session.risorseDiSquadra.cadenza !== cadenzaAttesa) coerenteSempre = false;
-    const esitoAtteso = json.tiro.esito === "pieno" ? "Esito pieno di prova" : "Esito parziale di prova";
+    const esitoAtteso = {
+      pieno: "Esito pieno di prova",
+      parziale: "Esito parziale di prova",
+      fallimento: "Esito fallimento di prova",
+    }[json.tiro.esito];
     if (json.esito !== esitoAtteso) coerenteSempre = false;
   }
-  verifica("con punteggio 4, il tiro produce sempre parziale o pieno, mai fallimento", coerenteSempre);
-  verifica("su 40 tentativi, si vedono entrambi i tier (parziale e pieno)", esitiVisti.has("parziale") && esitiVisti.has("pieno"));
+  verifica("con punteggio 4, il fallimento compare solo col dado a 1 (colpo secco) e ogni tier applica i suoi effetti", coerenteSempre);
+  verifica("su 40 tentativi, si vedono i tier parziale e pieno", esitiVisti.has("parziale") && esitiVisti.has("pieno"));
 }
 
 console.log("\n--- robustezza: contenuto malformato non manda in crash il motore ---");
