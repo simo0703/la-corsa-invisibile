@@ -1,16 +1,17 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 14 luglio 2026, sera. **In produzione fino a `2f06872`**:
-trilogia WebSocket, Difetti #6, #7 e scroll automatico ai pannelli sono pushati
-su `main` e verificati dal vivo. Il tavolo condiviso è live e reattivo.
+Aggiornato al: 14 luglio 2026, sera. **In produzione fino a `6623701`**:
+trilogia WebSocket, Difetti #6/#7/#3/#8 e scroll automatico ai pannelli sono
+pushati su `main` e verificati dal vivo. Il tavolo condiviso è live e reattivo.
 **In locale, NON ancora pushato** (deploy automatico sul push a `main`, attende
-autorizzazione): un commit per i **Difetti #3 + #8** (anno/luogo del nodo sul
-tavolo durante il gioco; bottone "Esci dalla stanza"). Solo client + una
-funzione pura. Batteria di test corrente:
-**30 file `test-*.mjs`, 922 asserzioni, 0 FAIL** — verificata due volte il
-14/07/2026 (29 file = 867; `test-vista-esito.mjs` 55).
-**PUNTO DI RIPRESA IMMEDIATO**: Difetti #3+#8 fatti e verificati dal vivo,
-**in attesa di autorizzazione al push**. Vedi la voce "Difetti #3 + #8".
+autorizzazione): un commit per la **rinomina delle etichette delle risorse di
+squadra** (cadenza→Slancio, spiritoDiCorpo→Coesione, passoAvanti→Ardimento;
+SOLO le etichette mostrate, id interni e competenze personali invariati).
+Batteria di test corrente:
+**30 file `test-*.mjs`, 932 asserzioni, 0 FAIL** — verificata due volte il
+14/07/2026 (29 file = 867; `test-vista-esito.mjs` 65).
+**PUNTO DI RIPRESA IMMEDIATO**: rinomina etichette fatta e verificata dal vivo,
+**in attesa di autorizzazione al push**. Vedi la voce "Rinomina risorse di squadra".
 Interventi della sessione serale del 13 luglio: **Riconoscimento** — rientro
 in partita e presa di comando (`1d9b592`), **anti-ripetizione del Cronista**
 (`23c402e`), **decisione di design su `bonusContesto`** + commenti allineati
@@ -1025,6 +1026,52 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**14/07/2026 — Rinomina etichette risorse di squadra: Slancio / Coesione / Ardimento (FATTO, commit locale)**
+File toccati: `src/game-config.js`, `public/index.html`; esteso
+`test-vista-esito.mjs`. **In locale, non pushato**.
+
+- **PROBLEMA**: le risorse di squadra (id `cadenza`/`spiritoDiCorpo`/
+  `passoAvanti`, quelle che partono da 0 e decidono l'esitoFinale) avevano le
+  ETICHETTE mostrate identiche a tre delle cinque competenze personali —
+  confusione per i giocatori, avviso apposta nei manuali.
+- **FATTO — solo le etichette mostrate** (come `margine` → "Tensione"): id
+  interni invariati (li leggono gli esitoFinale e il motore), competenze
+  personali invariate. Nuove etichette: `cadenza`→**Slancio**,
+  `spiritoDiCorpo`→**Coesione**, `passoAvanti`→**Ardimento**.
+- **Fonte unica**: `game-config.js` `risorseDiSquadra.nome` (prima solo un valore
+  parallelo, ora la sorgente vera). `renderRisorse` in `public/index.html` non
+  ha più una mappa hardcoded: legge `CONFIG.risorseDiSquadra[chiave].nome`. Una
+  rinomina futura tocca un solo punto.
+- **Punti player-facing cambiati**: (1) il box risorse durante il gioco
+  (`renderRisorse`); (2) il testo introduttivo di schermo-join che elenca le tre
+  risorse. Il pannello del comandante mostra solo "Tensione" (margine), niente
+  etichette di squadra. Gli esiti/tiri mostrano nomi di COMPETENZA, non di
+  risorsa.
+- **Come ho distinto risorse da competenze**: sono due oggetti separati in
+  game-config (`risorseDiSquadra` vs `competenze`) e due render separati nel
+  client (`renderRisorse` ← risorse; `renderSchedaPersonale` ← competenze). Gli
+  id si sovrappongono (cadenza/spiritoDiCorpo/passoAvanti) ma gli oggetti no:
+  ho cambiato solo `risorseDiSquadra.nome`.
+- **Contenuto che nomina ancora le vecchie etichette di squadra (punto 3, NON
+  corretto — da decidere in chat)**:
+  1. `src/game-config.js` — focus del ruolo **Fanfara**: *"Rigenera la Cadenza
+     della squadra, scaccia la paura col Suono della Corsa."* — "Cadenza della
+     squadra" = risorsa (ora Slancio), mostrato nel select/carte ruolo.
+  2. `src/game-config.js` — risposta di `milano-barricata`: *"Carica diretta,
+     sfruttando la Cadenza accumulata"* — "Cadenza accumulata" ambiguo (risorsa
+     ora Slancio, o la competenza personale Cadenza).
+  - **NON è un problema**: i frammenti Cronista `sviluppo-competenza-cadenza/
+    spiritoDiCorpo/passoAvanti` nei `narratore-*.md` nominano Cadenza/Spirito di
+    Corpo/Passo Avanti, ma si riferiscono alle COMPETENZE personali (chiave
+    `competenza` del tiro), che restano invariate. Verificati, coerenti.
+- **Test**: `test-vista-esito.mjs` (55→65): etichette risorse = nuove, id
+  interni invariati, competenze personali invariate. Batteria: **30 file, 932
+  OK, 0 FAIL** (due volte). Verificato dal vivo: box risorse "Slancio/Coesione/
+  Ardimento", scheda competenze "Cadenza/Precisione/Spirito di Corpo/Passo
+  Avanti/Ancoraggio", intro di join aggiornata.
+
+---
 
 **14/07/2026 — Difetti #3 (anno/luogo sul tavolo) + #8 (Esci dalla stanza) (FATTI, un commit locale)**
 File toccati: `public/index.html`, `public/vista-esito.js`; esteso

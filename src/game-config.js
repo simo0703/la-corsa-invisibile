@@ -46,18 +46,25 @@ export const GAME_CONFIG = {
   // giocatore invece di aggiungerlo senza un posto dove metterlo.
   maxGiocatori: 8,
 
-  // Risorse di squadra (party-level, non per singolo personaggio)
+  // Risorse di squadra (party-level, non per singolo personaggio).
+  // NOTA sui nomi: gli id interni restano cadenza/spiritoDiCorpo/passoAvanti
+  // (li leggono le condizioni degli esitoFinale e il motore), ma le ETICHETTE
+  // mostrate al giocatore sono Slancio/Coesione/Ardimento -- distinte di
+  // proposito dalle competenze personali omonime (Cadenza/Spirito di
+  // Corpo/Passo Avanti, vedi `competenze` sotto), che restano invariate. Stesso
+  // schema di `margine` (id) mostrato come "Tensione". Questa è la FONTE UNICA
+  // delle etichette: il client (renderRisorse) le legge da qui.
   risorseDiSquadra: {
     cadenza: {
-      nome: "Cadenza",
+      nome: "Slancio",
       descrizione: "Il ritmo della squadra. Si alimenta agendo, si svuota esitando.",
     },
     spiritoDiCorpo: {
-      nome: "Spirito di Corpo",
+      nome: "Coesione",
       descrizione: "Riserva condivisa di salute e stabilità mentale del gruppo.",
     },
     passoAvanti: {
-      nome: "Passo Avanti",
+      nome: "Ardimento",
       descrizione: "Punti che rappresentano la decisione conscia di superare la paura.",
     },
   },

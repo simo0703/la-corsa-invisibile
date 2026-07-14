@@ -1016,7 +1016,7 @@
     <div id="profilo-collegato-box"></div>
     <p class="spiega">
       Scegli un nome e un ruolo. Il ruolo definisce cosa il tuo personaggio sa fare
-      meglio, ma le risorse della squadra — Cadenza, Spirito di Corpo, Passo Avanti —
+      meglio, ma le risorse della squadra — Slancio, Coesione, Ardimento —
       sono condivise da tutti: quello che scegli conta per l'intero gruppo.
     </p>
     <div class="campo">
@@ -1950,14 +1950,17 @@ function esciDallaStanza() {
 document.getElementById("btn-esci-stanza").addEventListener("click", esciDallaStanza);
 
 function renderRisorse(risorseDiSquadra) {
-  const nomi = { cadenza: "Cadenza", spiritoDiCorpo: "Spirito di Corpo", passoAvanti: "Passo Avanti" };
+  // Etichette lette dalla FONTE UNICA (game-config risorseDiSquadra.nome:
+  // Slancio/Coesione/Ardimento), non più da una mappa hardcoded qui: così una
+  // rinomina futura tocca un solo punto. Gli id (chiavi) restano interni.
+  const definizioni = CONFIG.risorseDiSquadra;
   const box = document.getElementById("box-risorse");
-  box.innerHTML = Object.keys(nomi).map(chiave => {
+  box.innerHTML = Object.keys(definizioni).map(chiave => {
     const valore = risorseDiSquadra[chiave] || 0;
     const classe = valore > 0 ? "positivo" : (valore < 0 ? "negativo" : "");
     const segno = valore > 0 ? "+" : "";
     return `<div class="risorsa">
-      <div class="nome">${nomi[chiave]}</div>
+      <div class="nome">${definizioni[chiave].nome}</div>
       <div class="valore ${classe}">${segno}${valore}</div>
     </div>`;
   }).join("");

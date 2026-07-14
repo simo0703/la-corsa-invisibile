@@ -239,5 +239,28 @@ console.log("\n--- etichettaNodo (Difetto #3: anno/luogo sul tavolo) ---");
   }
 }
 
+console.log("\n--- Etichette risorse di squadra vs competenze personali (rinomina) ---");
+{
+  const risorse = GAME_CONFIG.risorseDiSquadra;
+  // Risorse di squadra: id interni invariati, ETICHETTE nuove.
+  verifica("risorsa cadenza → etichetta 'Slancio'", risorse.cadenza.nome === "Slancio");
+  verifica("risorsa spiritoDiCorpo → etichetta 'Coesione'", risorse.spiritoDiCorpo.nome === "Coesione");
+  verifica("risorsa passoAvanti → etichetta 'Ardimento'", risorse.passoAvanti.nome === "Ardimento");
+  verifica("gli id interni delle risorse restano cadenza/spiritoDiCorpo/passoAvanti",
+    ["cadenza", "spiritoDiCorpo", "passoAvanti"].every((k) => k in risorse));
+  // Nessuna etichetta di squadra usa più i vecchi nomi (che ora sono SOLO delle competenze).
+  const etichetteRisorse = Object.values(risorse).map((r) => r.nome);
+  verifica("nessuna etichetta di squadra è più Cadenza/Spirito di Corpo/Passo Avanti",
+    !etichetteRisorse.some((n) => ["Cadenza", "Spirito di Corpo", "Passo Avanti"].includes(n)));
+
+  // Competenze personali: nomi INVARIATI (le tre omonime + le altre due).
+  const comp = GAME_CONFIG.competenze;
+  verifica("competenza cadenza resta 'Cadenza'", comp.cadenza.nome === "Cadenza");
+  verifica("competenza spiritoDiCorpo resta 'Spirito di Corpo'", comp.spiritoDiCorpo.nome === "Spirito di Corpo");
+  verifica("competenza passoAvanti resta 'Passo Avanti'", comp.passoAvanti.nome === "Passo Avanti");
+  verifica("competenza precisione resta 'Precisione'", comp.precisione.nome === "Precisione");
+  verifica("competenza ancoraggio resta 'Ancoraggio'", comp.ancoraggio.nome === "Ancoraggio");
+}
+
 console.log(`\n${falliti === 0 ? "Tutti i test passati." : `${falliti} test falliti.`}`);
 process.exit(falliti === 0 ? 0 : 1);
