@@ -191,22 +191,179 @@ export const GAME_CONFIG = {
                 fallimento:
                   "La fretta vi tradisce: un piede sbaglia l'appoggio, il corpo si spezza per un istante prima di ritrovare l'equilibrio. Arrivate comunque per primi, ma il prezzo pagato si vede.",
               },
-              // Ramificazione: la fretta attira l'attenzione severa di La Marmora,
-              // qualunque sia l'esito del tiro — è la scelta stessa a costare cara,
-              // non il tiro.
-              prossima: "decalogo-vaira-severo",
+              // Prompt 12: la biforcazione verso il Decalogo si è spostata in
+              // fondo (al momento "fiato-corto"). Qui la risposta prosegue
+              // nella catena condivisa dei nuovi momenti: cambia SOLO
+              // prossima; testo, effetti ed esito restano invariati.
+              prossima: "corri-prima",
             },
             {
               testo: "Con metodo, risparmiando le forze per dopo",
               effetti: { cadenza: 1 },
               esito: "Meno brillanti, ma nessuno resta indietro.",
-              prossima: "decalogo-vaira",
+              prossima: "corri-prima",
             },
             {
               testo: "Aiutando chi fatica di più nel gruppo",
               effetti: { spiritoDiCorpo: 1 },
               esito: "Il tempo è peggiore, ma la squadra arriva unita.",
+              prossima: "corri-prima",
+            },
+          ],
+        },
+        {
+          // MOMENTO 2 (Prompt 12) — «Corri prima»: sola narrazione, un unico
+          // modo di proseguire. Nel motore un "beat" senza scelta si
+          // rappresenta come richiesta con UNA sola risposta, senza tiro e
+          // senza effetti; l'etichetta "Riprendete la corsa" è testo
+          // approvato. `esito` vuoto: non c'è testo d'esito approvato per la
+          // continuazione, il gioco applica (niente) e avanza.
+          id: "corri-prima",
+          situazione:
+            "Un bersagliere si ferma accanto a voi. Sta ricaricando l'arma e non vi guarda: le mani lavorano da sole, gli occhi restano sul campo.\n«Non correte più veloce», dice, come se stesse spiegando una cosa ovvia a gente che dovrebbe già saperla. «Correte prima.»\nChiude l'otturatore con un gesto secco. Solo adesso vi guarda.\n«La velocità non è un dono. È una decisione che prendete ogni mattina, prima ancora di muovervi.»\nRiparte senza aspettare risposta.",
+          prompt: "",
+          risposte: [
+            {
+              testo: "Riprendete la corsa",
+              effetti: {},
+              esito: "",
+              prossima: "ordine-che-non-arriva",
+            },
+          ],
+        },
+        {
+          // MOMENTO 3 (Prompt 12) — tiro su CADENZA. Gli esiti alzano il
+          // Margine +1/+2/+3 (scritti qui: il motore non li applica da solo).
+          // Le risposte a effetto fisso non hanno un testo d'esito approvato:
+          // `esito` resta vuoto (applicano gli effetti e si prosegue).
+          id: "ordine-che-non-arriva",
+          situazione:
+            "La fila si scioglie. Nessun fischio, nessun ordine — solo un uomo che smette di stare fermo, poi un altro, e adesso il campo è pieno di gente che corre e sa dove sta andando.\nVoi siete ancora in riga.\nLa Marmora non vi guarda.",
+          prompt: "E voi?",
+          risposte: [
+            {
+              testo: "Vi muovete. Non sapete dove, ma vi muovete.",
+              competenzaRichiesta: "cadenza",
+              effettiPerEsito: {
+                pieno: { margine: 1 },
+                parziale: { margine: 2 },
+                fallimento: { margine: 3 },
+              },
+              esito: {
+                pieno: "Vi muovete. Non sapete dove, e non importa: il campo vi assorbe come se vi aspettasse. Nessuno vi dice che avete fatto bene. Nessuno vi dice niente.",
+                parziale: "Partite un istante dopo gli altri. Un istante solo. Basta ad arrivare per ultimi dove non c'era più niente da prendere.",
+                fallimento: "Fate due passi e vi fermate, perché nessuno vi ha detto dove andare. Il campo vi scorre attorno. La Marmora passa e non vi guarda: è la cosa peggiore che potesse fare.",
+              },
+              prossima: "decisione-presa-prima",
+            },
+            {
+              testo: "Guardate cosa fanno gli altri, poi li seguite.",
+              effetti: { cadenza: -1, margine: 1 },
+              esito: "",
+              prossima: "decisione-presa-prima",
+            },
+            {
+              testo: "Chiedete cosa si deve fare.",
+              effetti: { passoAvanti: 1, margine: 2 },
+              esito: "",
+              prossima: "decisione-presa-prima",
+            },
+          ],
+        },
+        {
+          // MOMENTO 4 (Prompt 12) — tiro su PRECISIONE.
+          id: "decisione-presa-prima",
+          situazione:
+            "Bersagli di legno in fondo al campo. Gli altri sparano correndo: alzano l'arma, tirano, riprendono il passo senza fermarsi.\nVoi vi accorgete di una cosa: non mirano. Hanno deciso dove sparare mentre stavano ancora arrivando.",
+          prompt: "E voi come tirate?",
+          risposte: [
+            {
+              testo: "Decidete il bersaglio prima di alzare l'arma, e sparate senza rallentare.",
+              competenzaRichiesta: "precisione",
+              effettiPerEsito: {
+                pieno: { margine: 1 },
+                parziale: { margine: 2 },
+                fallimento: { margine: 3 },
+              },
+              esito: {
+                pieno: "Il colpo parte prima che il pensiero lo raggiunga. Il legno si scheggia. Le gambe non hanno mai smesso di correre.",
+                parziale: "Colpite. Ma per farlo avete rubato mezzo secondo al passo, e il mezzo secondo vi resta addosso come un debito.",
+                fallimento: "Alzate l'arma e cercate il bersaglio con gli occhi. È lì che avete perso: il tempo di cercarlo era il tempo di colpirlo.",
+              },
+              prossima: "quando-nessuno-guarda",
+            },
+            {
+              testo: "Vi fermate un istante, mirate bene, poi ripartite.",
+              effetti: { cadenza: -1, margine: 2 },
+              esito: "",
+              prossima: "quando-nessuno-guarda",
+            },
+          ],
+        },
+        {
+          // MOMENTO 5 (Prompt 12) — tiro su PASSO AVANTI.
+          id: "quando-nessuno-guarda",
+          situazione:
+            "La Marmora è dall'altra parte del campo, di spalle. Nessuno vi sta osservando.\nGli uomini attorno a voi continuano a correre. Con la stessa andatura di prima. Nessuno rallenta, e non c'è nessuno da impressionare.",
+          prompt: "E voi?",
+          risposte: [
+            {
+              testo: "Tenete il passo. Anche adesso. Soprattutto adesso.",
+              competenzaRichiesta: "passoAvanti",
+              effettiPerEsito: {
+                pieno: { margine: 1 },
+                parziale: { margine: 2 },
+                fallimento: { margine: 3 },
+              },
+              esito: {
+                pieno: "Non cambiate andatura. Nessuno se ne accorge. È esattamente il punto.",
+                parziale: "Tenete il passo, ma una parte di voi conta i secondi che mancano a quando lui si volterà. Non è la stessa cosa, e lo sapete.",
+                fallimento: "Rallentate. Poco, quasi niente. E quando La Marmora si volta, non vi sta guardando — sta guardando il vostro fiato, che è tornato regolare troppo presto.",
+              },
+              prossima: "fiato-corto",
+            },
+            {
+              testo: "Rallentate. Un po'. Tanto non se ne accorge nessuno.",
+              effetti: { spiritoDiCorpo: -1, margine: 2 },
+              esito: "",
+              prossima: "fiato-corto",
+            },
+          ],
+        },
+        {
+          // MOMENTO 6 (Prompt 12) — tiro su SPIRITO DI CORPO. Questo momento
+          // BIFORCA verso il Decalogo (Decisione B): risposta 0 (fermarsi ad
+          // aiutare) -> decalogo-vaira per TUTTI gli esiti del tiro (conta il
+          // gesto, non la riuscita); risposta 1 (continuare) ->
+          // decalogo-vaira-severo.
+          id: "fiato-corto",
+          situazione:
+            "Uno di voi è piegato sulle ginocchia. Non ce la fa più, e non è una scusa: si vede.\nNessuno si ferma. Non per cattiveria — è che fermarsi non è previsto. Il campo continua a correre come se quel corpo piegato non ci fosse.",
+          prompt: "E voi?",
+          risposte: [
+            {
+              testo: "Vi fermate. Lo tirate su. Ripartite insieme, più lenti.",
+              competenzaRichiesta: "spiritoDiCorpo",
+              effettiPerEsito: {
+                pieno: { margine: 1 },
+                parziale: { margine: 2 },
+                fallimento: { margine: 3 },
+              },
+              esito: {
+                pieno: "Lo tirate su. Ripartite insieme, più lenti degli altri. La Marmora vi vede e non dice niente — ma la sera, quando conterà chi è arrivato, conterà anche come.",
+                parziale: "Lo tirate su. Ci mettete troppo, e quando ripartite il campo è lontano. Arrivate insieme, e tardi.",
+                fallimento: "Vi fermate, e non riuscite a rimetterlo in piedi. Restate lì, in due, mentre tutto il resto corre. È il momento peggiore per capire che non basta volerlo.",
+              },
+              // Biforcazione: chi si è fermato ad aiutare prende il Decalogo
+              // normale, a prescindere dall'esito del tiro.
               prossima: "decalogo-vaira",
+            },
+            {
+              testo: "Continuate. Vi raggiungerà, o non vi raggiungerà.",
+              effetti: { cadenza: 1, spiritoDiCorpo: -2, margine: 2 },
+              esito: "",
+              // Biforcazione: chi ha tirato dritto prende il Decalogo severo.
+              prossima: "decalogo-vaira-severo",
             },
           ],
         },

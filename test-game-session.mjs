@@ -464,20 +464,16 @@ console.log("\n--- Autenticazione: /scegli richiede identita' verificata ---");
   verifica("/scegli con token sbagliato risponde 401", tokenSbagliato.status === 401);
 }
 
-console.log("\n--- Ramificazione: percorso aggressivo verso decalogo-vaira-severo ---");
+console.log("\n--- Catena dei nuovi momenti (Prompt 12) + chiusura del nodo ---");
 {
   const { gs, storage } = nuovaSessione();
   const { giocatoreId, token } = await joinComandante(gs);
-  // Dal Passo 9 questa risposta ha un tiro (competenzaRichiesta: "cadenza");
-  // punteggio forzato molto alto + dado bloccato al massimo per rendere il
-  // tier deterministico ("pieno") anche col colpo secco (dado 1 = fallimento).
+  // La risposta 0 di decalogo-ginnastica ha un tiro (cadenza); punteggio
+  // forzato alto + dado bloccato al massimo per il tier "pieno" deterministico
+  // (col colpo secco un dado 1 darebbe comunque fallimento).
   await impostaCompetenza(storage, giocatoreId, "cadenza", 20);
   await chiamata(gs, "/avvia-nodo", "POST", { nodoId: "1836-torino", giocatoreId, token });
 
-  // Risposta 0 su "decalogo-ginnastica": scelta aggressiva, con tiro.
-  // Tier "pieno": cadenza +3, margine +1 (niente spiritoDiCorpo);
-  // prossima: "decalogo-vaira-severo" a prescindere dal tier (dipende dalla
-  // scelta fatta, non da come va il tiro).
   const primaScelta = await conDadoMassimo(() =>
     chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token })
   );
@@ -488,8 +484,8 @@ console.log("\n--- Ramificazione: percorso aggressivo verso decalogo-vaira-sever
   verifica("l'orologio avanza di 1", primaScelta.json.session.orologio === 1);
   verifica("margine 1 non raggiunge la soglia (5): nessuna complicazione", primaScelta.json.complicazione === null);
   verifica(
-    "la ramificazione porta al ramo severo (dipende dalla scelta, non dal tiro)",
-    primaScelta.json.prossimaRichiesta && primaScelta.json.prossimaRichiesta.id === "decalogo-vaira-severo"
+    "la scelta del momento 1 porta ora alla catena dei nuovi momenti (corri-prima)",
+    primaScelta.json.prossimaRichiesta && primaScelta.json.prossimaRichiesta.id === "corri-prima"
   );
   verifica("il nodo non è ancora concluso (c'è una prossima richiesta)", primaScelta.json.esitoNodo === null);
   verifica("la scelta viene registrata nello storico", primaScelta.json.session.storicoScelte.length === 1);
@@ -509,30 +505,35 @@ console.log("\n--- Ramificazione: percorso aggressivo verso decalogo-vaira-sever
 
   const attivaDopo = await chiamata(gs, "/richiesta-attiva");
   verifica(
-    "la richiesta attiva è ora quella del ramo severo",
-    attivaDopo.json.richiestaAttiva.id === "decalogo-vaira-severo"
+    "la richiesta attiva è ora «Corri prima», il primo dei nuovi momenti",
+    attivaDopo.json.richiestaAttiva.id === "corri-prima"
   );
 
-  // Risposta 0 su "decalogo-vaira-severo": ammette la paura (effetto fisso,
-  // nessun tiro). effetti attesi: passoAvanti +1, margine -1; prossima: null (fine ramo)
-  const secondaScelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
-  verifica("nessun tiro su questa risposta (effetto fisso)", secondaScelta.json.tiro === null);
-  verifica("applica l'effetto su passoAvanti", secondaScelta.json.session.risorseDiSquadra.passoAvanti === 1);
-  verifica("il margine scende con l'effetto negativo (1 - 1 = 0)", secondaScelta.json.session.margine === 0);
-  verifica("l'orologio avanza ancora (ora a 2)", secondaScelta.json.session.orologio === 2);
+  // Traversa la catena condivisa scegliendo l'indice 0 fino a fiato-corto.
+  for (const _ of ["corri-prima", "ordine-che-non-arriva", "decisione-presa-prima", "quando-nessuno-guarda"]) {
+    await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
+  }
+  const attivaFiato = await chiamata(gs, "/richiesta-attiva");
+  verifica("la catena porta al momento 6 (fiato-corto)", attivaFiato.json.richiestaAttiva.id === "fiato-corto");
+
+  // Momento 6 risposta 0 (aiutare) -> Decalogo normale, poi si chiude il nodo.
+  const scelta6 = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
   verifica(
-    "\"prossima\": null chiude il ramo anche se il nodo ha altre richieste altrove",
-    secondaScelta.json.prossimaRichiesta === null
+    "momento 6 risposta 0 porta al Decalogo normale (decalogo-vaira)",
+    scelta6.json.prossimaRichiesta && scelta6.json.prossimaRichiesta.id === "decalogo-vaira"
   );
-  verifica("il nodo si conclude e restituisce un esito", secondaScelta.json.esitoNodo !== null);
-  verifica(
-    "nessuna condizione delle varianti è soddisfatta (spiritoDiCorpo 0, passoAvanti 1): vince il default",
-    secondaScelta.json.esitoNodo === "L'addestramento è finito. Non tutti sono pronti allo stesso modo, ma si corre insieme."
-  );
+  verifica("il nodo non è ancora concluso al momento 6", scelta6.json.esitoNodo === null);
+
+  const attivaVaira = await chiamata(gs, "/richiesta-attiva");
+  verifica("si è nel Decalogo normale", attivaVaira.json.richiestaAttiva.id === "decalogo-vaira");
+  const fine = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
+  verifica("nessun tiro sulla risposta del Decalogo (effetto fisso)", fine.json.tiro === null);
+  verifica("\"prossima\": null chiude il ramo", fine.json.prossimaRichiesta === null);
+  verifica("il nodo si conclude e restituisce un esito", fine.json.esitoNodo !== null);
   verifica(
     "il diario del nodo viene chiuso con concluso_il ed esitoFinale coerenti",
-    secondaScelta.json.session.storicoNodo[0].concluso_il !== null &&
-      secondaScelta.json.session.storicoNodo[0].esitoFinale === secondaScelta.json.esitoNodo
+    fine.json.session.storicoNodo[0].concluso_il !== null &&
+      fine.json.session.storicoNodo[0].esitoFinale === fine.json.esitoNodo
   );
 }
 

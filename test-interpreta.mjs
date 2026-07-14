@@ -140,8 +140,8 @@ console.log("--- /interpreta: esito \"automatica\" ---");
   verifica("il tier del tiro è \"pieno\" (competenza forzata)", json.tiro.esito === "pieno");
   verifica("gli effetti applicati sono quelli della risposta 0, tier pieno (cadenza +3)", json.session.risorseDiSquadra.cadenza === 3);
   verifica(
-    "la ramificazione è quella della risposta 0 (verso decalogo-vaira-severo)",
-    json.prossimaRichiesta && json.prossimaRichiesta.id === "decalogo-vaira-severo"
+    "la ramificazione è quella della risposta 0 (ora verso corri-prima, la catena dei nuovi momenti)",
+    json.prossimaRichiesta && json.prossimaRichiesta.id === "corri-prima"
   );
   verifica(
     "storicoScelte registra la scelta come se fosse stato un click",

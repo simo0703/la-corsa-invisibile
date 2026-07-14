@@ -170,8 +170,8 @@ console.log("\n--- GameSession: con il pool reale iniettato, /scegli usa il test
     json.session.risorseDiSquadra.cadenza === 3 && json.session.margine === 1
   );
   verifica(
-    "la ramificazione resta quella prevista, invariata dal Cronista",
-    json.prossimaRichiesta && json.prossimaRichiesta.id === "decalogo-vaira-severo"
+    "la ramificazione resta quella prevista, invariata dal Cronista (ora corri-prima)",
+    json.prossimaRichiesta && json.prossimaRichiesta.id === "corri-prima"
   );
 }
 

@@ -15,6 +15,7 @@
 // percorso di gioco reale (branching verso decalogo-vaira-severo incluso).
 
 import { GameSession } from "./src/durable-objects/GameSession.js";
+import { GAME_CONFIG } from "./src/game-config.js";
 
 let falliti = 0;
 function verifica(descrizione, condizione) {
@@ -118,8 +119,8 @@ console.log("--- tier pieno (punteggio forzato molto alto + dado bloccato: colpo
       "Il ritmo è perfetto, il corpo risponde a ogni comando: arrivate per primi senza sprecare un solo passo."
   );
   verifica(
-    "la ramificazione va comunque verso il ramo severo (dipende dalla scelta, non dal tiro)",
-    json.prossimaRichiesta && json.prossimaRichiesta.id === "decalogo-vaira-severo"
+    "la ramificazione va comunque verso corri-prima (catena dei nuovi momenti), a prescindere dal tiro",
+    json.prossimaRichiesta && json.prossimaRichiesta.id === "corri-prima"
   );
 }
 
@@ -141,8 +142,8 @@ console.log("\n--- tier fallimento (punteggio forzato molto basso) ---");
       "La fretta vi tradisce: un piede sbaglia l'appoggio, il corpo si spezza per un istante prima di ritrovare l'equilibrio. Arrivate comunque per primi, ma il prezzo pagato si vede."
   );
   verifica(
-    "la ramificazione va comunque verso il ramo severo anche in caso di fallimento",
-    json.prossimaRichiesta && json.prossimaRichiesta.id === "decalogo-vaira-severo"
+    "la ramificazione va comunque verso corri-prima anche in caso di fallimento",
+    json.prossimaRichiesta && json.prossimaRichiesta.id === "corri-prima"
   );
 }
 
@@ -197,8 +198,8 @@ console.log("\n--- coesistenza nello stesso nodo: le altre risposte restano a ef
   verifica("\"con metodo\" applica il suo effetto fisso invariato (cadenza +1)", metodo.json.session.risorseDiSquadra.cadenza === 1);
   verifica("\"con metodo\" mostra ancora il suo esito fisso invariato", metodo.json.esito === "Meno brillanti, ma nessuno resta indietro.");
   verifica(
-    "\"con metodo\" porta al ramo normale, non a quello severo",
-    metodo.json.prossimaRichiesta && metodo.json.prossimaRichiesta.id === "decalogo-vaira"
+    "\"con metodo\" porta anch'essa a corri-prima (la biforcazione si è spostata al momento fiato-corto)",
+    metodo.json.prossimaRichiesta && metodo.json.prossimaRichiesta.id === "corri-prima"
   );
 
   const { gs: gsAiuto, giocatoreId: idAiuto, token: tokenAiuto } = await sessionePronta();
@@ -210,27 +211,118 @@ console.log("\n--- coesistenza nello stesso nodo: le altre risposte restano a ef
   );
 }
 
-console.log("\n--- percorso completo: dalla risposta con tiro alla chiusura del nodo ---");
+console.log("\n--- percorso completo: dalla catena dei nuovi momenti alla chiusura del nodo ---");
 {
   const { gs, storage, giocatoreId, token } = await sessionePronta();
-  await impostaCompetenza(storage, giocatoreId, "cadenza", -10); // forza "fallimento"
+  await impostaCompetenza(storage, giocatoreId, "cadenza", -10); // forza "fallimento" sui tiri di cadenza
 
-  const primaScelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
-  verifica("prima scelta: tiro fallimento registrato", primaScelta.json.tiro.esito === "fallimento");
-  verifica("il nodo non è ancora concluso", primaScelta.json.esitoNodo === null);
-
-  const attiva = await chiamata(gs, "/richiesta-attiva");
-  verifica("si è nel ramo severo dopo il tiro fallito", attiva.json.richiestaAttiva.id === "decalogo-vaira-severo");
-
-  // "decalogo-vaira-severo", risposta 0: ammette la paura (effetto fisso).
-  const secondaScelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
-  verifica("seconda scelta: nessun tiro (effetto fisso)", secondaScelta.json.tiro === null);
-  verifica("il nodo si chiude con un esito finale", secondaScelta.json.esitoNodo !== null);
+  const p1 = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
+  verifica("momento 1: tiro fallimento registrato", p1.json.tiro.esito === "fallimento");
   verifica(
-    "lo storico ha due voci, la prima con tiro e la seconda senza",
-    secondaScelta.json.session.storicoScelte.length === 2 &&
-      secondaScelta.json.session.storicoScelte[0].tiro !== null &&
-      secondaScelta.json.session.storicoScelte[1].tiro === null
+    "momento 1: il nodo non è concluso e si prosegue in catena (corri-prima)",
+    p1.json.esitoNodo === null && p1.json.prossimaRichiesta && p1.json.prossimaRichiesta.id === "corri-prima"
+  );
+
+  // Traversa la catena condivisa fino a fiato-corto, scegliendo sempre l'indice 0.
+  const catena = ["corri-prima", "ordine-che-non-arriva", "decisione-presa-prima", "quando-nessuno-guarda", "fiato-corto"];
+  let lineare = true;
+  for (const atteso of catena) {
+    const attiva = await chiamata(gs, "/richiesta-attiva");
+    if (attiva.json.richiestaAttiva.id !== atteso) lineare = false;
+    if (atteso === "fiato-corto") break;
+    await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
+  }
+  verifica("la catena 1 → corri-prima → 3 → 4 → 5 → 6 è lineare e senza duplicati", lineare);
+
+  // Al momento 6, la risposta 1 ("Continuate…") porta al Decalogo severo.
+  const scelta6 = await chiamata(gs, "/scegli", "POST", { risposteIndice: 1, giocatoreId, token });
+  verifica("momento 6, risposta 1 (continuate): nessun tiro (effetto fisso)", scelta6.json.tiro === null);
+  verifica(
+    "momento 6, risposta 1 porta al Decalogo severo",
+    scelta6.json.prossimaRichiesta && scelta6.json.prossimaRichiesta.id === "decalogo-vaira-severo"
+  );
+
+  // Gioca il Decalogo severo fino alla chiusura del nodo.
+  const attivaSevero = await chiamata(gs, "/richiesta-attiva");
+  verifica("si è nel Decalogo severo", attivaSevero.json.richiestaAttiva.id === "decalogo-vaira-severo");
+  const fine = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
+  verifica("il nodo si chiude con un esito finale", fine.json.esitoNodo !== null);
+  verifica(
+    "il diario del nodo è chiuso con concluso_il ed esitoFinale coerenti",
+    fine.json.session.storicoNodo[0].concluso_il !== null &&
+      fine.json.session.storicoNodo[0].esitoFinale === fine.json.esitoNodo
+  );
+}
+
+console.log("\n--- Prompt 12: struttura dei cinque momenti nuovi (lettura da game-config) ---");
+{
+  const nodo = GAME_CONFIG.nodiTemporali.find((n) => n.id === "1836-torino");
+  const risposteTiro = [];
+  let bonusContesto = 0;
+  for (const r of nodo.richieste) {
+    for (const x of r.risposte) {
+      if (x.competenzaRichiesta) risposteTiro.push(x.competenzaRichiesta);
+      if (x.bonusContesto) bonusContesto += 1;
+    }
+  }
+  verifica("il nodo ha 5 risposte a tiro (cadenza del momento 1 + una per competenza principale)", risposteTiro.length === 5);
+  verifica(
+    "le competenze a tiro coprono cadenza (x2), precisione, passoAvanti, spiritoDiCorpo",
+    risposteTiro.filter((c) => c === "cadenza").length === 2 &&
+      risposteTiro.includes("precisione") &&
+      risposteTiro.includes("passoAvanti") &&
+      risposteTiro.includes("spiritoDiCorpo")
+  );
+  verifica("nessuna risposta del nodo usa bonusContesto", bonusContesto === 0);
+
+  const corri = nodo.richieste.find((r) => r.id === "corri-prima");
+  verifica("«Corri prima» ha una sola risposta", corri.risposte.length === 1);
+  verifica("«Corri prima» non ha tiro", !corri.risposte[0].competenzaRichiesta);
+  verifica(
+    "«Corri prima» non ha effetti (effetti vuoti)",
+    corri.risposte[0].effetti && Object.keys(corri.risposte[0].effetti).length === 0
+  );
+  verifica("«Corri prima» ha l'etichetta approvata «Riprendete la corsa»", corri.risposte[0].testo === "Riprendete la corsa");
+
+  const ids = nodo.richieste.map((r) => r.id);
+  verifica("nessun momento è duplicato (id unici)", new Set(ids).size === ids.length);
+
+  // Biforcazione al momento 6. `prossima` è un campo UNICO sulla risposta
+  // (non per-tier): quindi la risposta 0 porta a decalogo-vaira per pieno,
+  // parziale e fallimento allo stesso modo — provato per costruzione.
+  const fiato = nodo.richieste.find((r) => r.id === "fiato-corto");
+  verifica("fiato-corto risposta 0 è il tiro su spiritoDiCorpo", fiato.risposte[0].competenzaRichiesta === "spiritoDiCorpo");
+  verifica(
+    "fiato-corto risposta 0 porta a decalogo-vaira per TUTTI gli esiti del tiro (prossima unica, non per-tier)",
+    fiato.risposte[0].prossima === "decalogo-vaira"
+  );
+  verifica(
+    "fiato-corto risposta 1 (continuate, fisso) porta a decalogo-vaira-severo",
+    fiato.risposte[1].prossima === "decalogo-vaira-severo"
+  );
+  verifica(
+    "entrambi i Decaloghi restano richieste raggiungibili del nodo",
+    ids.includes("decalogo-vaira") && ids.includes("decalogo-vaira-severo")
+  );
+}
+
+console.log("\n--- Prompt 12: al momento 6 la risposta 0 (aiutare) porta al Decalogo normale, anche col tiro fallito ---");
+{
+  const { gs, storage, giocatoreId, token } = await sessionePronta();
+  // Traversa fino a fiato-corto scegliendo indice 0: cinque scelte, una per
+  // ciascun momento da decalogo-ginnastica a quando-nessuno-guarda.
+  for (const _ of ["decalogo-ginnastica", "corri-prima", "ordine-che-non-arriva", "decisione-presa-prima", "quando-nessuno-guarda"]) {
+    await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
+  }
+  const attiva = await chiamata(gs, "/richiesta-attiva");
+  verifica("si è arrivati a fiato-corto", attiva.json.richiestaAttiva.id === "fiato-corto");
+  // Forza il tiro di spiritoDiCorpo a fallimento: il ramo non deve cambiare.
+  await impostaCompetenza(storage, giocatoreId, "spiritoDiCorpo", -10);
+  const scelta = await chiamata(gs, "/scegli", "POST", { risposteIndice: 0, giocatoreId, token });
+  verifica("il tiro di spiritoDiCorpo è fallimento", scelta.json.tiro && scelta.json.tiro.esito === "fallimento");
+  verifica(
+    "anche col tiro fallito, la risposta 0 porta al Decalogo normale (conta il gesto, non la riuscita)",
+    scelta.json.prossimaRichiesta && scelta.json.prossimaRichiesta.id === "decalogo-vaira"
   );
 }
 
