@@ -58,3 +58,16 @@ export function deveMostrareRifiuto(rifiutoCorrente, ultimoRifiutoScacciato) {
   if (typeof rifiutoCorrente.testoProposta !== "string" || rifiutoCorrente.testoProposta === "") return false;
   return chiaveRifiuto(rifiutoCorrente) !== ultimoRifiutoScacciato;
 }
+
+// Decide se scorrere la pagina fino a un pannello, data la sua visibilità
+// attuale, la chiave di ciò che mostra ora e la chiave dell'ultimo contenuto a
+// cui si è GIÀ scorso su questo dispositivo. Si scorre SOLO alla transizione
+// nascosto→visibile di un contenuto NUOVO: se il pannello è già visibile con la
+// stessa chiave (un redraw da un broadcast qualsiasi) non si scorre, per non
+// strattonare chi sta leggendo o scrivendo. È la parte PURA della decisione;
+// il "è già tutto in viewport?" resta un controllo DOM a parte (vedi
+// scorriSeNecessario in index.html).
+export function deveScorrereAlPannello(visibileOra, chiaveCorrente, ultimaChiaveScorsa) {
+  if (!visibileOra) return false;
+  return chiaveCorrente !== ultimaChiaveScorsa;
+}

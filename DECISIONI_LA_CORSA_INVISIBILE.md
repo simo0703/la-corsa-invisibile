@@ -1,18 +1,18 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 14 luglio 2026, sera. **In produzione fino a `5066667`**: la
-**trilogia WebSocket (Passi 1-2-3)** è stata pushata su `main` e verificata dal
-vivo sul Worker reale (`wss://` su HTTPS, broadcast dopo un'azione). Il tavolo
-condiviso è live: esito/avanzamento del nodo si propagano in tempo reale.
+Aggiornato al: 14 luglio 2026, sera. **In produzione fino a `f7bf54b`**: la
+**trilogia WebSocket (Passi 1-2-3)** e il **Difetto #6** (rifiuto del comandante
+non più muto) sono pushati su `main` e verificati dal vivo sul Worker reale. Il
+tavolo condiviso è live: esito/avanzamento/rifiuto si propagano in tempo reale.
 **In locale, NON ancora pushato** (deploy automatico sul push a `main`, attende
-autorizzazione): un commit per il **Difetto #6** (il rifiuto del comandante non
-è più muto: `session.rifiutoCorrente` + avviso condiviso + pre-fill del
-proponente) — vedi la prima voce del changelog. Batteria di test corrente:
-**30 file `test-*.mjs`, 892 asserzioni, 0 FAIL** — verificata due volte il
-14/07/2026 (28 file storici = 847; `test-vista-esito.mjs` 25; nuovo
-`test-rifiuto-comandante.mjs` 20).
-**PUNTO DI RIPRESA IMMEDIATO**: Difetto #6 fatto e verificato dal vivo, **in
-attesa di autorizzazione al push**. Vedi la voce "Difetto #6" nel changelog.
+autorizzazione): un commit per lo **scroll automatico ai pannelli** (esito, fine
+nodo, avviso di rifiuto): quando un pannello sopra il tavolo appare, la pagina ci
+scorre da sola — ma solo alla transizione nascosto→visibile, mai su un redraw di
+un pannello già visibile. Solo client. Batteria di test corrente:
+**30 file `test-*.mjs`, 897 asserzioni, 0 FAIL** — verificata due volte il
+14/07/2026 (29 file = 867; `test-vista-esito.mjs` 30, esteso con la logica di scroll).
+**PUNTO DI RIPRESA IMMEDIATO**: scroll ai pannelli fatto e verificato dal vivo,
+**in attesa di autorizzazione al push**. Vedi la voce "Scroll ai pannelli".
 Interventi della sessione serale del 13 luglio: **Riconoscimento** — rientro
 in partita e presa di comando (`1d9b592`), **anti-ripetizione del Cronista**
 (`23c402e`), **decisione di design su `bonusContesto`** + commenti allineati
@@ -1027,6 +1027,36 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**14/07/2026 — Scroll automatico ai pannelli sopra il tavolo (FATTO, commit locale)**
+File toccati: `public/index.html`, `public/vista-esito.js`; esteso
+`test-vista-esito.mjs`. Solo client: server, scacciamento, polling/socket **non
+toccati**. **In locale, non pushato** (attende autorizzazione).
+
+- **PROBLEMA**: i pannelli (esito, fine nodo, avviso di rifiuto #6) compaiono
+  SOPRA il tavolo, in cima; ma i giocatori sono quasi sempre scorsi in basso sul
+  momento corrente, quindi non li notano e credono che non sia successo nulla.
+- **SOLUZIONE**: quando `ridisegnaDaStato` fa APPARIRE uno di questi pannelli,
+  la pagina ci scorre da sola (`scrollIntoView({behavior:"smooth",
+  block:"start"})`). Solo alla **transizione nascosto→visibile di un contenuto
+  NUOVO**: ogni pannello tiene la chiave dell'ultimo contenuto a cui si è già
+  scorsi (`ultimaChiaveEsitoScorsa` = `esitoCorrente.richiestaId`;
+  `ultimaChiaveRifiutoScorsa` = `richiestaId:timestamp`), azzerata quando il
+  campo di stato torna null. Un redraw da un broadcast qualsiasi di un pannello
+  GIÀ visibile (stessa chiave) NON riscrolla — verificato dal vivo che chi sta
+  leggendo/scrivendo non viene strattonato. Nessuno scroll se l'elemento è già
+  interamente in viewport (`scorriSeNecessario` controlla `getBoundingClientRect`).
+- **Logica pura/testata** in `public/vista-esito.js`: `deveScorrereAlPannello(
+  visibileOra, chiaveCorrente, ultimaChiaveScorsa)` — la sola decisione "va
+  scrollato ora?" (transizione); il controllo viewport resta DOM. Test in
+  `test-vista-esito.mjs` (25→30). Batteria: **30 file, 897 OK, 0 FAIL** (due volte).
+- **Verificato dal vivo** (`wrangler dev`, viewport mobile): scorso in fondo sul
+  momento, una scelta fa apparire il pannello esito → la pagina risale da sola
+  (scrollY 1978→149, pannello a top=0); idem l'avviso di rifiuto dopo un annulla
+  (scrollY 2330→149); un broadcast (chat) che ridisegna il pannello già visibile
+  NON riscrolla (scrollY invariato a 2454). Zero errori console.
+
+---
 
 **14/07/2026 — Difetto #6: il rifiuto del comandante non è più muto (FATTO, commit locale)**
 File toccati: `src/durable-objects/GameSession.js`, `public/index.html`,

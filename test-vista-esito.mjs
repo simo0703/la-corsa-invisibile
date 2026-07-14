@@ -19,6 +19,7 @@ import {
   deveMostrareEsito,
   chiaveRifiuto,
   deveMostrareRifiuto,
+  deveScorrereAlPannello,
 } from "./public/vista-esito.js";
 
 let falliti = 0;
@@ -141,6 +142,24 @@ console.log("\n--- deveMostrareRifiuto (Difetto #6) ---");
   verifica(
     "un rifiuto NUOVO sullo stesso momento (timestamp diverso) torna a mostrarsi",
     deveMostrareRifiuto({ ...rifiuto, timestamp: "2026-07-14T10:05:00.000Z" }, chiaveRifiuto(rifiuto)) === true
+  );
+}
+
+console.log("\n--- deveScorrereAlPannello (scroll ai pannelli sopra il tavolo) ---");
+{
+  verifica("non visibile: non si scorre", deveScorrereAlPannello(false, "k1", null) === false);
+  verifica(
+    "non visibile anche se la chiave è nuova: non si scorre",
+    deveScorrereAlPannello(false, "k2", "k1") === false
+  );
+  verifica("visibile e mai scorso qui: si scorre", deveScorrereAlPannello(true, "k1", null) === true);
+  verifica(
+    "visibile ma già scorso a questa chiave (redraw): non si scorre",
+    deveScorrereAlPannello(true, "k1", "k1") === false
+  );
+  verifica(
+    "visibile con una chiave nuova (contenuto diverso): si scorre",
+    deveScorrereAlPannello(true, "k2", "k1") === true
   );
 }
 

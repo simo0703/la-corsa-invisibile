@@ -2150,6 +2150,12 @@ let ultimoRifiutoScacciato = null;
 // per il PROPONENTE la cui proposta è stata rifiutata, così il campo torna
 // attivo con la frase già dentro, pronta da correggere (Difetto #6, punto 3).
 let testoLiberoDaRipristinare = null;
+// Chiavi dell'ultimo contenuto a cui si è GIÀ scorsi per i due pannelli sopra
+// il tavolo (esito e avviso di rifiuto): servono a scorrere SOLO alla
+// transizione nascosto→visibile di un contenuto nuovo, mai su un redraw di un
+// pannello già visibile (vedi deveScorrereAlPannello + scorriSeNecessario).
+let ultimaChiaveEsitoScorsa = null;
+let ultimaChiaveRifiutoScorsa = null;
 
 // Azzera lo stato locale del tavolo condiviso quando si (ri)entra in una
 // partita. I richiestaId sono stabili tra stanze diverse (id di game-config,
@@ -2163,6 +2169,22 @@ function resettaTavoloCondiviso() {
   ultimoEsitoNodoGradiForzati = null;
   ultimoRifiutoScacciato = null;
   testoLiberoDaRipristinare = null;
+  ultimaChiaveEsitoScorsa = null;
+  ultimaChiaveRifiutoScorsa = null;
+}
+
+// Scorre la pagina fino a `elemento`, ma SOLO se non è già interamente visibile
+// nella finestra (così un pannello già sotto gli occhi non provoca un salto
+// inutile). Chi decide SE è il momento di scorrere è il chiamante (transizione
+// nascosto→visibile, vedi deveScorrereAlPannello); qui si aggiunge solo il
+// controllo di viewport e lo scroll morbido.
+function scorriSeNecessario(elemento) {
+  if (!elemento) return;
+  const rect = elemento.getBoundingClientRect();
+  const altezzaFinestra = window.innerHeight || document.documentElement.clientHeight;
+  const giaTuttoVisibile = rect.top >= 0 && rect.bottom <= altezzaFinestra;
+  if (giaTuttoVisibile) return;
+  elemento.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 // Il momento da mostrare a tutti, ricavato dallo stato del server: selezione
@@ -2251,6 +2273,8 @@ function aggiornaPannelloEsito(session) {
   if (!e) {
     ultimaRichiestaScacciata = null;
     ultimoEsitoNodoGradiForzati = null;
+    ultimaChiaveEsitoScorsa = null; // nessun esito: il prossimo, anche con lo
+    // stesso richiestaId (rigioco del nodo), tornerà a far scorrere la pagina.
     box.innerHTML = "";
     return;
   }
@@ -2304,6 +2328,14 @@ function aggiornaPannelloEsito(session) {
     ultimaRichiestaScacciata = e.richiestaId;
     ridisegnaDaStato(ULTIMA_SESSIONE);
   });
+
+  // Il pannello sta SOPRA il tavolo, in cima: se è appena apparso (chiave
+  // nuova), porta la pagina fin qui, così non passa inosservato a chi è scorso
+  // in basso sul momento. Un redraw dello stesso esito già visibile non scorre.
+  if (window.VistaEsito.deveScorrereAlPannello(true, e.richiestaId, ultimaChiaveEsitoScorsa)) {
+    ultimaChiaveEsitoScorsa = e.richiestaId;
+    scorriSeNecessario(box);
+  }
 }
 
 // Avviso di rifiuto (Difetto #6): il comandante non ha accolto una proposta di
@@ -2321,6 +2353,7 @@ function aggiornaAvvisoRifiuto(session) {
     // Nessun rifiuto corrente: niente da scacciare, azzera la memoria così un
     // rifiuto successivo (anche sullo stesso momento) tornerà a mostrarsi.
     ultimoRifiutoScacciato = null;
+    ultimaChiaveRifiutoScorsa = null; // e a far scorrere di nuovo la pagina.
     box.innerHTML = "";
     return;
   }
@@ -2342,6 +2375,14 @@ function aggiornaAvvisoRifiuto(session) {
     ultimoRifiutoScacciato = window.VistaEsito.chiaveRifiuto(r);
     ridisegnaDaStato(ULTIMA_SESSIONE);
   });
+
+  // Come il pannello esito: se l'avviso è appena apparso (chiave nuova), porta
+  // la pagina fin qui. Un redraw dello stesso avviso già visibile non scorre.
+  const chiave = window.VistaEsito.chiaveRifiuto(r);
+  if (window.VistaEsito.deveScorrereAlPannello(true, chiave, ultimaChiaveRifiutoScorsa)) {
+    ultimaChiaveRifiutoScorsa = chiave;
+    scorriSeNecessario(box);
+  }
 }
 
 // ===== CLIENT WEBSOCKET (sola lettura) =====
