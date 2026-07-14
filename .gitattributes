@@ -1,0 +1,8 @@
+# Asset binari: mai conversione di fine riga.
+# Senza questo, con core.autocrlf=true (Windows) i PDF verrebbero corrotti in checkout.
+*.pdf  binary
+*.jpg  binary
+*.jpeg binary
+*.png  binary
+*.webp binary
+*.ico  binary

@@ -1,2 +1,6 @@
 node_modules/
 .wrangler/
+
+# Sorgente della copertina ad alta risoluzione (~8 MB): resta fuori dal repo,
+# serve solo in locale a genera-pdf-manuali.py per produrre copertina-stampa.jpg
+manuali/copertina-originale.png
