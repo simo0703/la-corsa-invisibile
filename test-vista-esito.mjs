@@ -14,12 +14,14 @@
 // resta DAL VIVO (nessun DOM sotto Node): vedi il changelog.
 
 import { GAME_CONFIG } from "./src/game-config.js";
+import { richiesteConLibreria } from "./src/lib/interprete-registro-librerie.js";
 import {
   richiestaAttivaDaSessione,
   deveMostrareEsito,
   chiaveRifiuto,
   deveMostrareRifiuto,
   deveScorrereAlPannello,
+  momentoAccettaTestoLibero,
 } from "./public/vista-esito.js";
 
 let falliti = 0;
@@ -161,6 +163,60 @@ console.log("\n--- deveScorrereAlPannello (scroll ai pannelli sopra il tavolo) -
     "visibile con una chiave nuova (contenuto diverso): si scorre",
     deveScorrereAlPannello(true, "k2", "k1") === true
   );
+}
+
+console.log("\n--- momentoAccettaTestoLibero: casi sintetici (Difetto #7) ---");
+{
+  const conLibreria = ["mom-con-libreria", "mom-tiro-e-libreria"];
+  verifica(
+    "momento con libreria ma SENZA tiro → true",
+    momentoAccettaTestoLibero({ id: "mom-con-libreria", risposte: [{ testo: "x" }] }, conLibreria) === true
+  );
+  verifica(
+    "momento con SOLO tiro (competenzaRichiesta), non in elenco librerie → true",
+    momentoAccettaTestoLibero({ id: "mom-solo-tiro", risposte: [{ testo: "x", competenzaRichiesta: "cadenza" }] }, []) === true
+  );
+  verifica(
+    "momento senza tiro né libreria (beat) → false",
+    momentoAccettaTestoLibero({ id: "beat", risposte: [{ testo: "x" }] }, []) === false
+  );
+  verifica("richiesta assente → false", momentoAccettaTestoLibero(null, conLibreria) === false);
+  verifica(
+    "richiesta senza risposte ma in elenco librerie → true (la libreria basta)",
+    momentoAccettaTestoLibero({ id: "mom-con-libreria", risposte: [] }, conLibreria) === true
+  );
+  verifica(
+    "elenco librerie assente: si ricade sul solo tiro",
+    momentoAccettaTestoLibero({ id: "x", risposte: [{ testo: "x", competenzaRichiesta: "cadenza" }] }, undefined) === true
+  );
+}
+
+console.log("\n--- momentoAccettaTestoLibero: DATI REALI di 1836-torino (tabella #7) ---");
+{
+  const nodo = GAME_CONFIG.nodiTemporali.find((n) => n.id === "1836-torino");
+  const conLibreria = richiesteConLibreria(); // dal registro reale, non a mano
+  // Atteso per ogni momento del nodo (true = campo visibile, false = nascosto).
+  const atteso = {
+    "decalogo-ginnastica": true, // tiro (cadenza) + libreria
+    "corri-prima": false, // beat: né tiro né libreria
+    "ordine-che-non-arriva": true, // tiro + libreria
+    "decisione-presa-prima": true, // tiro + libreria
+    "quando-nessuno-guarda": true, // tiro + libreria
+    "fiato-corto": true, // tiro + libreria
+    "decalogo-vaira": true, // libreria SENZA tiro
+    "decalogo-vaira-severo": true, // libreria SENZA tiro
+  };
+  for (const richiesta of nodo.richieste) {
+    const risultato = momentoAccettaTestoLibero(richiesta, conLibreria);
+    verifica(
+      `1836-torino/${richiesta.id}: campo ${atteso[richiesta.id] ? "VISIBILE" : "NASCOSTO"}`,
+      risultato === atteso[richiesta.id]
+    );
+  }
+  // Controllo esplicito della derivazione dai dati: l'elenco esclude il beat e
+  // include un momento del Decalogo che non ha tiro.
+  verifica("richiesteConLibreria() NON include corri-prima", !conLibreria.includes("corri-prima"));
+  verifica("richiesteConLibreria() include decalogo-vaira (libreria senza tiro)", conLibreria.includes("decalogo-vaira"));
 }
 
 console.log(`\n${falliti === 0 ? "Tutti i test passati." : `${falliti} test falliti.`}`);

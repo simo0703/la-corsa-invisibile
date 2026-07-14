@@ -36,6 +36,17 @@ const CARICATORI = {
   "moderna-provocazione": () => import("./interprete-libero/missione-moderna/moderna-provocazione.js"),
 };
 
+// Elenco delle richieste che hanno una libreria dell'interprete registrata:
+// sono le SOLE su cui il testo libero può portare a qualcosa. Deriva dalle
+// chiavi del registro (la fonte unica), non da una lista scritta a mano —
+// aggiungere la libreria di una nuova richiesta la rende automaticamente
+// "interpretabile" anche lato client. Esposta al front-end via /api/config
+// (vedi src/index.js) e usata da momentoAccettaTestoLibero (Difetto #7): il
+// client non ha accesso al registro, quindi gli va passato l'elenco.
+export function richiesteConLibreria() {
+  return Object.keys(CARICATORI);
+}
+
 // Registra (o sovrascrive) il caricatore di una libreria. Usato soprattutto
 // dai test, per iniettare una libreria costruita in modo portabile (con il
 // testo del .md già letto da fs) invece di passare dall'import del .md,

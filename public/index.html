@@ -2452,6 +2452,14 @@ function renderRichiesta(richiesta, nodoAttivo) {
   inAttesaDiInterpretazione = false;
   const area = document.getElementById("area-nodo");
   const nodo = trovaNodo(nodoAttivo);
+  // Difetto #7: il campo di testo libero ha senso SOLO sui momenti che possono
+  // interpretarlo (tiro e/o libreria dell'interprete). Sui "beat" senza né
+  // l'uno né l'altra (es. corri-prima) qualsiasi frase non porterebbe a nulla:
+  // niente campo, solo le risposte fisse. Condizione pura e derivata dai dati
+  // (momentoAccettaTestoLibero), così i nodi futuri la ereditano da soli.
+  const accettaTestoLibero = window.VistaEsito.momentoAccettaTestoLibero(
+    richiesta, CONFIG.richiesteConTestoLibero
+  );
   area.innerHTML = `
     <div class="etichetta">${nodo ? nodo.titolo : ""}</div>
     <div class="situazione-box">
@@ -2460,6 +2468,7 @@ function renderRichiesta(richiesta, nodoAttivo) {
     </div>
     <div class="risposte-lista" id="lista-risposte"></div>
     <p class="errore" id="errore-risposta"></p>
+    ${accettaTestoLibero ? `
     <div class="testo-libero-box" id="testo-libero-box">
       <div class="separatore">oppure</div>
       <div class="campo">
@@ -2468,7 +2477,7 @@ function renderRichiesta(richiesta, nodoAttivo) {
       </div>
       <button class="secondario" id="btn-invia-testo-libero">Invia</button>
       <p class="messaggio-testo-libero" id="messaggio-testo-libero"></p>
-    </div>
+    </div>` : ""}
   `;
 
   const lista = document.getElementById("lista-risposte");
@@ -2482,28 +2491,16 @@ function renderRichiesta(richiesta, nodoAttivo) {
     erroreRisposta.classList.add("mostra");
   }
 
+  // Riferimenti al blocco testo libero: null sui momenti che non lo accettano
+  // (Difetto #7) — disabilitaTutto e la logica sotto li guardano di conseguenza.
   const inputTestoLibero = document.getElementById("input-testo-libero");
   const btnInviaTestoLibero = document.getElementById("btn-invia-testo-libero");
   const messaggioTestoLibero = document.getElementById("messaggio-testo-libero");
 
-  // Difetto #6, punto 3: se sto rientrando come proponente la cui proposta è
-  // stata rifiutata, ripristino la mia frase nel campo (impostata da
-  // ridisegnaDaStato) e le do il focus — pronta da correggere, non da riscrivere.
-  if (testoLiberoDaRipristinare != null) {
-    inputTestoLibero.value = testoLiberoDaRipristinare;
-    testoLiberoDaRipristinare = null;
-    inputTestoLibero.focus();
-  }
-
-  function mostraMessaggioTestoLibero(testo, classe) {
-    messaggioTestoLibero.textContent = testo;
-    messaggioTestoLibero.className = "messaggio-testo-libero mostra" + (classe ? " " + classe : "");
-  }
-
   function disabilitaTutto(disabilitato) {
     lista.querySelectorAll("button.risposta").forEach(b => b.disabled = disabilitato);
-    inputTestoLibero.disabled = disabilitato;
-    btnInviaTestoLibero.disabled = disabilitato;
+    if (inputTestoLibero) inputTestoLibero.disabled = disabilitato;
+    if (btnInviaTestoLibero) btnInviaTestoLibero.disabled = disabilitato;
   }
 
   lista.querySelectorAll("button.risposta").forEach(btn => {
@@ -2526,6 +2523,29 @@ function renderRichiesta(richiesta, nodoAttivo) {
       }
     });
   });
+
+  // Da qui in giù è tutto testo libero: esiste solo dove il momento lo accetta
+  // (Difetto #7). Altrimenti non c'è campo, messaggio né handler da attaccare.
+  if (!accettaTestoLibero) {
+    // Scarta un eventuale pre-fill pendente (in pratica non capita: un rifiuto
+    // avviene solo su momenti interpretabili, che accettano il testo libero).
+    testoLiberoDaRipristinare = null;
+    return;
+  }
+
+  function mostraMessaggioTestoLibero(testo, classe) {
+    messaggioTestoLibero.textContent = testo;
+    messaggioTestoLibero.className = "messaggio-testo-libero mostra" + (classe ? " " + classe : "");
+  }
+
+  // Difetto #6, punto 3: se sto rientrando come proponente la cui proposta è
+  // stata rifiutata, ripristino la mia frase nel campo (impostata da
+  // ridisegnaDaStato) e le do il focus — pronta da correggere, non da riscrivere.
+  if (testoLiberoDaRipristinare != null) {
+    inputTestoLibero.value = testoLiberoDaRipristinare;
+    testoLiberoDaRipristinare = null;
+    inputTestoLibero.focus();
+  }
 
   btnInviaTestoLibero.addEventListener("click", async () => {
     const testoLibero = inputTestoLibero.value.trim();

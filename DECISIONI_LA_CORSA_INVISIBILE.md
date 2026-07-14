@@ -1,18 +1,17 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 14 luglio 2026, sera. **In produzione fino a `f7bf54b`**: la
-**trilogia WebSocket (Passi 1-2-3)** e il **Difetto #6** (rifiuto del comandante
-non più muto) sono pushati su `main` e verificati dal vivo sul Worker reale. Il
-tavolo condiviso è live: esito/avanzamento/rifiuto si propagano in tempo reale.
+Aggiornato al: 14 luglio 2026, sera. **In produzione fino a `77af82e`**:
+trilogia WebSocket (Passi 1-2-3), **Difetto #6** (rifiuto del comandante non più
+muto) e **scroll automatico ai pannelli** sono pushati su `main` e verificati
+dal vivo. Il tavolo condiviso è live e reattivo.
 **In locale, NON ancora pushato** (deploy automatico sul push a `main`, attende
-autorizzazione): un commit per lo **scroll automatico ai pannelli** (esito, fine
-nodo, avviso di rifiuto): quando un pannello sopra il tavolo appare, la pagina ci
-scorre da sola — ma solo alla transizione nascosto→visibile, mai su un redraw di
-un pannello già visibile. Solo client. Batteria di test corrente:
-**30 file `test-*.mjs`, 897 asserzioni, 0 FAIL** — verificata due volte il
-14/07/2026 (29 file = 867; `test-vista-esito.mjs` 30, esteso con la logica di scroll).
-**PUNTO DI RIPRESA IMMEDIATO**: scroll ai pannelli fatto e verificato dal vivo,
-**in attesa di autorizzazione al push**. Vedi la voce "Scroll ai pannelli".
+autorizzazione): un commit per il **Difetto #7** (niente campo di testo libero
+sui momenti che non possono interpretarlo — es. `corri-prima`: né tiro né
+libreria). Batteria di test corrente:
+**30 file `test-*.mjs`, 913 asserzioni, 0 FAIL** — verificata due volte il
+14/07/2026 (29 file = 867; `test-vista-esito.mjs` 46, esteso con la logica #7).
+**PUNTO DI RIPRESA IMMEDIATO**: Difetto #7 fatto e verificato dal vivo,
+**in attesa di autorizzazione al push**. Vedi la voce "Difetto #7".
 Interventi della sessione serale del 13 luglio: **Riconoscimento** — rientro
 in partita e presa di comando (`1d9b592`), **anti-ripetizione del Cronista**
 (`23c402e`), **decisione di design su `bonusContesto`** + commenti allineati
@@ -1027,6 +1026,52 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**14/07/2026 — Difetto #7: niente campo di testo libero sui momenti che non possono interpretarlo (FATTO, commit locale)**
+File toccati: `public/index.html`, `public/vista-esito.js`, `src/index.js`,
+`src/lib/interprete-registro-librerie.js`; esteso `test-vista-esito.mjs`. **In
+locale, non pushato** (attende autorizzazione).
+
+- **PROBLEMA** (verificato dal vivo): il front-end mostrava su OGNI momento il
+  campo "Scrivi con parole tue cosa fate" + "OPPURE". Ma certi momenti (es.
+  `corri-prima` di 1836-torino) non hanno né tiro né libreria dell'interprete:
+  qualsiasi frase lì non poteva portare a nulla.
+- **CONDIZIONE (derivata dai dati, non da un elenco a mano)**: un momento
+  accetta testo libero se ha un **tiro** (una risposta con `competenzaRichiesta`,
+  leggibile dai dati della richiesta) **e/o** una **libreria** dell'interprete
+  registrata per il suo id. Tiro e libreria NON coincidono: in 1836-torino
+  `decalogo-vaira`/`-severo` hanno libreria ma NESSUN tiro (il solo tiro le
+  avrebbe nascoste per errore). La lista delle richieste-con-libreria è la
+  **fonte unica** — le chiavi del registro `CARICATORI`
+  (`interprete-registro-librerie.js` → nuova `richiesteConLibreria()`): i nodi
+  futuri la ereditano aggiungendo la loro libreria, senza toccare altro.
+- **SERVER (minimo, necessario)**: il client non ha accesso al registro, quindi
+  `/api/config` ora espone `richiesteConTestoLibero: richiesteConLibreria()`
+  (index.js resta neutro: nessuna stringa di gioco, solo il relay della funzione
+  del registro). Nessun cambio a GameSession, autenticazione, socket.
+- **CLIENT**: funzione pura `momentoAccettaTestoLibero(richiesta,
+  richiesteConLibreria)` in `vista-esito.js`. In `renderRichiesta`: se `false`,
+  il blocco testo libero (campo, "OPPURE", Invia) NON viene renderizzato — solo
+  le risposte fisse; tutta la logica del testo libero (handler, messaggi,
+  pre-fill #6) è dietro una guardia, e `disabilitaTutto` tollera l'assenza del
+  campo. Sui momenti interpretabili: comportamento identico a prima, pre-fill
+  del rifiuto (#6) incluso.
+- **TABELLA 1836-torino** (asserita sui dati reali in `test-vista-esito.mjs`):
+  decalogo-ginnastica VISIBILE, corri-prima **NASCOSTO**, ordine-che-non-arriva
+  VISIBILE, decisione-presa-prima VISIBILE, quando-nessuno-guarda VISIBILE,
+  fiato-corto VISIBILE, decalogo-vaira VISIBILE, decalogo-vaira-severo VISIBILE.
+  (Solo `corri-prima` cambia: è l'unico beat senza tiro né libreria.)
+- **Test**: `test-vista-esito.mjs` 30→46 (casi sintetici + tabella sui dati
+  reali + derivazione: l'elenco esclude corri-prima e include decalogo-vaira).
+  Batteria: **30 file, 913 OK, 0 FAIL** (due volte).
+- **Verificato dal vivo** (`wrangler dev`): `/api/config` espone
+  `richiesteConTestoLibero` (15, include decalogo-vaira, esclude corri-prima);
+  su decalogo-ginnastica il campo c'è, su corri-prima NO (niente box né
+  "OPPURE", solo "Riprendete la corsa"); il testo libero funziona ancora sui
+  momenti interpretabili e il pre-fill #6 dopo un rifiuto è intatto. Zero errori
+  console.
+
+---
 
 **14/07/2026 — Scroll automatico ai pannelli sopra il tavolo (FATTO, commit locale)**
 File toccati: `public/index.html`, `public/vista-esito.js`; esteso

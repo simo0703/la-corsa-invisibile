@@ -1,5 +1,6 @@
 import { GameSession } from "./durable-objects/GameSession.js";
 import { GAME_CONFIG } from "./game-config.js";
+import { richiesteConLibreria } from "./lib/interprete-registro-librerie.js";
 import {
   registraGiocatore,
   accediGiocatore,
@@ -30,9 +31,14 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    // Config pubblica del gioco (terminologia, ruoli, nodi) — letta dal client
+    // Config pubblica del gioco (terminologia, ruoli, nodi) — letta dal client.
+    // Vi si aggiunge richiesteConTestoLibero: l'elenco (derivato dal registro
+    // delle librerie, non scritto qui) delle richieste su cui il testo libero
+    // può portare a qualcosa; il client lo usa per non mostrare il campo dove
+    // sarebbe inutile (Difetto #7). index.js resta neutro: nessuna stringa di
+    // gioco qui, solo il relay di una funzione del registro.
     if (url.pathname === "/api/config") {
-      return Response.json(GAME_CONFIG);
+      return Response.json({ ...GAME_CONFIG, richiesteConTestoLibero: richiesteConLibreria() });
     }
 
     // Crea una nuova stanza di gioco: nessun codice richiesto, il gioco è gratuito.

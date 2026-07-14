@@ -71,3 +71,25 @@ export function deveScorrereAlPannello(visibileOra, chiaveCorrente, ultimaChiave
   if (!visibileOra) return false;
   return chiaveCorrente !== ultimaChiaveScorsa;
 }
+
+// Difetto #7: un momento accetta testo libero SOLO se qualcosa di scritto può
+// portare a un esito — cioè se ha un tiro (una risposta con competenzaRichiesta,
+// leggibile dai dati della richiesta) e/o una libreria dell'interprete
+// registrata per il suo id. La lista delle richieste con libreria è DATA:
+// deriva dal registro server (Object.keys dei caricatori, esposta al client via
+// /api/config come richiesteConTestoLibero), non da un elenco di id scritto a
+// mano — così i nodi futuri la ereditano senza toccare questa funzione.
+//
+// Nota: tiro e libreria NON coincidono. In 1836-torino le richieste del
+// Decalogo (decalogo-vaira, -severo) hanno una libreria ma NESSUN tiro: il solo
+// tiro le nasconderebbe per errore, per questo serve anche la libreria. Al
+// contrario un momento "beat" come corri-prima non ha né l'uno né l'altra → il
+// campo sparisce.
+export function momentoAccettaTestoLibero(richiesta, richiesteConLibreria) {
+  if (!richiesta) return false;
+  const haTiro = Array.isArray(richiesta.risposte)
+    && richiesta.risposte.some((r) => r && r.competenzaRichiesta);
+  const haLibreria = Array.isArray(richiesteConLibreria)
+    && richiesteConLibreria.includes(richiesta.id);
+  return haTiro || haLibreria;
+}
