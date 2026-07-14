@@ -263,6 +263,58 @@ export class GameSession {
     return pubblica;
   }
 
+  // ===== CANALE WEBSOCKET (SOLO NOTIZIE, MAI COMANDI) =====
+  // Decisione di design: il socket porta solo lo stato pieno pubblico ai client
+  // connessi. NON riceve azioni: tutte le azioni restano su HTTP col token. Il
+  // socket e' anonimo e in sola lettura -- non autentica e non autorizza nulla,
+  // quindi autenticazione/token/Riconoscimento non sono toccati.
+
+  // Manda lo stato pieno pubblico a tutti i socket connessi. Rimuove quelli che
+  // non accettano piu' l'invio (chiusi/morti). No-op se nessuno e' connesso.
+  broadcast(session) {
+    if (this.sockets.size === 0) return;
+    const payload = JSON.stringify({ tipo: "stato", session: this.sessionPubblica(session) });
+    for (const ws of this.sockets) {
+      try {
+        ws.send(payload);
+      } catch {
+        this.sockets.delete(ws);
+      }
+    }
+  }
+
+  // Persiste la sessione E notifica i client connessi: ogni mutazione che gli
+  // altri devono vedere passa di qui invece del solo storage.put. La risposta
+  // HTTP resta identica (il broadcast e' un effetto collaterale, non cambia il
+  // valore restituito dall'endpoint).
+  async salvaSessione(session) {
+    await this.state.storage.put("session", session);
+    this.broadcast(session);
+  }
+
+  // Registra un socket appena connesso e gli manda subito lo stato pieno, cosi'
+  // che un client nuovo parta allineato. I messaggi in arrivo dal client sono
+  // IGNORATI di proposito (sola notizia). Su chiusura/errore il socket viene
+  // tolto dall'elenco.
+  async accettaSocket(server) {
+    server.accept();
+    this.sockets.add(server);
+    const session = await this.initState();
+    try {
+      server.send(JSON.stringify({ tipo: "stato", session: this.sessionPubblica(session) }));
+    } catch {
+      this.sockets.delete(server);
+      return;
+    }
+    // Sola notizia: qualunque messaggio dal client viene scartato senza
+    // eseguire alcuna azione (le azioni sono su HTTP col token).
+    server.addEventListener("message", () => {});
+    const rimuovi = () => this.sockets.delete(server);
+    server.addEventListener("close", rimuovi);
+    server.addEventListener("error", rimuovi);
+  }
+  // ===== FINE CANALE WEBSOCKET =====
+
   // Verifica che (giocatoreId, token) corrispondano a un giocatore reale
   // della stanza -- prova di identita' vera, non solo "questo id esiste".
   // Restituisce { giocatore } se la verifica passa, altrimenti { errore:
@@ -302,6 +354,17 @@ export class GameSession {
   async fetch(request) {
     const url = new URL(request.url);
 
+    // Handshake WebSocket (sola notizia): un client puo' aprire un socket per
+    // ricevere lo stato pieno a ogni cambiamento. Nessuna azione passa di qui
+    // (vedi accettaSocket). Wrapper Cloudflare-only (WebSocketPair/Response
+    // 101); la logica testabile sta in accettaSocket.
+    if (request.headers.get("Upgrade") === "websocket") {
+      const pair = new WebSocketPair();
+      const [client, server] = Object.values(pair);
+      await this.accettaSocket(server);
+      return new Response(null, { status: 101, webSocket: client });
+    }
+
     if (url.pathname.endsWith("/state") && request.method === "GET") {
       const session = await this.initState();
       return Response.json(this.sessionPubblica(session));
@@ -319,7 +382,7 @@ export class GameSession {
       const { tokenCreazione } = await request.json();
       const session = await this.initState();
       session.tokenCreazione = tokenCreazione ?? null;
-      await this.state.storage.put("session", session);
+      await this.salvaSessione(session);
       return Response.json(this.sessionPubblica(session));
     }
 
@@ -391,7 +454,7 @@ export class GameSession {
         token,
         profiloId,
       });
-      await this.state.storage.put("session", session);
+      await this.salvaSessione(session);
       return Response.json({ ...this.sessionPubblica(session), token });
     }
 
@@ -423,7 +486,7 @@ export class GameSession {
       }
 
       session.cessioneComandantePendente = { versoGiocatoreId };
-      await this.state.storage.put("session", session);
+      await this.salvaSessione(session);
       return Response.json(this.sessionPubblica(session));
     }
 
@@ -453,7 +516,7 @@ export class GameSession {
         // Stato incoerente (nessun comandante attuale): scarta la cessione
         // pendente invece di applicarla a una situazione che non torna.
         session.cessioneComandantePendente = null;
-        await this.state.storage.put("session", session);
+        await this.salvaSessione(session);
         return new Response(
           "Il comandante che ha proposto la cessione non e' piu' comandante: cessione annullata",
           { status: 409 }
@@ -463,7 +526,7 @@ export class GameSession {
       comandanteAttuale.comandante = false;
       auth.giocatore.comandante = true;
       session.cessioneComandantePendente = null;
-      await this.state.storage.put("session", session);
+      await this.salvaSessione(session);
       return Response.json(this.sessionPubblica(session));
     }
 
@@ -491,7 +554,7 @@ export class GameSession {
       }
 
       session.cessioneComandantePendente = null;
-      await this.state.storage.put("session", session);
+      await this.salvaSessione(session);
       return Response.json(this.sessionPubblica(session));
     }
 
@@ -520,7 +583,7 @@ export class GameSession {
       if (!record) return Response.json({ esito: "nessun_match" });
       const nuovoToken = crypto.randomUUID();
       record.token = nuovoToken; // invalida il vecchio: la vecchia scheda non agisce piu'
-      await this.state.storage.put("session", session);
+      await this.salvaSessione(session);
       return Response.json({
         esito: "riagganciato",
         token: nuovoToken,
@@ -551,7 +614,7 @@ export class GameSession {
         stato: "in_attesa",
         biglietto,
       };
-      await this.state.storage.put("session", session);
+      await this.salvaSessione(session);
       return Response.json({ biglietto });
     }
 
@@ -572,13 +635,13 @@ export class GameSession {
         // Il diretto interessato ha vetato: dillo esplicitamente al richiedente
         // (distinto dal generico "chiusa"), poi chiudi la richiesta.
         session.riconoscimentoPendente = null;
-        await this.state.storage.put("session", session);
+        await this.salvaSessione(session);
         return Response.json({ stato: "rifiutato" });
       }
       // approvato: consegna il token nuovo e chiude la richiesta.
       const token = p.nuovoToken;
       session.riconoscimentoPendente = null;
-      await this.state.storage.put("session", session);
+      await this.salvaSessione(session);
       return Response.json({
         stato: "approvato",
         token,
@@ -602,7 +665,7 @@ export class GameSession {
         return new Response("Sei gia' il comandante", { status: 400 });
       }
       session.riconoscimentoPendente = { tipo: "comando", versoGiocatoreId: giocatoreId, stato: "in_attesa" };
-      await this.state.storage.put("session", session);
+      await this.salvaSessione(session);
       return Response.json(this.sessionPubblica(session));
     }
 
@@ -628,14 +691,14 @@ export class GameSession {
         const record = session.giocatori.find((g) => g.id === p.versoGiocatoreId);
         if (!record) {
           session.riconoscimentoPendente = null;
-          await this.state.storage.put("session", session);
+          await this.salvaSessione(session);
           return new Response("Il record da riagganciare non esiste piu'", { status: 409 });
         }
         const nuovoToken = crypto.randomUUID();
         record.token = nuovoToken; // invalida il vecchio subito
         p.stato = "approvato";
         p.nuovoToken = nuovoToken; // il richiedente lo raccoglie con /reclama-rientro
-        await this.state.storage.put("session", session);
+        await this.salvaSessione(session);
         return Response.json(this.sessionPubblica(session));
       }
 
@@ -643,14 +706,14 @@ export class GameSession {
       const nuovo = session.giocatori.find((g) => g.id === p.versoGiocatoreId);
       if (!nuovo) {
         session.riconoscimentoPendente = null;
-        await this.state.storage.put("session", session);
+        await this.salvaSessione(session);
         return new Response("Il richiedente non esiste piu'", { status: 409 });
       }
       const comandanteAttuale = session.giocatori.find((g) => g.comandante);
       if (comandanteAttuale) comandanteAttuale.comandante = false;
       nuovo.comandante = true;
       session.riconoscimentoPendente = null;
-      await this.state.storage.put("session", session);
+      await this.salvaSessione(session);
       return Response.json(this.sessionPubblica(session));
     }
 
@@ -681,7 +744,7 @@ export class GameSession {
         // "rifiutato" da fargli scoprire.
         if (biglietto && biglietto === p.biglietto) {
           session.riconoscimentoPendente = null;
-          await this.state.storage.put("session", session);
+          await this.salvaSessione(session);
           return Response.json(this.sessionPubblica(session));
         }
         // Veto del diretto interessato: deve autenticarsi come il record reclamato.
@@ -694,7 +757,7 @@ export class GameSession {
         // lo legge con /reclama-rientro, cosi' scopre di essere stato rifiutato
         // (non un generico "chiusa"). /reclama-rientro azzera alla lettura.
         p.stato = "rifiutato";
-        await this.state.storage.put("session", session);
+        await this.salvaSessione(session);
         return Response.json(this.sessionPubblica(session));
       }
 
@@ -709,7 +772,7 @@ export class GameSession {
         });
       }
       session.riconoscimentoPendente = null;
-      await this.state.storage.put("session", session);
+      await this.salvaSessione(session);
       return Response.json(this.sessionPubblica(session));
     }
     // ===== FINE RICONOSCIMENTO =====
@@ -732,7 +795,7 @@ export class GameSession {
       } else {
         return new Response("Risorsa sconosciuta", { status: 400 });
       }
-      await this.state.storage.put("session", session);
+      await this.salvaSessione(session);
       return Response.json(this.sessionPubblica(session));
     }
 
@@ -765,7 +828,7 @@ export class GameSession {
         concluso_il: null,
         esitoFinale: null,
       });
-      await this.state.storage.put("session", session);
+      await this.salvaSessione(session);
       return Response.json({ session: this.sessionPubblica(session), richiestaAttiva: primaRichiesta });
     }
 
@@ -800,7 +863,7 @@ export class GameSession {
       if (!risposta) return new Response("Risposta sconosciuta", { status: 400 });
 
       const risultato = await this.applicaRisposta(session, richiestaAttiva, risposta, giocatoreId);
-      await this.state.storage.put("session", session);
+      await this.salvaSessione(session);
       return Response.json({ session: this.sessionPubblica(session), ...risultato });
     }
 
@@ -853,7 +916,7 @@ export class GameSession {
           );
         }
         const risultato = await this.applicaRisposta(session, richiestaAttiva, risposta, giocatoreId);
-        await this.state.storage.put("session", session);
+        await this.salvaSessione(session);
         return Response.json({ session: this.sessionPubblica(session), ...risultato });
       }
 
@@ -872,7 +935,7 @@ export class GameSession {
             };
           }),
         };
-        await this.state.storage.put("session", session);
+        await this.salvaSessione(session);
         return Response.json({ esito: "manuale", session: this.sessionPubblica(session) });
       }
 
@@ -901,7 +964,7 @@ export class GameSession {
 
       if (annulla) {
         session.interpretazionePendente = null;
-        await this.state.storage.put("session", session);
+        await this.salvaSessione(session);
         return Response.json({ session: this.sessionPubblica(session) });
       }
 
@@ -913,7 +976,7 @@ export class GameSession {
         // frattempo): scarta senza applicare, invece di rischiare di
         // applicare una risposta alla richiesta sbagliata.
         session.interpretazionePendente = null;
-        await this.state.storage.put("session", session);
+        await this.salvaSessione(session);
         return new Response("La richiesta non e' piu' attiva: interpretazione scartata", { status: 409 });
       }
       const risposta = richiestaAttiva.risposte[risposteIndice];
@@ -921,7 +984,7 @@ export class GameSession {
 
       const risultato = await this.applicaRisposta(session, richiestaAttiva, risposta, pendente.giocatoreId);
       session.interpretazionePendente = null;
-      await this.state.storage.put("session", session);
+      await this.salvaSessione(session);
       return Response.json({ session: this.sessionPubblica(session), ...risultato });
     }
 
@@ -960,7 +1023,7 @@ export class GameSession {
       });
       session.chat = session.chat.slice(-200);
 
-      await this.state.storage.put("session", session);
+      await this.salvaSessione(session);
       return Response.json(this.sessionPubblica(session));
     }
 
