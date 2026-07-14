@@ -544,6 +544,12 @@
     font-size: 0.78rem;
   }
 
+  /* Pannello dell'esito (Passo 3): sopra il tavolo, comune a tutti. Contiene
+     .esito-box e, a fine nodo, .esito-finale-box (già stilizzati sotto).
+     Nascosto quando non c'è nulla da mostrare (:empty). */
+  #pannello-esito:empty { display: none; }
+  #pannello-esito { margin-bottom: 18px; }
+
   .esito-box {
     background: var(--bg-panel-raised);
     border: 1px solid var(--brass);
@@ -552,6 +558,14 @@
     margin-bottom: 20px;
   }
   .esito-box .etichetta { margin-bottom: 10px; }
+  /* Complicazione da margine dentro il pannello esito (prima non mostrata al
+     client): richiamo crimson, sotto il testo dell'esito. */
+  .esito-box .testo-complicazione {
+    font-size: 0.98rem;
+    line-height: 1.55;
+    color: var(--crimson-bright);
+    margin: 12px 0 0;
+  }
   .esito-box .dettaglio-tiro {
     font-family: var(--font-mono);
     font-size: 0.8rem;
@@ -928,6 +942,16 @@
     letter-spacing: 0.05em;
   }
 </style>
+<!-- Logica PURA condivisa del tavolo condiviso (Passo 3), esposta come
+     window.VistaEsito per lo script principale qui sotto. Modulo statico in
+     public/, lo STESSO file importato dai test Node (public/vista-esito.js):
+     nessuna duplicazione della decisione "quale momento / mostra esito". È un
+     modulo (deferred): il suo primo uso avviene solo dopo il caricamento della
+     config e del primo stato, quando window.VistaEsito è già impostato. -->
+<script type="module">
+  import * as VistaEsito from "/vista-esito.js";
+  window.VistaEsito = VistaEsito;
+</script>
 </head>
 <body>
 <div class="wrap">
@@ -1000,6 +1024,10 @@
        chat a destra) a prescindere dall'ordine del DOM. -->
   <section id="schermo-gioco" class="schermo">
     <div class="zona-gioco">
+      <!-- Pannello dell'esito (Passo 3): sopra il tavolo, comune a tutti,
+           scacciabile con CONTINUA. Popolato da aggiornaPannelloEsito() dallo
+           stato condiviso (session.esitoCorrente); vuoto = nascosto. -->
+      <div id="pannello-esito"></div>
       <div class="tavolo-vista" id="tavolo-vista"></div>
 
       <div class="contenuto-scuro">
@@ -1362,6 +1390,7 @@ async function avvia() {
 
   if (STATO.roomId && STATO.nome) {
     // già dentro una stanza con un nome: vai dritto al gioco
+    resettaTavoloCondiviso();
     mostraSchermo("schermo-gioco");
     await aggiornaSchermataGioco();
     avviaPolling();
@@ -1392,6 +1421,7 @@ async function applicaIdentitaRiagganciata(risposta) {
   STATO.tokenCreazione = null;
   salvaStato();
   fermaPollingRientro();
+  resettaTavoloCondiviso();
   mostraSchermo("schermo-gioco");
   await aggiornaSchermataGioco();
   avviaPolling();
@@ -1771,6 +1801,7 @@ async function eseguiJoin(nome, ruolo) {
     // l'abbia fatto (es. era già stato consumato da un altro tentativo).
     STATO.tokenCreazione = null;
     salvaStato();
+    resettaTavoloCondiviso();
     mostraSchermo("schermo-gioco");
     await aggiornaSchermataGioco();
     avviaPolling();
@@ -1811,6 +1842,7 @@ function mostraAvvisoIdentitaEsistente(nomeNuovo, ruoloNuovo) {
     // aveva, invece di lasciarlo bloccato su una schermata di join ormai
     // superflua.
     nascondiAvvisoIdentitaEsistente();
+    resettaTavoloCondiviso();
     mostraSchermo("schermo-gioco");
     await aggiornaSchermataGioco();
     avviaPolling();
@@ -2054,30 +2086,222 @@ function renderSelezioneNodo() {
   });
 }
 
-// Applica il risultato di una scelta già decisa dal server (bottone
-// cliccato, testo libero risolto in automatico, o risolto a mano dal
-// comandante) — stesso rendering per tutti e tre i casi, mai duplicato.
-// `risultato` ha sempre la stessa forma: { session, esito, prossimaRichiesta,
-// esitoNodo, complicazione, tiro, competenzaId }.
-async function mostraRisultatoScelta(risultato) {
-  renderRisorse(risultato.session.risorseDiSquadra);
-  // Forza il ricalcolo dei gradi SOLO quando un nodo si è appena chiuso:
-  // è l'unico momento in cui l'XP (e quindi il grado) può essere cambiato
-  // per chi ha un profiloId (vedi assegnaXpNodoCompletato in GameSession.js).
-  await aggiornaGradiPerRoster(risultato.session.giocatori, { forza: !!risultato.esitoNodo });
-  renderGiocatori(risultato.session.giocatori);
-  renderTavolo(risultato.session.giocatori);
-  renderSchedaPersonale(risultato.session.giocatori);
-  const competenzaInfo = risultato.competenzaId ? CONFIG.competenze[risultato.competenzaId] : null;
-  const nomeCompetenza = competenzaInfo ? competenzaInfo.nome : risultato.competenzaId;
-  mostraEsito(
-    risultato.esito,
-    risultato.prossimaRichiesta,
-    risultato.esitoNodo,
-    risultato.session.nodoAttivo,
-    risultato.tiro,
-    nomeCompetenza
-  );
+// ===== TAVOLO CONDIVISO (Passo 3/3): un'unica funzione di ridisegno =====
+// Ogni percorso che porta uno stato nuovo (socket, polling, risposta a
+// un'azione, refresh autoritativo) finisce in ridisegnaDaStato(): riceve la
+// sessione PUBBLICA e ridisegna tutto ciò che dipende dallo stato — risorse,
+// giocatori/tavolo, scheda, pannello comandante, chat, Riconoscimento, il
+// MOMENTO corrente del nodo (deciso dal server, mai dalla navigazione locale)
+// e il pannello dell'esito. Non fa MAI chiamate di gioco: legge e disegna.
+
+// Ultimo stato pubblico ricevuto: serve al bottone CONTINUA del pannello
+// esito, che ridisegna senza interrogare di nuovo il server.
+let ULTIMA_SESSIONE = null;
+// Richiesta il cui esito è già stato "scacciato" (dismesso) su QUESTO
+// dispositivo: locale, non persistito. Azzerata quando lo stato non ha un
+// esito corrente (cambio nodo) e all'ingresso in una partita.
+let ultimaRichiestaScacciata = null;
+// Chiave del momento attualmente disegnato in #area-nodo: evita di ricostruire
+// l'area (cancellando testo in digitazione o bottoni in uso) a ogni push di
+// stato quando il momento NON è cambiato. Il refresh autoritativo
+// (aggiornaSchermataGioco) la azzera per forzare comunque il ridisegno.
+let momentoRenderizzato = null;
+// Deduplica il refresh forzato dei gradi alla chiusura di un nodo (un nodo si
+// chiude una volta sola: senza deduplica, ogni push col medesimo esito di fine
+// nodo rifarebbe la query gradi finché l'esito resta a schermo).
+let ultimoEsitoNodoGradiForzati = null;
+
+// Azzera lo stato locale del tavolo condiviso quando si (ri)entra in una
+// partita. I richiestaId sono stabili tra stanze diverse (id di game-config,
+// non UUID): senza questo reset un esito già scacciato in una stanza
+// resterebbe nascosto in un'altra, o un momento identico non verrebbe
+// ridisegnato al cambio stanza.
+function resettaTavoloCondiviso() {
+  ULTIMA_SESSIONE = null;
+  ultimaRichiestaScacciata = null;
+  momentoRenderizzato = null;
+  ultimoEsitoNodoGradiForzati = null;
+}
+
+// Il momento da mostrare a tutti, ricavato dallo stato del server: selezione
+// del nodo se non c'è un nodo attivo (o è esaurito), altrimenti la richiesta
+// attiva. La logica di "quale richiesta" è condivisa col server tramite
+// public/vista-esito.js (window.VistaEsito), la stessa coperta dai test.
+function calcolaMomento(session) {
+  if (!session.nodoAttivo) return { tipo: "selezione" };
+  const richiesta = window.VistaEsito.richiestaAttivaDaSessione(session, CONFIG.nodiTemporali);
+  if (!richiesta) return { tipo: "selezione" };
+  return { tipo: "richiesta", richiesta, nodoAttivo: session.nodoAttivo };
+}
+
+async function ridisegnaDaStato(session) {
+  if (!session) return;
+  ULTIMA_SESSIONE = session;
+
+  aggiornaComandanteDaSessione(session.giocatori);
+  renderRisorse(session.risorseDiSquadra);
+
+  // Gradi: forza il refresh SOLO alla prima comparsa dell'esito di fine nodo
+  // (unico momento in cui l'XP, e quindi il grado, può cambiare) — stesso
+  // comportamento del vecchio mostraRisultatoScelta, ma deduplicato per non
+  // rifare la query a ogni push finché l'esito resta a schermo.
+  const esito = session.esitoCorrente;
+  const fineNodo = !!(esito && esito.esitoNodo);
+  const forzaGradi = fineNodo && esito.richiestaId !== ultimoEsitoNodoGradiForzati;
+  if (forzaGradi) ultimoEsitoNodoGradiForzati = esito.richiestaId;
+  await aggiornaGradiPerRoster(session.giocatori, { forza: forzaGradi });
+
+  renderGiocatori(session.giocatori);
+  renderTavolo(session.giocatori);
+  renderSchedaPersonale(session.giocatori);
+  renderPannelloComandante(session);
+  renderPromptCessione(session);
+  applicaTexturaNodo(session.nodoAttivo);
+  setupChat();
+  renderChat(session.chat);
+  renderRiconoscimento(session);
+  renderRigaComandoDefilata(session);
+  verificaEsitoComando(session);
+
+  // MOMENTO: ridisegnato solo se la sua chiave è cambiata, oppure per sbloccare
+  // chi aspettava che il comandante risolvesse il proprio testo libero ambiguo
+  // (l'interpretazione pendente si è chiusa senza far avanzare la richiesta).
+  const momento = calcolaMomento(session);
+  const chiave = momento.tipo === "selezione"
+    ? "selezione"
+    : `richiesta:${momento.nodoAttivo}:${momento.richiesta.id}`;
+  const sbloccaInterpretazione = inAttesaDiInterpretazione && !session.interpretazionePendente;
+  if (chiave !== momentoRenderizzato || sbloccaInterpretazione) {
+    momentoRenderizzato = chiave;
+    if (momento.tipo === "selezione") {
+      inAttesaDiInterpretazione = false;
+      renderSelezioneNodo();
+    } else {
+      renderRichiesta(momento.richiesta, momento.nodoAttivo);
+    }
+  }
+
+  // PANNELLO ESITO: sopra il tavolo, scacciabile (non più navigazione locale).
+  aggiornaPannelloEsito(session);
+}
+
+// Pannello dell'esito appena prodotto, mostrato SOPRA il tavolo e comune a
+// tutti (viene dallo stato condiviso session.esitoCorrente, non dalla risposta
+// HTTP del solo attore). CONTINUA lo scaccia senza interrogare il server:
+// sotto c'è già il momento nuovo, ridisegnato da ridisegnaDaStato.
+function aggiornaPannelloEsito(session) {
+  const box = document.getElementById("pannello-esito");
+  if (!box) return;
+  const e = session.esitoCorrente;
+  // Nessun esito corrente (es. cambio nodo): niente da scacciare, azzera la
+  // memoria così un momento successivo con lo STESSO richiestaId (rigioco dello
+  // stesso nodo) tornerà a mostrare il proprio esito.
+  if (!e) {
+    ultimaRichiestaScacciata = null;
+    ultimoEsitoNodoGradiForzati = null;
+    box.innerHTML = "";
+    return;
+  }
+  if (!window.VistaEsito.deveMostrareEsito(e, ultimaRichiestaScacciata)) {
+    box.innerHTML = "";
+    return;
+  }
+
+  const competenzaInfo = e.competenzaId ? CONFIG.competenze[e.competenzaId] : null;
+  const nomeCompetenza = competenzaInfo ? competenzaInfo.nome : e.competenzaId;
+  const dettaglioTiro = e.tiro
+    ? `<p class="dettaglio-tiro">${nomeCompetenza || "Competenza"} ${e.tiro.competenza} + dado ${e.tiro.dado} = ${e.tiro.totale} → ${e.tiro.esito}</p>`
+    : "";
+  const complicazioneHtml = e.complicazione
+    ? `<p class="testo-complicazione">${e.complicazione}</p>`
+    : "";
+
+  let fineNodoHtml = "";
+  if (e.esitoNodo) {
+    // Invito post-sessione (Passo 4): solo per gli ospiti senza profilo
+    // collegato. Nome passato come suggerimento in query string (mai dati
+    // sensibili). Identico a quello del vecchio .esito-finale-box.
+    const invitoProfilo = PROFILO_COLLEGATO ? "" : `
+      <div class="invito-profilo">
+        <p>Vuoi conservare questo grado? <a href="/arruolati.html?nome=${encodeURIComponent(STATO.nome || "")}">Arruolati</a> per portarlo alla prossima sessione.</p>
+      </div>`;
+    fineNodoHtml = `
+      <div class="esito-finale-box">
+        <div class="etichetta">Fine del nodo</div>
+        <p class="testo-esito">${e.esitoNodo}</p>
+        ${invitoProfilo}
+      </div>`;
+  }
+
+  // A fine nodo il momento sotto è già la selezione del prossimo nodo: il
+  // bottone lo dice, ma fa comunque solo "scaccia".
+  const etichettaBottone = e.esitoNodo ? "Scegli un altro Nodo Temporale" : "Continua";
+  box.innerHTML = `
+    <div class="esito-box">
+      <div class="etichetta">Esito</div>
+      ${dettaglioTiro}
+      <p class="testo-esito">${e.esito}</p>
+      ${complicazioneHtml}
+    </div>
+    ${fineNodoHtml}
+    <button class="principale" id="btn-continua-esito">${etichettaBottone}</button>
+  `;
+  document.getElementById("btn-continua-esito").addEventListener("click", () => {
+    // Solo locale: segna questo esito come scacciato e ridisegna dall'ultimo
+    // stato ricevuto. Nessuna chiamata al server (il momento nuovo è già sotto).
+    ultimaRichiestaScacciata = e.richiestaId;
+    ridisegnaDaStato(ULTIMA_SESSIONE);
+  });
+}
+
+// ===== CLIENT WEBSOCKET (sola lettura) =====
+// Apre un socket verso la stessa stanza del Durable Object (stesso host/path
+// del polling, upgrade a WebSocket). Riceve SOLO notizie: a ogni messaggio
+// { tipo:"stato", session } ridisegna. NON invia MAI nulla sul socket — tutte
+// le azioni restano su HTTP col token. Riconnessione con attesa crescente
+// (2s, 4s, 8s… tetto 30s), senza limite di tentativi.
+let socket = null;
+let socketBackoff = 2000;
+let timerRiconnessione = null;
+
+function urlSocket() {
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${location.host}/api/stanza/${STATO.roomId}/socket`;
+}
+
+function connettiSocket() {
+  if (!STATO.roomId) return;
+  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
+  let ws;
+  try {
+    ws = new WebSocket(urlSocket());
+  } catch (e) {
+    programmaRiconnessione();
+    return;
+  }
+  socket = ws;
+  ws.addEventListener("open", () => { socketBackoff = 2000; }); // connesso: riparte da 2s
+  ws.addEventListener("message", (ev) => {
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch (e) { return; }
+    if (msg && msg.tipo === "stato" && msg.session) {
+      ridisegnaDaStato(msg.session);
+    }
+  });
+  ws.addEventListener("close", programmaRiconnessione);
+  // Un errore precede tipicamente una chiusura: chiudo e lascio che sia
+  // "close" a programmare la riconnessione (una sola volta).
+  ws.addEventListener("error", () => { try { ws.close(); } catch (e) {} });
+}
+
+function programmaRiconnessione() {
+  if (socket && socket.readyState === WebSocket.OPEN) return;
+  if (timerRiconnessione) return; // già programmata
+  timerRiconnessione = setTimeout(() => {
+    timerRiconnessione = null;
+    connettiSocket();
+  }, socketBackoff);
+  socketBackoff = Math.min(socketBackoff * 2, 30000); // 2→4→8…→30s (tetto)
 }
 
 // ESPERIMENTO: se true, questa richiesta ha già mostrato di NON avere una
@@ -2153,7 +2377,9 @@ function renderRichiesta(richiesta, nodoAttivo) {
           { risposteIndice: indice },
           mostraErroreRisposta
         );
-        await mostraRisultatoScelta(risultato);
+        // La risposta include la sessione aggiornata (con esitoCorrente):
+        // ridisegna tutto da lì — il momento avanza e il pannello esito appare.
+        await ridisegnaDaStato(risultato.session);
       } catch (e) {
         disabilitaTutto(false);
         if (!e.sessioneNonValida) mostraErroreRisposta("Qualcosa è andato storto. Riprova.");
@@ -2191,8 +2417,8 @@ function renderRichiesta(richiesta, nodoAttivo) {
         return;
       }
 
-      // Automatica: stessa gestione del click su un bottone.
-      await mostraRisultatoScelta(risultato);
+      // Automatica: stessa gestione del click su un bottone (ridisegno condiviso).
+      await ridisegnaDaStato(risultato.session);
     } catch (e) {
       if (e.sessioneNonValida) {
         disabilitaTutto(false);
@@ -2211,49 +2437,10 @@ function renderRichiesta(richiesta, nodoAttivo) {
   });
 }
 
-function mostraEsito(testoEsito, prossimaRichiesta, esitoNodo, nodoAttivo, tiro, nomeCompetenza) {
-  const area = document.getElementById("area-nodo");
-  // Il dettaglio del tiro (competenza + dado = totale -> esito) esiste solo
-  // per le risposte con competenzaRichiesta: le altre non hanno tiro,
-  // restano come prima (solo il testo dell'esito).
-  const dettaglioTiro = tiro
-    ? `<p class="dettaglio-tiro">${nomeCompetenza || "Competenza"} ${tiro.competenza} + dado ${tiro.dado} = ${tiro.totale} → ${tiro.esito}</p>`
-    : "";
-  area.innerHTML = `
-    <div class="esito-box">
-      <div class="etichetta">Esito</div>
-      ${dettaglioTiro}
-      <p class="testo-esito">${testoEsito}</p>
-    </div>
-    <div id="prosegui"></div>
-  `;
-  const prosegui = document.getElementById("prosegui");
-  if (esitoNodo) {
-    // Invito post-sessione (Passo 4): solo per chi NON ha un profilo
-    // collegato (PROFILO_COLLEGATO, vedi Passo 3) -- chi ha già fatto
-    // login non deve vederlo. Nome scelto in partita passato come
-    // suggerimento in query string (mai dati sensibili: solo il nome).
-    const invitoProfilo = PROFILO_COLLEGATO ? "" : `
-      <div class="invito-profilo">
-        <p>Vuoi conservare questo grado? <a href="/arruolati.html?nome=${encodeURIComponent(STATO.nome || "")}">Arruolati</a> per portarlo alla prossima sessione.</p>
-      </div>
-    `;
-    prosegui.innerHTML = `
-      <div class="esito-finale-box">
-        <div class="etichetta">Fine del nodo</div>
-        <p class="testo-esito">${esitoNodo}</p>
-        <button class="secondario" id="btn-altro-nodo">Scegli un altro Nodo Temporale</button>
-        ${invitoProfilo}
-      </div>
-    `;
-    document.getElementById("btn-altro-nodo").addEventListener("click", renderSelezioneNodo);
-  } else if (prossimaRichiesta) {
-    prosegui.innerHTML = `<button class="principale" id="btn-continua">Continua</button>`;
-    document.getElementById("btn-continua").addEventListener("click", () => {
-      renderRichiesta(prossimaRichiesta, nodoAttivo);
-    });
-  }
-}
+// (Il vecchio mostraEsito, che disegnava l'esito DENTRO #area-nodo come
+// navigazione locale, è stato sostituito nel Passo 3 da aggiornaPannelloEsito:
+// l'esito è ora un pannello scacciabile SOPRA il tavolo, comune a tutti e
+// derivato dallo stato condiviso session.esitoCorrente.)
 
 // Nome (con grado, se noto) del comandante corrente secondo l'ultimo roster
 // ricevuto dal server. Serve SOLO alla seconda riga dei messaggi d'errore
@@ -2658,74 +2845,36 @@ function setupChat() {
   });
 }
 
+// Refresh autoritativo dello stato: legge /state una volta e ridisegna tutto
+// da lì. Usato all'ingresso in partita e dopo le azioni deliberate (pannello
+// comandante, Riconoscimento, cessione). Il momento (richiesta attiva o
+// selezione nodo) è ora ricavato client-side dallo stato dentro
+// ridisegnaDaStato, quindi non serve più la seconda chiamata a
+// /richiesta-attiva. Azzera momentoRenderizzato per forzare comunque il
+// ridisegno del momento anche a chiave invariata (es. cambio stanza con la
+// stessa "selezione nodo" sotto): gli aggiornamenti incrementali via
+// socket/polling rispettano invece il guard di momentoRenderizzato.
 async function aggiornaSchermataGioco() {
   document.getElementById("testo-codice-stanza").textContent = "stanza " + STATO.roomId.slice(0, 8);
-
-  const [, { session: session2, richiestaAttiva }] = await Promise.all([
-    chiamaAPI(`/api/stanza/${STATO.roomId}/state`),
-    chiamaAPI(`/api/stanza/${STATO.roomId}/richiesta-attiva`),
-  ]);
-
-  aggiornaComandanteDaSessione(session2.giocatori);
-  renderRisorse(session2.risorseDiSquadra);
-  await aggiornaGradiPerRoster(session2.giocatori);
-  renderGiocatori(session2.giocatori);
-  renderTavolo(session2.giocatori);
-  renderSchedaPersonale(session2.giocatori);
-  renderPannelloComandante(session2);
-  renderPromptCessione(session2);
-  applicaTexturaNodo(session2.nodoAttivo);
-  setupChat();
-  renderChat(session2.chat);
-  renderRiconoscimento(session2);
-  renderRigaComandoDefilata(session2);
-  verificaEsitoComando(session2);
-
-  if (!session2.nodoAttivo) {
-    renderSelezioneNodo();
-  } else if (richiestaAttiva) {
-    renderRichiesta(richiestaAttiva, session2.nodoAttivo);
-  } else {
-    // nodo esaurito ma non stiamo mostrando l'esito in questo momento
-    // (es. dopo un refresh di pagina): mostriamo la scelta del prossimo nodo
-    renderSelezioneNodo();
-  }
+  const session = await chiamaAPI(`/api/stanza/${STATO.roomId}/state`);
+  momentoRenderizzato = null;
+  await ridisegnaDaStato(session);
 }
 
+// Il polling è la RETE DI SICUREZZA del socket: resta sempre attivo, anche a
+// socket vivo, ma con intervallo ampio (30s, prima 6s). Anche lui finisce in
+// ridisegnaDaStato, la stessa funzione del socket — nessuna logica duplicata,
+// inclusa la deduplica del momento e lo sblocco dell'attesa di interpretazione.
 let intervalloPolling = null;
 function avviaPolling() {
+  connettiSocket(); // via primaria della propagazione real-time; idempotente
   if (intervalloPolling) return;
   intervalloPolling = setInterval(async () => {
     try {
       const session = await chiamaAPI(`/api/stanza/${STATO.roomId}/state`);
-      aggiornaComandanteDaSessione(session.giocatori);
-      renderRisorse(session.risorseDiSquadra);
-      // Cache-aware (vedi aggiornaGradiPerRoster): a ogni tick di polling
-      // (ogni 6s) non genera una richiesta di rete a meno che non sia
-      // apparso un profiloId mai visto prima in questa stanza.
-      await aggiornaGradiPerRoster(session.giocatori);
-      renderGiocatori(session.giocatori);
-      renderTavolo(session.giocatori);
-      renderSchedaPersonale(session.giocatori);
-      renderPannelloComandante(session);
-      renderPromptCessione(session);
-      applicaTexturaNodo(session.nodoAttivo);
-      renderChat(session.chat);
-      renderRiconoscimento(session);
-      renderRigaComandoDefilata(session);
-      verificaEsitoComando(session);
-
-      // Se questo giocatore stava aspettando che il comandante risolvesse
-      // il suo testo libero ambiguo, e non c'è più nulla in attesa,
-      // aggiorna tutta la schermata di gioco (bottoni sbloccati, prossima
-      // richiesta o selezione nodo a seconda di come è stata risolta) —
-      // senza bisogno che il giocatore ricarichi la pagina a mano.
-      if (inAttesaDiInterpretazione && !session.interpretazionePendente) {
-        inAttesaDiInterpretazione = false;
-        await aggiornaSchermataGioco();
-      }
+      await ridisegnaDaStato(session);
     } catch (e) {}
-  }, 6000);
+  }, 30000);
 }
 
 avvia();

@@ -1,9 +1,20 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 14 luglio 2026 (in produzione e su `origin/main` fino a
-`3b553d2`; questo aggiornamento allinea al codice reale le sezioni rimaste
-indietro). Batteria di test corrente: **25 file `test-*.mjs`, 757
-asserzioni, 0 FAIL** — verificata due volte il 14/07/2026.
+Aggiornato al: 14 luglio 2026, sera. **In produzione fino a `bf58d64`**
+(nodo 1836-torino completo: librerie testo libero dei 4 momenti + frammenti
+di scena del Cronista). **In locale, NON ancora pushati** (deploy automatico
+sul push a `main`, attende autorizzazione): i TRE commit del lavoro WebSocket
+`98596e6` (Passo 1/3, `esitoCorrente`), `e2f9870` (Passo 2/3, canale WS di
+sola notizia) e il commit del Passo 3/3 (front-end consumatore dello stato
+condiviso) — vedi la prima voce del changelog. Batteria di test corrente:
+**29 file `test-*.mjs`, 863 asserzioni, 0 FAIL** — verificata due volte il
+14/07/2026 (i 28 file preesistenti restano 847; il nuovo
+`test-vista-esito.mjs` aggiunge 16).
+**PUNTO DI RIPRESA IMMEDIATO**: la trilogia WebSocket (Passi 1-2-3) è
+**COMPLETA in locale**, propagazione real-time verificata dal vivo (due schede,
+polling spento, chat consegnata solo via socket; pannello esito scacciabile;
+riconnessione). Resta **solo l'autorizzazione a pushare** (i tre commit
+insieme → deploy automatico). Vedi la voce "Verso il WebSocket" nel changelog.
 Interventi della sessione serale del 13 luglio: **Riconoscimento** — rientro
 in partita e presa di comando (`1d9b592`), **anti-ripetizione del Cronista**
 (`23c402e`), **decisione di design su `bonusContesto`** + commenti allineati
@@ -1018,6 +1029,129 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**14/07/2026 — Verso il WebSocket: propagazione real-time agli altri giocatori (Passi 1-2-3 FATTI)**
+File toccati: `src/durable-objects/GameSession.js` (Passi 1-2),
+`public/index.html` (Passo 3); nuovi `test-esito-corrente.mjs`,
+`test-websocket-notifica.mjs`, `public/vista-esito.js`, `test-vista-esito.mjs`.
+`index.js` e autenticazione/token/Riconoscimento **non toccati**. Tre commit
+**LOCALI, non pushati**: `98596e6`, `e2f9870` e il commit del Passo 3 — si
+pushano **insieme** solo dopo autorizzazione esplicita (deploy automatico).
+
+- **DIFETTO #4 diagnosticato** (sola lettura, nessuna modifica in quel passo):
+  il testo dell'esito di un momento tornava solo nella risposta HTTP di chi
+  agiva; gli altri non lo vedevano. Cause architetturali: (A) l'esito viene
+  disegnato solo dalla risposta della propria azione (`mostraEsito` ←
+  `mostraRisultatoScelta`), mai dallo stato condiviso; (B) il polling a 6s NON
+  ridisegna l'area del nodo (`renderRichiesta`/`mostraEsito`), quindi avvio
+  nodo, avanzamento del momento ed esito non arrivano agli altri finché non
+  ricaricano — e il refresh mostra la richiesta attiva, mai l'esito. Il
+  CONTINUA è navigazione puramente client-side (nessuna chiamata al server:
+  l'avanzamento è già avvenuto alla risoluzione). "Il comandante non risponde"
+  è un link fisso mostrato a ogni non-comandante, senza timer né rilevazione.
+  L'esito vuoto di Anna nasce dai momenti-passaggio (`corri-prima`, esito "")
+  risolti su uno schermo stantio.
+
+- **MODELLO scelto (da La Soglia / session-zero, letto in sola lettura)**:
+  La Soglia funziona perché ha **un solo modello a stato-pieno** — ogni
+  mutazione fa `broadcast(statoIntero)` e ogni client ha UNA
+  `aggiornaSchermata(stato)` che ridisegna tutto. La Corsa ha invece due
+  canali disallineati (risposta HTTP dell'attore per l'area-nodo, polling per
+  il resto). Piano: trapiantare il pattern in tre passi.
+
+- **DECISIONE DI DESIGN (applicata, non da ridiscutere)**: il WebSocket porta
+  **SOLO NOTIZIE, MAI COMANDI**. Il server manda lo stato pieno; il client NON
+  invia azioni via socket (tutte restano su HTTP col token); i messaggi in
+  arrivo dal socket sono ignorati. Conseguenza: autenticazione, token e
+  Riconoscimento NON si toccano — il socket è anonimo e non autorizza nulla.
+
+- **PASSO 1/3 — FATTO** (commit `98596e6`, locale): `session.esitoCorrente`,
+  la "vista corrente" dell'esito nello STATO CONDIVISO
+  `{ richiestaId, esito, tiro, competenzaId, complicazione, esitoNodo,
+  prossimaRichiestaId }`. Popolata in `applicaRisposta` (stessi dati della
+  risposta HTTP), azzerata al cambio nodo (`/avvia-nodo`), esce da
+  `sessionPubblica`/`/state` senza token né segreti né `giocatoreId`. Nessun
+  cambio al front-end, risposte HTTP identiche (campo additivo dentro
+  `session`). Per un passaggio (`corri-prima`) l'esito è `""` **presente**,
+  non assente. Test: `test-esito-corrente.mjs` (24 asserzioni).
+
+- **PASSO 2/3 — FATTO** (commit `e2f9870`, locale): canale WebSocket nel
+  Durable Object, **nessuno lo usa ancora**. `this.sockets` (già nel
+  costruttore) + `accettaSocket(server)` (accept, registra, manda subito lo
+  stato iniziale, rimuove su close/error, ignora i messaggi) + `broadcast(
+  session)` (manda `sessionPubblica` a tutti, rimuove i socket morti) +
+  `salvaSessione(session)` = `storage.put` + `broadcast`, che sostituisce i
+  `put` dei **27 endpoint di mutazione** (join, cessione, tutto il
+  Riconoscimento, risorse, avvia-nodo, scegli, interpreta, risolvi, chat;
+  `initState`/`migrateState` restano `put` semplici). Handshake in `fetch`
+  (`Upgrade:websocket`): wrapper Cloudflare-only, logica in `accettaSocket`.
+  Risposte HTTP identiche (il broadcast è un effetto collaterale). Test:
+  `test-websocket-notifica.mjs` (19 asserzioni), con i globali Cloudflare
+  mockati per l'handshake (non esercitabile sotto Node puro).
+
+- **PASSO 3/3 — FATTO** (commit locale, front-end): `public/index.html`
+  diventa consumatore dello stato condiviso. File: `public/index.html`
+  modificato; nuovi `public/vista-esito.js` (logica pura condivisa) e
+  `test-vista-esito.mjs` (16 asserzioni). `GameSession.js`, `index.js`,
+  autenticazione/token/Riconoscimento **non toccati**.
+  - **UNA sola funzione di ridisegno** `ridisegnaDaStato(session)`: ogni
+    percorso (socket, polling, risposta a un'azione, refresh autoritativo)
+    finisce lì. Sostituisce `mostraRisultatoScelta`/`mostraEsito` (rimossi) e
+    accentra ciò che prima facevano in parallelo `aggiornaSchermataGioco` e il
+    tick di polling. Il **momento** (richiesta attiva o selezione nodo) è
+    deciso dallo **stato del server**, non più dalla navigazione locale: un
+    guard `momentoRenderizzato` ridisegna `#area-nodo` solo quando la sua
+    chiave cambia (così un push di stato non cancella testo in digitazione o
+    bottoni in uso), tranne il refresh autoritativo che lo forza e lo sblocco
+    dell'attesa di interpretazione.
+  - **Esito come pannello scacciabile** sopra il tavolo (`#pannello-esito`),
+    non più navigazione. `let ultimaRichiestaScacciata`; mostra se
+    `esitoCorrente.esito !== ""` e non già scacciato; CONTINUA fa solo
+    `ultimaRichiestaScacciata = richiestaId` + `ridisegnaDaStato(ultimo stato)`
+    — **nessuna chiamata al server** (il momento nuovo è già sotto). Momenti
+    `corri-prima` (esito `""`): nessun pannello, ridisegno diretto. Ora mostra
+    anche la **complicazione** da margine (prima non arrivava al client).
+  - **Client WebSocket in sola lettura**: apre `wss://…/api/stanza/{roomId}/
+    socket`, `onmessage` `{tipo:"stato"}` → `ridisegnaDaStato`; **non invia
+    mai nulla**. Riconnessione con attesa crescente 2→4→8…→30s (tetto), reset
+    a 2s su `open`, senza limite di tentativi.
+  - **Polling come rete di sicurezza**: intervallo 6s → **30s**, sempre attivo
+    anche a socket vivo, stesso `ridisegnaDaStato`. `aggiornaSchermataGioco`
+    non chiama più `/richiesta-attiva` (il momento si calcola client-side dalla
+    `session` via `vista-esito.js`), solo `/state`.
+  - **Logica pura condivisa** in `public/vista-esito.js`
+    (`richiestaAttivaDaSessione`, `deveMostrareEsito`): servita come modulo al
+    browser (`window.VistaEsito`) E importata dal test Node — nessuna
+    duplicazione della decisione "quale momento / mostra esito".
+
+- **Verifica dal vivo FATTA** (`wrangler dev` + due schede browser, stessa
+  stanza): WebSocket **OPEN** attraverso il proxy di `index.js` → DO (l'header
+  `Upgrade` passa: `new Request(url, request)` lo preserva, lo stub è
+  restituito così com'è); avvio nodo e scelta con tiro → pannello esito sopra
+  il tavolo (dettaglio tiro + testo del Cronista) col momento nuovo già sotto;
+  CONTINUA scaccia senza chiamare il server; `corri-prima` senza pannello;
+  **propagazione real-time provata con il polling di una scheda SPENTO** (due
+  messaggi consegnati solo via socket); una seconda scheda entrata a partita in
+  corso atterra sul momento condiviso; riconnessione (backoff 2000→4000 → nuovo
+  socket OPEN → reset → riceve i broadcast). Limiti d'ambiente, non del codice:
+  lo screenshot delle schermate di gioco va in timeout (nota nota); in miniflare
+  locale l'evento DOM `close` su `close()` avviato dal client non scatta (nei
+  browser reali sì su disconnessione), quindi la catena di riconnessione è stata
+  esercitata invocando a mano il gestore.
+
+- **Prima del WebSocket, chiuso il nodo 1836-torino** (commit `bf58d64`, **in
+  produzione**): librerie dell'interprete di testo libero per i 4 momenti
+  (ordine-che-non-arriva, decisione-presa-prima, quando-nessuno-guarda,
+  fiato-corto) + frammenti di scena del Cronista su `richiestaId`; test nuovo
+  `test-interprete-libero-1836-torino.mjs` (con "lo tiro su" MANUALE di
+  proposito, vedi sotto) e conteggi del Cronista allineati (22/23/25) con
+  asserzioni di sostanza (baseline 6/6/3 incondizionate, "zero candidati
+  impossibile"). **Decisione "lo tiro su" resta manuale**: pesare la parola
+  "tiro" per farla passare in automatico faceva scattare in automatico anche
+  "tiro dritto/avanti/oltre" (senso opposto), quindi fix respinto — il segnale
+  che conta è la parola che accompagna "tiro", non "tiro" da sola.
+
+---
 
 **13/07/2026 — Decisione di design: `bonusContesto` non si usa nei contenuti + commenti allineati al ribilanciamento 1d6**
 File modificati: `src/game-config.js`, `src/lib/risoluzione.js` (solo
