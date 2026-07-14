@@ -259,13 +259,13 @@ export const GAME_CONFIG = {
             {
               testo: "Guardate cosa fanno gli altri, poi li seguite.",
               effetti: { cadenza: -1, margine: 1 },
-              esito: "",
+              esito: "Guardate. Capite. Vi muovete. In quest'ordine, e ogni passaggio costa un secondo che gli altri non hanno speso.",
               prossima: "decisione-presa-prima",
             },
             {
               testo: "Chiedete cosa si deve fare.",
               effetti: { passoAvanti: 1, margine: 2 },
-              esito: "",
+              esito: "Chiedete. Un bersagliere si volta appena, senza fermarsi. «Se lo devi chiedere», dice, «sei già in ritardo.» E riparte.",
               prossima: "decisione-presa-prima",
             },
           ],
@@ -295,7 +295,7 @@ export const GAME_CONFIG = {
             {
               testo: "Vi fermate un istante, mirate bene, poi ripartite.",
               effetti: { cadenza: -1, margine: 2 },
-              esito: "",
+              esito: "Il colpo è perfetto. Il bersaglio è al centro. Quando rialzate la testa, la fila che vi precedeva è già oltre il campo.",
               prossima: "quando-nessuno-guarda",
             },
           ],
@@ -325,7 +325,7 @@ export const GAME_CONFIG = {
             {
               testo: "Rallentate. Un po'. Tanto non se ne accorge nessuno.",
               effetti: { spiritoDiCorpo: -1, margine: 2 },
-              esito: "",
+              esito: "Rallentate. Nessuno vi dice niente. Nessuno vi guarda. È vero: non se n'è accorto nessuno. Tranne voi.",
               prossima: "fiato-corto",
             },
           ],
@@ -361,7 +361,7 @@ export const GAME_CONFIG = {
             {
               testo: "Continuate. Vi raggiungerà, o non vi raggiungerà.",
               effetti: { cadenza: 1, spiritoDiCorpo: -2, margine: 2 },
-              esito: "",
+              esito: "Continuate. Alle vostre spalle il respiro si fa più corto, poi più lontano, poi non lo sentite più. Il passo non l'avete perso.",
               // Biforcazione: chi ha tirato dritto prende il Decalogo severo.
               prossima: "decalogo-vaira-severo",
             },

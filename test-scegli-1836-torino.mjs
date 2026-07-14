@@ -326,5 +326,38 @@ console.log("\n--- Prompt 12: al momento 6 la risposta 0 (aiutare) porta al Deca
   );
 }
 
+console.log("\n--- Prompt 13: gli esiti a effetto fisso dei nuovi momenti non sono vuoti (tranne corri-prima) ---");
+{
+  const nodo = GAME_CONFIG.nodiTemporali.find((n) => n.id === "1836-torino");
+  const momentiConTesto = ["ordine-che-non-arriva", "decisione-presa-prima", "quando-nessuno-guarda", "fiato-corto"];
+  let tuttiPieni = true;
+  for (const id of momentiConTesto) {
+    const r = nodo.richieste.find((x) => x.id === id);
+    for (const risp of r.risposte) {
+      // Le risposte a tiro hanno esito come oggetto per-tier (già non vuoto);
+      // le risposte a effetto fisso hanno esito come stringa, che non deve
+      // essere vuota.
+      const ok = risp.competenzaRichiesta
+        ? risp.esito && typeof risp.esito === "object"
+        : typeof risp.esito === "string" && risp.esito.trim().length > 0;
+      if (!ok) tuttiPieni = false;
+    }
+  }
+  verifica("nessuna risposta dei momenti 3, 4, 5 e 6 ha esito vuoto", tuttiPieni);
+
+  const corri = nodo.richieste.find((x) => x.id === "corri-prima");
+  verifica(
+    "l'unica risposta di corri-prima resta con esito vuoto (è un passaggio, non una scelta)",
+    corri.risposte[0].esito === ""
+  );
+
+  // Il parlato coi caporali « » deve arrivare intatto nel testo del giocatore.
+  const ordine = nodo.richieste.find((x) => x.id === "ordine-che-non-arriva");
+  verifica(
+    "momento 3, risposta 2: il parlato riporta i caporali «Se lo devi chiedere»",
+    ordine.risposte[2].esito.includes("«Se lo devi chiedere»")
+  );
+}
+
 console.log(`\n${falliti === 0 ? "Tutti i test passati." : `${falliti} test falliti.`}`);
 process.exit(falliti === 0 ? 0 : 1);
