@@ -119,21 +119,21 @@ export const GAME_CONFIG = {
       nome: "Esploratore",
       nomeConArticolo: "L'Esploratore",
       ispirazione: "7° Reggimento — Celeritate ac virtute",
-      focus: "Muoversi rapidamente, scoprire pericoli nascosti, vedere prima.",
+      focus: "Vai avanti per primo. Quando la squadra non sa cosa c'è dietro la curva, ci arrivi tu. Non è coraggio: è che qualcuno deve vedere prima.",
       competenzaPrincipale: "cadenza",
     },
     {
       id: "fanfara",
       nome: "Fanfara",
       nomeConArticolo: "La Fanfara",
-      focus: "Rigenera la Cadenza della squadra, scaccia la paura col Suono della Corsa.",
+      focus: "Dai il passo. Non con la tromba: col fatto che ti muovi. Quando parti tu, gli altri scoprono di poter partire.",
       competenzaPrincipale: "passoAvanti",
     },
     {
       id: "custode",
       nome: "Custode / Soccorritore",
       nomeConArticolo: "Il Custode",
-      focus: "Gestisce crisi ambientali, protegge i civili, cura corpo e spirito.",
+      focus: "Tieni su chi cede. Guardi i feriti, i civili, quello che è rimasto indietro. Se la squadra arriva intera, è perché c'eri tu.",
       competenzaPrincipale: "spiritoDiCorpo",
     },
     {
@@ -141,7 +141,7 @@ export const GAME_CONFIG = {
       nome: "Incursore",
       nomeConArticolo: "L'Incursore",
       ispirazione: "3° Reggimento — Maiora viribus audere",
-      focus: "Affronta minacce dirette, apre le brecce, osa imprese superiori alle proprie forze.",
+      focus: "Apri la strada dove è chiusa. Fai la cosa che nessuno vuole fare, e la fai bene alla prima: una seconda volta non c'è.",
       competenzaPrincipale: "precisione",
     },
   ],
@@ -446,7 +446,7 @@ export const GAME_CONFIG = {
           prompt: "Come procedete?",
           risposte: [
             {
-              testo: "Carica diretta, sfruttando la Cadenza accumulata",
+              testo: "Carica diretta, senza rallentare il passo",
               costoMinimo: { cadenza: 2 },
               competenzaRichiesta: "cadenza",
               effettiPerEsito: {

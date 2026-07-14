@@ -3,15 +3,16 @@
 Aggiornato al: 14 luglio 2026, sera. **In produzione fino a `6623701`**:
 trilogia WebSocket, Difetti #6/#7/#3/#8 e scroll automatico ai pannelli sono
 pushati su `main` e verificati dal vivo. Il tavolo condiviso è live e reattivo.
-**In locale, NON ancora pushato** (deploy automatico sul push a `main`, attende
-autorizzazione): un commit per la **rinomina delle etichette delle risorse di
-squadra** (cadenza→Slancio, spiritoDiCorpo→Coesione, passoAvanti→Ardimento;
-SOLO le etichette mostrate, id interni e competenze personali invariati).
-Batteria di test corrente:
+**In locale, NON ancora pushati** (deploy automatico sul push a `main`, attende
+autorizzazione), DUE commit da pushare insieme: (1) **rinomina delle etichette
+delle risorse di squadra** (cadenza→Slancio, spiritoDiCorpo→Coesione,
+passoAvanti→Ardimento; SOLO le etichette mostrate); (2) **riscrittura dei focus
+dei ruoli + testo di milano-barricata** (i due testi che la rinomina aveva
+lasciato incoerenti). Batteria di test corrente:
 **30 file `test-*.mjs`, 932 asserzioni, 0 FAIL** — verificata due volte il
 14/07/2026 (29 file = 867; `test-vista-esito.mjs` 65).
-**PUNTO DI RIPRESA IMMEDIATO**: rinomina etichette fatta e verificata dal vivo,
-**in attesa di autorizzazione al push**. Vedi la voce "Rinomina risorse di squadra".
+**PUNTO DI RIPRESA IMMEDIATO**: i due commit sopra sono fatti e verificati dal
+vivo, **in attesa di autorizzazione al push**.
 Interventi della sessione serale del 13 luglio: **Riconoscimento** — rientro
 in partita e presa di comando (`1d9b592`), **anti-ripetizione del Cronista**
 (`23c402e`), **decisione di design su `bonusContesto`** + commenti allineati
@@ -1026,6 +1027,29 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**14/07/2026 — Testi dei ruoli e di milano-barricata (segue la rinomina, commit locale separato)**
+File toccato: `src/game-config.js` (solo contenuto). Chiude i due testi lasciati
+incoerenti dalla rinomina (vedi voce successiva, punto 3). **In locale, non pushato.**
+
+- **Decisione 1 — focus dei ruoli riscritti**: i vecchi focus promettevano
+  meccaniche inesistenti ("Rigenera la Cadenza della squadra", "cura corpo e
+  spirito"…). Sostituiti coi testi già stampati sulle **carte dei ruoli** (voce
+  in seconda persona, niente promesse meccaniche): Esploratore "Vai avanti per
+  primo…", Fanfara "Dai il passo…", Custode "Tieni su chi cede…", Incursore
+  "Apri la strada dove è chiusa…". Il campo `focus` è usato in **un solo punto**:
+  l'`<option>` del select ruolo (schermo-join). **Verificato dal vivo** che i
+  testi più lunghi NON rompono il layout: il `<select>` resta a larghezza fissa,
+  nessun overflow orizzontale della pagina né a mobile (375) né a desktop (750);
+  il testo lungo si vede aprendo il dropdown (overlay del browser).
+- **Decisione 2 — risposta di milano-barricata**: "Carica diretta, sfruttando la
+  Cadenza accumulata" → "Carica diretta, senza rallentare il passo". Cambia SOLO
+  il testo mostrato; la risposta continua a tirare su `competenzaRichiesta:
+  "cadenza"` (meccanica invariata).
+- Nessun altro contenuto narrativo toccato, id interni invariati. Nessun test
+  asseriva i vecchi testi (batteria invariata: 30 file, 932 OK, 0 FAIL, due volte).
+
+---
 
 **14/07/2026 — Rinomina etichette risorse di squadra: Slancio / Coesione / Ardimento (FATTO, commit locale)**
 File toccati: `src/game-config.js`, `public/index.html`; esteso
