@@ -717,6 +717,32 @@ oggi contiene un `index.html` minimo).
     la specialità). L'implementazione va in un cantiere dedicato — serve
     la UI di distribuzione. Non è più un'ipotesi aperta.
 
+26. **Playtest zero — chiusura (14/07/2026)**: prima serie di misure prima
+    di far giocare persone vere. Strumenti e log in `test/playtest-zero/`
+    (fuori dalla batteria; vedi il suo `LEGGIMI.md`). Tre simulazioni:
+    - **Sim A** (partita funzionale in PRODUZIONE, 4 giocatori simulati):
+      il motore regge una partita intera del nodo `1836-torino`,
+      **Riconoscimento incluso** (rientro dell'ospite con conferma di un
+      terzo), coerenza finale OK, **nessuna anomalia**. Ha rivelato che
+      `1836-torino` ha **un solo tiro reale** — da cui il bersaglio #24.
+    - **Sim B** (Monte Carlo offline, funzioni vere del gioco): ha prodotto
+      le Decisioni **#22 (colpo secco)** e **#23 (azzeramento)** e il
+      **bersaglio #24 (6-8 tiri per nodo)**.
+    - **Sim C** (interprete di testo libero, offline, 20 frasi da tavolo):
+      **l'interprete NON produce falsi automatismi** (0 su 20 frasi coi
+      valori attuali, e in 61 combinazioni di manopole su 63): la logica è
+      sana, non esegue mai un'azione sbagliata da sola.
+      **DECISIONE: le manopole NON si toccano** — `sogliaAlta` resta `0.6`,
+      `margineDistacco` resta `0.15`. Motivo: la griglia guadagnerebbe 3
+      frasi abbassando `sogliaAlta` a 0.40, ma quel guadagno riguarda casi
+      che si risolvono meglio **arricchendo le librerie**, mentre abbassare
+      la soglia renderebbe l'interprete più fiducioso su TUTTE le frasi
+      future (anche quelle non ancora testate). Il difetto vero emerso è il
+      **vocabolario povero delle librerie**: frasi da tavolo come "me ne
+      frego e spingo" (fretta) e "tengo la bocca chiusa" (silenzio)
+      prendono punteggio **zero**, e nessuna soglia può recuperarle; in più
+      "buongiorno" / "non lo so" agganciano a vuoto (mancano stopword).
+
 ---
 
 ## Ipotesi in attesa di conferma (NON dare per deciso)
@@ -724,9 +750,10 @@ oggi contiene un `index.html` minimo).
 - **Margine**: **non più un'ipotesi** — la definizione ufficiale è quella
   già implementata nel codice (vedi Decisioni confermate #21: contatore di
   squadra che sale +1/+2/+3 sull'esito del tiro, soglia 5 → complicazione +
-  dimezzamento, margine alto = male). Nessuna riconciliazione da fare: il
-  codice era giusto. Resta solo la taratura al playtest zero (soglia 5 e passi
-  1/2/3) — vedi "Cosa manca".
+  **azzeramento a 0** dal 14/07/2026, Decisione #23; margine alto = male).
+  Nessuna riconciliazione da fare: il codice era giusto. La taratura al
+  playtest zero è **fatta** (soglia 5 e passi 1/2/3 confermati, vedi
+  Decisione #26 e "Cosa manca").
 - **Codice del libro**: il README attuale dice accesso libero, nessun codice
   richiesto per giocare (diverso da Soglia). Non ancora discusso esplicitamente
   se resta così.
@@ -786,6 +813,15 @@ oggi contiene un `index.html` minimo).
       mescolamento tra scene, invece dell'accorgimento provvisorio
       dell'Opzione 2 (frammenti dedicati affiancati ai baseline) usato in
       `1848-milano`
+- [ ] Arricchire le librerie dell'interprete di testo libero con la lingua
+      parlata vera — emerso dal playtest zero (Sim C, Decisione #26):
+      frasi da tavolo come "me ne frego e spingo" (fretta) o "tengo la bocca
+      chiusa" (silenzio) oggi prendono punteggio ZERO, e nessuna soglia le
+      recupera; servono anche stopword per "buongiorno"/"non lo so", che
+      oggi agganciano a vuoto (falsi agganci). Da fare **insieme** alla
+      conversione delle risposte a tiro, nodo per nodo (stesso cantiere di
+      contenuto). Le manopole `sogliaAlta`/`margineDistacco` restano 0.6/0.15
+      (Decisione #26): il difetto è di vocabolario, non di soglia
 - [x] Abilitare l'asse `richiestaId` nel contesto del Cronista — **CHIUSO
       il 13/07/2026** (commit `a33880c`, `src/durable-objects/GameSession.js`
       + `test-scegli-cronista.mjs`):
