@@ -652,26 +652,40 @@ oggi contiene un `index.html` minimo).
       un altro può chiederne il ruolo, ma il veto del comandante presente
       prevale (veto forte).
 
-21. **Definizione ufficiale di Margine (decisa in chat il 14/07/2026, da ora
-    vincolante)**: **«Margine = totale del tiro meno la soglia raggiunta. Se
-    positivo, di quanto hai superato il gradino; se negativo, di quanto l'hai
-    mancato.»** La distribuzione reale di questo valore sarà misurata dal
-    **playtest zero**. Nota di allineamento onesta: il campo `margine` oggi
-    nel codice è ancora la vecchia traccia di squadra (soglia con
-    complicazione, poi dimezzata), precedente a questa definizione —
-    riconciliare l'implementazione con la definizione ufficiale è lavoro di
-    contenuto futuro, non svolto in questo aggiornamento di sola documentazione.
+21. **Margine (definizione ufficiale, corretta il 14/07/2026)**:
+    il Margine è un **contatore della squadra**, non un numero del singolo
+    tiro. Parte da 0. Ogni azione risolta col dado lo fa salire: **+1 se
+    l'esito è pieno, +2 se parziale, +3 se fallimento**. Alcuni effetti fissi
+    dei nodi lo abbassano. Quando raggiunge la **soglia 5** scatta la
+    complicazione (testo `margineComplicazioneTesto`) e il contatore si
+    **dimezza, tornando a 2**. Il Cronista ne legge la **fascia** (basso /
+    medio / alto / critico) per intonare la chiusura della narrazione.
+    **Attenzione al verso: MARGINE ALTO = MALE.**
+
+    **Nome interno e nome mostrato divergono di proposito**: nel codice resta
+    `margine`; al comandante viene mostrato come **"Tensione"** (etichetta in
+    `public/index.html`), perché "Margine: 4/5" farebbe pensare di stare
+    andando bene mentre è vero il contrario. Nei testi del Cronista la parola
+    "margine" resta nel suo senso italiano comune ("il margine si
+    assottiglia"), dove il verso è già corretto: quei testi **NON si toccano**.
+
+    Il **playtest zero** misura: quante volte il Margine trabocca in un nodo,
+    e se la soglia 5 e i passi 1/2/3 sono tarati bene.
+
+    **Nota storica**: la definizione precedente ("totale del tiro meno la
+    soglia raggiunta") era un'ipotesi errata, mai esistita nel codice.
+    Annullata.
 
 ---
 
 ## Ipotesi in attesa di conferma (NON dare per deciso)
 
-- **Margine**: **non più un'ipotesi** — la definizione ufficiale è stata
-  decisa il 14/07/2026 (vedi Decisioni confermate #21: «totale del tiro meno
-  la soglia raggiunta»). Resta da fare la **riconciliazione** del campo
-  `margine` oggi nel codice (la vecchia traccia con soglia `margineSoglia`,
-  ora 5, complicazione e dimezzamento) con questa definizione, e la misura
-  della sua distribuzione al playtest zero — vedi "Cosa manca".
+- **Margine**: **non più un'ipotesi** — la definizione ufficiale è quella
+  già implementata nel codice (vedi Decisioni confermate #21: contatore di
+  squadra che sale +1/+2/+3 sull'esito del tiro, soglia 5 → complicazione +
+  dimezzamento, margine alto = male). Nessuna riconciliazione da fare: il
+  codice era giusto. Resta solo la taratura al playtest zero (soglia 5 e passi
+  1/2/3) — vedi "Cosa manca".
 - **Codice del libro**: il README attuale dice accesso libero, nessun codice
   richiesto per giocare (diverso da Soglia). Non ancora discusso esplicitamente
   se resta così.
@@ -762,10 +776,13 @@ oggi contiene un `index.html` minimo).
 - [x] Identità comandante (primo giocatore della stanza) + pannello nella
       schermata di gioco (margine, avvio/cambio nodo, note private) —
       fatto nel Passo 12
-- [x] Definizione ufficiale di Margine — **decisa il 14/07/2026** (vedi
-      Decisioni confermate #21: «totale del tiro meno la soglia raggiunta»)
-- [ ] Riconciliare il campo `margine` nel codice (traccia con soglia) con la
-      definizione ufficiale #21, e misurarne la distribuzione al playtest zero
+- [x] Definizione ufficiale di Margine — **corretta il 14/07/2026** (vedi
+      Decisioni confermate #21: contatore di squadra +1/+2/+3, soglia 5,
+      margine alto = male; nome mostrato "Tensione", nome interno `margine`).
+      Nessuna riconciliazione da fare: il codice era giusto, era il log a
+      sbagliare
+- [ ] Taratura al playtest zero: se soglia 5 e passi 1/2/3 del Margine sono
+      ben calibrati (misurare quante volte trabocca in un nodo)
 - [x] Un nodo scritto come esempio con ramificazione reale — fatto nel Passo 2
       (`decalogo-vaira-severo` in `1836-torino`)
 - [ ] Collegare davvero l'AI alla generazione degli esiti (con il tetto per sessione)
