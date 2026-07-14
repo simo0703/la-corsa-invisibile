@@ -343,6 +343,12 @@
     cursor: pointer;
   }
   .barra-stanza button.copia:hover { border-color: var(--brass); }
+  .barra-stanza .azioni-stanza { display: flex; gap: 8px; align-items: center; }
+  /* "Esci dalla stanza": stessa forma discreta del bottone Copia, ma il colore
+     brass smorzato del testo e il crimson al hover segnalano che è un'uscita.
+     La conferma (window.confirm) protegge dai click accidentali. */
+  .barra-stanza button.copia.esci { color: var(--text-faint); }
+  .barra-stanza button.copia.esci:hover { border-color: var(--crimson); color: var(--crimson-bright); }
 
   .risorse {
     display: grid;
@@ -1067,7 +1073,10 @@
 
         <div class="barra-stanza">
           <span class="codice-stanza" id="testo-codice-stanza">stanza —</span>
-          <button class="copia" id="btn-copia-link">Copia link stanza</button>
+          <div class="azioni-stanza">
+            <button class="copia" id="btn-copia-link">Copia link stanza</button>
+            <button class="copia esci" id="btn-esci-stanza">Esci dalla stanza</button>
+          </div>
         </div>
 
         <div class="risorse" id="box-risorse"></div>
@@ -1915,6 +1924,31 @@ document.getElementById("btn-copia-link").addEventListener("click", () => {
   });
 });
 
+// Difetto #8: esci dalla stanza, SOLO lato client. Il server NON viene avvisato
+// (il giocatore resta nel roster: scelta deliberata, la versione che lo avvisa è
+// rinviata); riaprendo il link si rientra dal normale flusso di join. Conferma
+// prima di agire, per evitare click accidentali.
+function esciDallaStanza() {
+  const conferma = window.confirm("Vuoi uscire da questa stanza? Potrai rientrare con il link.");
+  if (!conferma) return;
+  // Chiudi il socket senza riconnessione e ferma il polling.
+  chiudiSocketDefinitivamente();
+  if (intervalloPolling) { clearInterval(intervalloPolling); intervalloPolling = null; }
+  // Dimentica la sessione di QUESTA stanza: identità/token (lci_stato) e le note
+  // del comandante di questa partita (lci_note_comandante), entrambe legate alla
+  // stanza. NON tocca il profilo/arruolamento (lci_profilo), che vive tra una
+  // stanza e l'altra.
+  localStorage.removeItem("lci_stato");
+  localStorage.removeItem("lci_note_comandante");
+  STATO = { roomId: null, nome: null, ruolo: null, giocatoreId: null, token: null, tokenCreazione: null, comandante: false, competenze: null, identitaRoomId: null };
+  resettaTavoloCondiviso();
+  // Via anche l'?stanza dall'URL: un reload non ritenta il flusso di stanza e
+  // la pagina d'ingresso è davvero pulita. Il link della stanza resta valido.
+  history.replaceState(null, "", window.location.pathname);
+  mostraSchermo("schermo-codice");
+}
+document.getElementById("btn-esci-stanza").addEventListener("click", esciDallaStanza);
+
 function renderRisorse(risorseDiSquadra) {
   const nomi = { cadenza: "Cadenza", spiritoDiCorpo: "Spirito di Corpo", passoAvanti: "Passo Avanti" };
   const box = document.getElementById("box-risorse");
@@ -2394,6 +2428,10 @@ function aggiornaAvvisoRifiuto(session) {
 let socket = null;
 let socketBackoff = 2000;
 let timerRiconnessione = null;
+// Difetto #8: quando si esce dalla stanza il socket va chiuso SENZA far
+// scattare la riconnessione automatica. Questo flag lo segnala a
+// programmaRiconnessione; una connessione nuova (nuova stanza) lo azzera.
+let socketChiusoVolutamente = false;
 
 function urlSocket() {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
@@ -2403,6 +2441,7 @@ function urlSocket() {
 function connettiSocket() {
   if (!STATO.roomId) return;
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
+  socketChiusoVolutamente = false; // una connessione nuova annulla una chiusura volontaria precedente
   let ws;
   try {
     ws = new WebSocket(urlSocket());
@@ -2426,6 +2465,7 @@ function connettiSocket() {
 }
 
 function programmaRiconnessione() {
+  if (socketChiusoVolutamente) return; // uscita dalla stanza: non riconnettere
   if (socket && socket.readyState === WebSocket.OPEN) return;
   if (timerRiconnessione) return; // già programmata
   timerRiconnessione = setTimeout(() => {
@@ -2433,6 +2473,16 @@ function programmaRiconnessione() {
     connettiSocket();
   }, socketBackoff);
   socketBackoff = Math.min(socketBackoff * 2, 30000); // 2→4→8…→30s (tetto)
+}
+
+// Chiude il socket in modo DEFINITIVO (uscita dalla stanza, Difetto #8): alza
+// il flag così l'evento "close" non programma una riconnessione, annulla un
+// eventuale timer già in coda e scarta il riferimento. Un successivo
+// connettiSocket() (nuova stanza) riabbassa il flag e riparte.
+function chiudiSocketDefinitivamente() {
+  socketChiusoVolutamente = true;
+  if (timerRiconnessione) { clearTimeout(timerRiconnessione); timerRiconnessione = null; }
+  if (socket) { try { socket.close(); } catch (e) {} socket = null; }
 }
 
 // ESPERIMENTO: se true, questa richiesta ha già mostrato di NON avere una
@@ -2461,7 +2511,7 @@ function renderRichiesta(richiesta, nodoAttivo) {
     richiesta, CONFIG.richiesteConTestoLibero
   );
   area.innerHTML = `
-    <div class="etichetta">${nodo ? nodo.titolo : ""}</div>
+    <div class="etichetta">${window.VistaEsito.etichettaNodo(nodo)}</div>
     <div class="situazione-box">
       <p class="testo-situazione">${richiesta.situazione}</p>
       <p class="prompt">${richiesta.prompt}</p>

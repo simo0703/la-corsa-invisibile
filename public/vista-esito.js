@@ -93,3 +93,14 @@ export function momentoAccettaTestoLibero(richiesta, richiesteConLibreria) {
     && richiesteConLibreria.includes(richiesta.id);
   return haTiro || haLibreria;
 }
+
+// Difetto #3: etichetta del nodo mostrata sopra il momento durante il gioco,
+// così chi entra a partita in corso sa DOVE e QUANDO si trova. Compone titolo +
+// luogo (es. "La Scuola del Decalogo — Torino, 1836") dai DATI del nodo di
+// game-config (gli stessi che il menu di selezione mostra già): `luogo` contiene
+// già "Città, anno", non si duplica nulla. Vale per qualsiasi nodo. Se manca il
+// luogo si mostra il solo titolo; senza nodo/titolo, stringa vuota.
+export function etichettaNodo(nodo) {
+  if (!nodo || !nodo.titolo) return "";
+  return nodo.luogo ? `${nodo.titolo} — ${nodo.luogo}` : nodo.titolo;
+}

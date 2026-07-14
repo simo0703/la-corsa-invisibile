@@ -22,6 +22,7 @@ import {
   deveMostrareRifiuto,
   deveScorrereAlPannello,
   momentoAccettaTestoLibero,
+  etichettaNodo,
 } from "./public/vista-esito.js";
 
 let falliti = 0;
@@ -217,6 +218,25 @@ console.log("\n--- momentoAccettaTestoLibero: DATI REALI di 1836-torino (tabella
   // include un momento del Decalogo che non ha tiro.
   verifica("richiesteConLibreria() NON include corri-prima", !conLibreria.includes("corri-prima"));
   verifica("richiesteConLibreria() include decalogo-vaira (libreria senza tiro)", conLibreria.includes("decalogo-vaira"));
+}
+
+console.log("\n--- etichettaNodo (Difetto #3: anno/luogo sul tavolo) ---");
+{
+  verifica(
+    "titolo + luogo uniti con trattino",
+    etichettaNodo({ titolo: "La Scuola del Decalogo", luogo: "Torino, 1836" }) === "La Scuola del Decalogo — Torino, 1836"
+  );
+  verifica("senza luogo: solo il titolo", etichettaNodo({ titolo: "Solo Titolo" }) === "Solo Titolo");
+  verifica("nodo assente: stringa vuota", etichettaNodo(null) === "");
+  verifica("nodo senza titolo: stringa vuota", etichettaNodo({ luogo: "Torino, 1836" }) === "");
+  // Dati reali: ogni nodo produce "titolo — luogo" senza duplicare dati (usa i
+  // campi che il menu di selezione mostra già).
+  for (const nodo of GAME_CONFIG.nodiTemporali) {
+    verifica(
+      `nodo ${nodo.id}: etichetta = "${nodo.titolo} — ${nodo.luogo}"`,
+      etichettaNodo(nodo) === `${nodo.titolo} — ${nodo.luogo}`
+    );
+  }
 }
 
 console.log(`\n${falliti === 0 ? "Tutti i test passati." : `${falliti} test falliti.`}`);

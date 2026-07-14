@@ -1,17 +1,16 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 14 luglio 2026, sera. **In produzione fino a `77af82e`**:
-trilogia WebSocket (Passi 1-2-3), **Difetto #6** (rifiuto del comandante non più
-muto) e **scroll automatico ai pannelli** sono pushati su `main` e verificati
-dal vivo. Il tavolo condiviso è live e reattivo.
+Aggiornato al: 14 luglio 2026, sera. **In produzione fino a `2f06872`**:
+trilogia WebSocket, Difetti #6, #7 e scroll automatico ai pannelli sono pushati
+su `main` e verificati dal vivo. Il tavolo condiviso è live e reattivo.
 **In locale, NON ancora pushato** (deploy automatico sul push a `main`, attende
-autorizzazione): un commit per il **Difetto #7** (niente campo di testo libero
-sui momenti che non possono interpretarlo — es. `corri-prima`: né tiro né
-libreria). Batteria di test corrente:
-**30 file `test-*.mjs`, 913 asserzioni, 0 FAIL** — verificata due volte il
-14/07/2026 (29 file = 867; `test-vista-esito.mjs` 46, esteso con la logica #7).
-**PUNTO DI RIPRESA IMMEDIATO**: Difetto #7 fatto e verificato dal vivo,
-**in attesa di autorizzazione al push**. Vedi la voce "Difetto #7".
+autorizzazione): un commit per i **Difetti #3 + #8** (anno/luogo del nodo sul
+tavolo durante il gioco; bottone "Esci dalla stanza"). Solo client + una
+funzione pura. Batteria di test corrente:
+**30 file `test-*.mjs`, 922 asserzioni, 0 FAIL** — verificata due volte il
+14/07/2026 (29 file = 867; `test-vista-esito.mjs` 55).
+**PUNTO DI RIPRESA IMMEDIATO**: Difetti #3+#8 fatti e verificati dal vivo,
+**in attesa di autorizzazione al push**. Vedi la voce "Difetti #3 + #8".
 Interventi della sessione serale del 13 luglio: **Riconoscimento** — rientro
 in partita e presa di comando (`1d9b592`), **anti-ripetizione del Cronista**
 (`23c402e`), **decisione di design su `bonusContesto`** + commenti allineati
@@ -1026,6 +1025,43 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**14/07/2026 — Difetti #3 (anno/luogo sul tavolo) + #8 (Esci dalla stanza) (FATTI, un commit locale)**
+File toccati: `public/index.html`, `public/vista-esito.js`; esteso
+`test-vista-esito.mjs`. Solo client + una funzione pura: server, socket
+(protocollo), autenticazione **non toccati**. **In locale, non pushato**.
+
+- **#3 — anno/luogo del nodo durante il gioco**: prima l'etichetta sopra il
+  momento mostrava solo il titolo; chi entrava a partita in corso non sapeva
+  dove/quando fosse (il menu di selezione mostrava già `luogo`). Ora
+  l'etichetta è titolo + luogo, dai DATI del nodo (`nodo.luogo` contiene già
+  "Città, anno", nessuna duplicazione), per QUALSIASI nodo. Funzione pura
+  `etichettaNodo(nodo)` in `vista-esito.js` (`"titolo — luogo"`), usata in
+  `renderRichiesta`. Stesso stile (.etichetta, uppercase via CSS), nessun
+  elemento nuovo. Verificato dal vivo che un giocatore entrato a metà partita
+  vede subito "L'Identità — Milano, 1848".
+- **#8 — Esci dalla stanza (SOLO client, deciso in chat)**: nuovo bottone
+  discreto "Esci dalla stanza" accanto a "Copia link stanza" (raggruppati in
+  `.azioni-stanza`; tinta smorzata, crimson al hover). Alla conferma
+  (`window.confirm`, per evitare click accidentali): chiude il socket senza
+  riconnessione (`chiudiSocketDefinitivamente` + flag `socketChiusoVolutamente`,
+  controllato in `programmaRiconnessione` e riazzerato da `connettiSocket`),
+  ferma il polling, **rimuove `lci_stato` (identità/token di stanza) e
+  `lci_note_comandante` (note del comandante, per-stanza)**, **preserva
+  `lci_profilo`** (arruolamento, vive tra le stanze), azzera `STATO`, toglie
+  `?stanza` dall'URL (`history.replaceState`) e torna a `schermo-codice`. Il
+  **server NON viene avvisato**: il giocatore resta nel roster (scelta
+  deliberata, versione con avviso al server rinviata). Rientro: riaprendo il
+  link si passa dal normale flusso (Riconoscimento → "sei già seduto?" col
+  roster, o "Sono nuovo" → join). Verificato dal vivo: percorso Annulla (nulla
+  cambia), percorso conferma (rimozioni giuste, profilo preservato, socket
+  chiuso senza riconnessione dopo 4s, URL pulito), e rientro completo fino al
+  gioco (nuovo join → socket riconnesso, polling ripartito).
+- **Test**: `etichettaNodo` in `test-vista-esito.mjs` (46→55: casi sintetici +
+  tutti i 5 nodi reali). #8 è flusso DOM/localStorage: verifica dal vivo.
+  Batteria: **30 file, 922 OK, 0 FAIL** (due volte).
+
+---
 
 **14/07/2026 — Difetto #7: niente campo di testo libero sui momenti che non possono interpretarlo (FATTO, commit locale)**
 File toccati: `public/index.html`, `public/vista-esito.js`, `src/index.js`,
