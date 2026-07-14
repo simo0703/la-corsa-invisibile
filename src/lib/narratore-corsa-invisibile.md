@@ -47,6 +47,27 @@ nello sviluppo), quindi non hanno una colonna `esito`.
 | apertura-ruolo-custode | custode | {ruolo} controlla la fila con un'occhiata, contando teste prima di contare metri. |
 | apertura-ruolo-incursore | incursore | {ruolo} non aspetta il segnale: è già dentro il primo fossato. |
 
+### Per momento (Prompt 14)
+
+Aperture specifiche dei quattro momenti a tiro nuovi: condizionate su
+`richiestaId` per non mescolarsi con le scene degli altri momenti né con la
+corsa iniziale. Nessun vincolo di esito (è flavor della scena).
+
+| id | richiestaId | testo |
+|---|---|---|
+| apertura-ordine-1 | ordine-che-non-arriva | Il campo si muove prima che qualcuno lo dica. |
+| apertura-ordine-2 | ordine-che-non-arriva | Non c'è un segnale. C'è solo gente che ha smesso di aspettarlo. |
+| apertura-ordine-3 | ordine-che-non-arriva | Il grigio di Torino non si alza. Gli uomini sì. |
+| apertura-decisione-1 | decisione-presa-prima | I bersagli di legno stanno in fondo al campo e non si muovono. È l'unica cosa ferma qui. |
+| apertura-decisione-2 | decisione-presa-prima | Gli spari arrivano a raffica irregolare, come passi. |
+| apertura-decisione-3 | decisione-presa-prima | L'aria sa di polvere e di carbone. |
+| apertura-quando-1 | quando-nessuno-guarda | La Marmora è dall'altra parte del campo. Di spalle. |
+| apertura-quando-2 | quando-nessuno-guarda | Per un momento, il campo è solo vostro. |
+| apertura-quando-3 | quando-nessuno-guarda | Nessuno vi sta guardando. È questa la prova. |
+| apertura-fiato-1 | fiato-corto | Un corpo piegato sulle ginocchia, in mezzo a un campo che corre. |
+| apertura-fiato-2 | fiato-corto | Il respiro di uno solo, e si sente sopra tutto il resto. |
+| apertura-fiato-3 | fiato-corto | Fermarsi non è previsto. Non è vietato: è che non è previsto. |
+
 ## Slot: sviluppo
 
 ### Baseline per esito
@@ -74,6 +95,27 @@ hanno una colonna `esito`.
 | sviluppo-competenza-passoAvanti | passoAvanti | È il Passo Avanti a spingere oltre la fatica: la paura di fermarsi pesa più di quella di cadere. |
 | sviluppo-competenza-ancoraggio | ancoraggio | È l'Ancoraggio a tenere in piedi tutto il resto: la testa resta ferma anche quando le gambe tremano. |
 
+### Per momento (Prompt 14)
+
+Sviluppi specifici dei quattro momenti a tiro nuovi, condizionati su
+`richiestaId`. Nessun vincolo di esito (il "come è andata" resta nel
+frammento baseline dello stesso slot).
+
+| id | richiestaId | testo |
+|---|---|---|
+| sviluppo-ordine-1 | ordine-che-non-arriva | La Marmora cammina lungo una fila che non esiste più, le mani dietro la schiena. |
+| sviluppo-ordine-2 | ordine-che-non-arriva | Nessuno spiega niente a nessuno. Nessuno sembra averne bisogno. |
+| sviluppo-ordine-3 | ordine-che-non-arriva | Il fiato degli uomini si disperde nel freddo, sottile come fumo. |
+| sviluppo-decisione-1 | decisione-presa-prima | Nessuno si ferma per tirare. Nessuno. |
+| sviluppo-decisione-2 | decisione-presa-prima | Le mani lavorano da sole: caricano, alzano, tirano, riprendono il passo. |
+| sviluppo-decisione-3 | decisione-presa-prima | La Marmora guarda i bersagli, non gli uomini. I bersagli dicono tutto. |
+| sviluppo-quando-1 | quando-nessuno-guarda | Gli uomini attorno a voi corrono con la stessa andatura di prima. Non c'è nessuno da impressionare. |
+| sviluppo-quando-2 | quando-nessuno-guarda | Correre quando nessuno guarda non è più difficile. È solo più facile smettere. |
+| sviluppo-quando-3 | quando-nessuno-guarda | Il vapore dei respiri sale uguale, dappertutto. |
+| sviluppo-fiato-1 | fiato-corto | Il campo scorre attorno come acqua attorno a un sasso. |
+| sviluppo-fiato-2 | fiato-corto | Nessuno rallenta. Non per cattiveria. Semplicemente nessuno rallenta. |
+| sviluppo-fiato-3 | fiato-corto | La Marmora ha smesso di camminare. Adesso guarda. |
+
 ## Slot: eco
 
 ### Baseline per esito
@@ -98,3 +140,29 @@ mano).
 | eco-margine-critico | critico | Il piano ha ceduto: il peso accumulato si fa sentire tutto insieme, ora. |
 | eco-margine-critico-2 | critico | La Marmora alza una mano: basta. Qualcosa nel piano si è rotto, e tocca alla squadra rimetterlo in piedi. |
 | eco-margine-critico-3 | critico | Il Decalogo non lascia scampo: il margine è esaurito, e il conto arriva tutto insieme. |
+
+### Per momento e fascia (Prompt 14)
+
+Ecò specifiche dei quattro momenti a tiro nuovi: condizionate su `richiestaId`
+E su `fasciaMargine`, una per fascia (basso / medio / alto / critico). Le
+baseline per esito e le ecò per fascia qui sopra restano incondizionate su
+`richiestaId`, così ogni momento ha comunque almeno un candidato.
+
+| id | richiestaId | fasciaMargine | testo |
+|---|---|---|---|
+| eco-ordine-basso | ordine-che-non-arriva | basso | Il campo vi ha preso dentro. Per adesso. |
+| eco-ordine-medio | ordine-che-non-arriva | medio | Qualcosa non gira nel verso giusto, e non sapete ancora dire cosa. |
+| eco-ordine-alto | ordine-che-non-arriva | alto | Il margine si assottiglia: un altro passo falso, e sarà complicazione. |
+| eco-ordine-critico | ordine-che-non-arriva | critico | Il margine è esaurito. Il conto arriva tutto insieme, come arriva sempre. |
+| eco-decisione-basso | decisione-presa-prima | basso | Il legno scheggiato è la sola risposta che il campo dà. |
+| eco-decisione-medio | decisione-presa-prima | medio | Il ritmo tiene, ma comincia a costare. |
+| eco-decisione-alto | decisione-presa-prima | alto | Il margine si assottiglia: ogni colpo rubato al passo si paga più avanti. |
+| eco-decisione-critico | decisione-presa-prima | critico | Il margine è esaurito. Non c'è più tempo da rubare a niente. |
+| eco-quando-basso | quando-nessuno-guarda | basso | Il passo è quello di prima. Nessuno lo sa. Va bene così. |
+| eco-quando-medio | quando-nessuno-guarda | medio | Il fiato comincia a dire cose che le gambe non ammettono. |
+| eco-quando-alto | quando-nessuno-guarda | alto | Il margine si assottiglia: quello che vi tiene su non è più il fiato. |
+| eco-quando-critico | quando-nessuno-guarda | critico | Il margine è esaurito. E stavolta qualcuno guarda. |
+| eco-fiato-basso | fiato-corto | basso | Siete ancora una squadra. Lo si vede da poco, ma si vede. |
+| eco-fiato-medio | fiato-corto | medio | Qualcosa si è incrinato, e non è il fiato. |
+| eco-fiato-alto | fiato-corto | alto | Il margine si assottiglia: quello che state per decidere pesa più della corsa. |
+| eco-fiato-critico | fiato-corto | critico | Il margine è esaurito. Adesso La Marmora sa chi siete. |

@@ -38,9 +38,9 @@ const testoMarkdown = readFileSync(percorsoMd, "utf8");
 console.log("--- caricamento dal file: parseFrammenti ---");
 const frammenti = parseFrammenti(testoMarkdown);
 verifica("il file produce i tre slot apertura/sviluppo/eco", Object.keys(frammenti).sort().join(",") === "apertura,eco,sviluppo");
-verifica("slot apertura: 6 baseline per esito + 4 per ruolo = 10 frammenti", frammenti.apertura.length === 10);
-verifica("slot sviluppo: 6 baseline per esito + 5 per competenza = 11 frammenti", frammenti.sviluppo.length === 11);
-verifica("slot eco: 3 baseline per esito + 6 per fascia di margine (3 per \"critico\") = 9 frammenti", frammenti.eco.length === 9);
+verifica("slot apertura: 6 baseline per esito + 4 per ruolo + 12 di scena (richiestaId) = 22 frammenti", frammenti.apertura.length === 22);
+verifica("slot sviluppo: 6 baseline per esito + 5 per competenza + 12 di scena (richiestaId) = 23 frammenti", frammenti.sviluppo.length === 23);
+verifica("slot eco: 3 baseline per esito + 6 per fascia di margine + 16 di scena (fasciaMargine+richiestaId) = 25 frammenti", frammenti.eco.length === 25);
 
 const apertura1 = frammenti.apertura.find((f) => f.id === "apertura-pieno-1");
 verifica(
@@ -63,6 +63,34 @@ verifica(
   "il frammento eco-margine-critico ha condizione fasciaMargine=critico",
   ecoMargine && JSON.stringify(ecoMargine.condizione) === JSON.stringify({ fasciaMargine: "critico" })
 );
+
+console.log("\n--- regola d'oro: le baseline per esito restano INCONDIZIONATE (6/6/3) ---");
+{
+  // Sostanza, non solo numero: le baseline (frammenti condizionati SOLO su
+  // esito) devono restare tante quante servono E incondizionate su richiestaId.
+  // Se una baseline dipendesse da richiestaId, un momento senza frammenti di
+  // scena dedicati resterebbe senza candidati in quello slot -> componiNarrazione
+  // lancerebbe "zero candidati" al tavolo. Il conteggio totale (sopra) non lo
+  // vede: solo questo controllo protegge la regola d'oro.
+  const soloEsito = (lista) =>
+    lista.filter((f) => JSON.stringify(Object.keys(f.condizione).sort()) === JSON.stringify(["esito"]));
+  const baseAp = soloEsito(frammenti.apertura);
+  const baseSv = soloEsito(frammenti.sviluppo);
+  const baseEc = soloEsito(frammenti.eco);
+  verifica("apertura: 6 baseline condizionate SOLO su esito", baseAp.length === 6);
+  verifica("sviluppo: 6 baseline condizionate SOLO su esito", baseSv.length === 6);
+  verifica("eco: 3 baseline condizionate SOLO su esito", baseEc.length === 3);
+  verifica(
+    "nessuna baseline per esito è condizionata su richiestaId (il Cronista non resta mai muto)",
+    [...baseAp, ...baseSv, ...baseEc].every((f) => !("richiestaId" in f.condizione))
+  );
+  const copreEsiti = (lista) =>
+    ["pieno", "parziale", "fallimento"].every((e) => lista.some((f) => f.condizione.esito === e));
+  verifica(
+    "le baseline coprono pieno/parziale/fallimento in tutti e tre gli slot",
+    copreEsiti(baseAp) && copreEsiti(baseSv) && copreEsiti(baseEc)
+  );
+}
 
 console.log("\n--- markdown malformato: errori chiari, non silenziosi ---");
 try {
@@ -201,6 +229,40 @@ console.log("\n--- varietà dei frammenti eco per fasciaMargine critico ---");
     "su 60 tentativi con margine critico, il testo composto varia (più di un risultato distinto)",
     testiVisti.size > 1
   );
+}
+
+console.log("\n--- zero candidati impossibile: i 4 momenti nuovi hanno sempre un candidato in ogni slot e fascia ---");
+{
+  // Per ognuno dei 4 momenti del Prompt 14, ottieniFrammenti deve restituire
+  // >=1 candidato in OGNI slot, per OGNI esito e OGNI fascia di margine: è la
+  // garanzia concreta che "zero candidati" (l'errore di componiNarrazione) non
+  // può capitare in partita, a prescindere dai frammenti di scena presenti.
+  const momenti = ["ordine-che-non-arriva", "decisione-presa-prima", "quando-nessuno-guarda", "fiato-corto"];
+  const slot = ["apertura", "sviluppo", "eco"];
+  const fasce = ["basso", "medio", "alto", "critico"];
+  const esiti = ["pieno", "parziale", "fallimento"];
+  for (const richiestaId of momenti) {
+    let sempreCoperto = true;
+    let primoVuoto = "";
+    for (const s of slot) {
+      for (const fasciaMargine of fasce) {
+        for (const esito of esiti) {
+          const cand = pool.ottieniFrammenti(
+            s,
+            contesto({ richiestaId, fasciaMargine, esito, ruoloId: "esploratore", competenzaId: "cadenza" })
+          );
+          if (cand.length === 0 && !primoVuoto) {
+            sempreCoperto = false;
+            primoVuoto = `${s}/${fasciaMargine}/${esito}`;
+          }
+        }
+      }
+    }
+    verifica(
+      `momento "${richiestaId}": >=1 candidato in ogni slot x esito x fascia${sempreCoperto ? "" : " — VUOTO a " + primoVuoto}`,
+      sempreCoperto
+    );
+  }
 }
 
 console.log("\n--- placeholder {ruolo} risolto quando presente in variabili ---");
