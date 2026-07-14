@@ -1,17 +1,22 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 13 luglio 2026, sera (in produzione fino a `23c402e`; in
-locale, non ancora pushati: `3e14e22` e questo aggiornamento del log).
+Aggiornato al: 14 luglio 2026 (in produzione e su `origin/main` fino a
+`3b553d2`; questo aggiornamento allinea al codice reale le sezioni rimaste
+indietro). Batteria di test corrente: **25 file `test-*.mjs`, 757
+asserzioni, 0 FAIL** — verificata due volte il 14/07/2026.
 Interventi della sessione serale del 13 luglio: **Riconoscimento** — rientro
 in partita e presa di comando (`1d9b592`), **anti-ripetizione del Cronista**
 (`23c402e`), **decisione di design su `bonusContesto`** + commenti allineati
 al 1d6 (`3e14e22`), **verifica dal vivo di `POSTI_TAVOLO`** (nessun file
 toccato) — vedi le prime quattro voci del changelog.
-**Buco noto**: i commit `9119409` (chat di squadra, layout a tre zone,
-colonna dei romanzi) e `c0fabb2` (ribilanciamento del tiro: 1d6 per tutti,
-competenze non principali a 2) sono in produzione ma non hanno ancora una
-voce qui; alcune parti vecchie del log citano ancora il dado 1d4 o "le
-altre partono da 1" — come da nota tecnica sotto, fidati del codice.
+**Buco colmato (14/07/2026)**: i commit `9119409` (chat di squadra, layout a
+tre zone, colonna dei romanzi), `c0fabb2` (ribilanciamento del tiro: 1d6 per
+tutti, competenze non principali a 2), `1d9b592` (Riconoscimento) e `23c402e`
+(anti-ripetizione del Cronista) sono in produzione E ora allineati in questo
+log: la Decisione confermata #2 (numeri del tiro), le note su
+`storicoFrammenti`, l'ipotesi sulla chat, la definizione di Margine e la voce
+sull'interfaccia `public/` sono state riscritte per dire il vero — vedi le
+rispettive sezioni.
 La sessione mattutina del 13 luglio aveva chiuso: titolo del pannello
 comandante WCAG AA (`1caefcb`), messaggi 401/403 distinti (`0a0bc88`),
 asse `richiestaId` del Cronista (`a33880c`); quella del 12 luglio i tre
@@ -169,8 +174,9 @@ Il bug noto di `public/index.html` (non mandava mai `giocatoreId` a
 Il Cronista è collegato al flusso di `/scegli` dal Passo 10, tramite un
 registro `nodoId → pool` (`src/lib/narratore-registro-pool.js`) — ora
 copre tutti e 5 i nodi. `storicoFrammenti` (anti-ripetizione del Cronista)
-resta sempre `[]`: nessun nuovo campo di sessione per ora, vedi nota più
-sotto.
+è ora un campo di sessione reale (`session.storicoFrammenti`, commit
+`23c402e`): finestra scorrevole degli ultimi 12 id, azzerata al cambio nodo
+(`/avvia-nodo`), con migrazione in `initState()`/`migrateState()`.
 Restano da confermare: la definizione del Margine, e poi codice del libro /
 chat / chiamata vocale (vedi sotto) — invariato dal Passo 3. Restano anche
 da fare, ora che la copertura di base è completa: convertire altre
@@ -228,12 +234,16 @@ oggi contiene un `index.html` minimo).
    Passo Avanti, Ancoraggio), ognuna delle 4 competenze principali legata a
    un ruolo diverso (Esploratore→Cadenza, Fanfarista→Passo Avanti,
    Custode→Spirito di Corpo, Incursore→Precisione; Ancoraggio trasversale,
-   di nessun ruolo). Punteggio 1-5, principale parte da 3, le altre da 1,
-   + 3 punti extra liberi in creazione (tetto 5). Dado 1d4 sommato al
-   punteggio; verificato che la competenza alta batte sempre quella bassa
-   anche nel peggior/miglior caso di fortuna incrociata. Soglie: 8+ pieno,
-   5-7 parziale, ≤4 fallimento. **Non ancora collegato ai nodi temporali**
-   (i nodi restano a effetti fissi per ora).
+   di nessun ruolo). Punteggio 1-5, principale parte da 3, le altre da 2,
+   + 3 punti extra liberi in creazione (tetto 5). Dado **1d6** sommato al
+   punteggio, uguale per TUTTI su qualunque competenza — quindi principale
+   3 + 1d6, non principali 2 + 1d6 (ribilanciamento `c0fabb2`: il vecchio
+   1d4, ampiezza 4, non copriva la finestra fallimento ≤4 ↔ pieno ≥8, che
+   richiede ampiezza 5). Verificato che la competenza alta batte sempre
+   quella bassa anche nel peggior/miglior caso di fortuna incrociata.
+   Soglie: 8+ pieno, 5-7 parziale, ≤4 fallimento. **Collegato ai nodi
+   temporali**: tutti e 5 i nodi hanno almeno una risposta a tiro reale
+   (`competenzaRichiesta`) — vedi Passi 8-18 nel changelog.
 
 3. **Narrazione assistita da AI**: architettura ibrida approvata —
    - Gli **effetti meccanici** (variazioni di risorse/tracce, quale nodo si apre
@@ -384,8 +394,9 @@ oggi contiene un `index.html` minimo).
     testo del Cronista **sostituisce** `esito`, coerente con l'architettura
     decisa fin dall'inizio (punto 3: il testo di narrazione può essere
     generato, il Cronista è la versione gratuita di quell'idea).
-    `storicoFrammenti`: **resta sempre `[]`** per ora, nessun nuovo campo
-    di stato — annotato come nota per il futuro, non lavoro da fare subito.
+    `storicoFrammenti`: all'epoca del Passo 10 restava `[]`; **implementato
+    poi come campo di sessione** (commit `23c402e`): `session.storicoFrammenti`,
+    finestra degli ultimi 12 id, reset al cambio nodo, con migrazione.
     **Vincolo tecnico scoperto e risolto**: i pool reali importano un
     `.md`, risolvibile solo da Wrangler, non da Node puro (usato dai
     test) — un `import` statico di quel modulo dentro `GameSession.js`
@@ -626,20 +637,48 @@ oggi contiene un `index.html` minimo).
     vedi "Punto di ripresa" in cima al file per lo stato completo nodo per
     nodo.
 
+20. **Riconoscimento — rientro in partita e presa di comando (fatto, commit
+    `1d9b592`)**: tre flussi distinti, in `GameSession.js` con stato
+    `session.riconoscimentoPendente` (migrato in `initState()`/`migrateState()`):
+    - **rientro dell'ospite con conferma di un terzo**: chi ha perso la
+      sessione apre una richiesta (`POST /richiedi-rientro`) che un ALTRO
+      giocatore già al tavolo deve confermare; solo dopo la conferma il
+      richiedente reclama il token nuovo (`POST /reclama-rientro`). I campi
+      `biglietto`/`nuovoToken` sono segreti, esclusi da `/state`;
+    - **rientro del giocatore registrato**: chi ha un profilo rientra da sé
+      con il proprio `profiloToken` (`POST /rientro-registrato`), senza
+      bisogno della conferma di un terzo;
+    - **presa di comando con veto forte**: quando il comandante non risponde,
+      un altro può chiederne il ruolo, ma il veto del comandante presente
+      prevale (veto forte).
+
+21. **Definizione ufficiale di Margine (decisa in chat il 14/07/2026, da ora
+    vincolante)**: **«Margine = totale del tiro meno la soglia raggiunta. Se
+    positivo, di quanto hai superato il gradino; se negativo, di quanto l'hai
+    mancato.»** La distribuzione reale di questo valore sarà misurata dal
+    **playtest zero**. Nota di allineamento onesta: il campo `margine` oggi
+    nel codice è ancora la vecchia traccia di squadra (soglia con
+    complicazione, poi dimezzata), precedente a questa definizione —
+    riconciliare l'implementazione con la definizione ufficiale è lavoro di
+    contenuto futuro, non svolto in questo aggiornamento di sola documentazione.
+
 ---
 
 ## Ipotesi in attesa di conferma (NON dare per deciso)
 
-- **Margine**: ipotesi di lavoro implementata nel codice = traccia che misura
-  quanto la squadra si allontana dal "binario" della missione; supera una soglia
-  (`margineSoglia`, ora 5) e scatta una complicazione, poi si dimezza. **Non
-  confermato dall'utente** — va verificato o corretto prima di scrivere altro
-  contenuto che ne dipenda.
+- **Margine**: **non più un'ipotesi** — la definizione ufficiale è stata
+  decisa il 14/07/2026 (vedi Decisioni confermate #21: «totale del tiro meno
+  la soglia raggiunta»). Resta da fare la **riconciliazione** del campo
+  `margine` oggi nel codice (la vecchia traccia con soglia `margineSoglia`,
+  ora 5, complicazione e dimezzamento) con questa definizione, e la misura
+  della sua distribuzione al playtest zero — vedi "Cosa manca".
 - **Codice del libro**: il README attuale dice accesso libero, nessun codice
   richiesto per giocare (diverso da Soglia). Non ancora discusso esplicitamente
   se resta così.
-- **Chat di gruppo / chiamata vocale integrata**: presenti in Soglia, non ancora
-  deciso se includerle in Corsa Invisibile.
+- **Chiamata vocale integrata**: presente in Soglia, non ancora deciso se
+  includerla in Corsa Invisibile. (La **chat di squadra** invece è già
+  implementata — commit `9119409`, tetto 200 messaggi / 500 caratteri,
+  pannello nella UI; non è più un'ipotesi aperta.)
 
 ---
 
@@ -723,12 +762,24 @@ oggi contiene un `index.html` minimo).
 - [x] Identità comandante (primo giocatore della stanza) + pannello nella
       schermata di gioco (margine, avvio/cambio nodo, note private) —
       fatto nel Passo 12
-- [ ] Conferma o correzione della definizione di Margine
+- [x] Definizione ufficiale di Margine — **decisa il 14/07/2026** (vedi
+      Decisioni confermate #21: «totale del tiro meno la soglia raggiunta»)
+- [ ] Riconciliare il campo `margine` nel codice (traccia con soglia) con la
+      definizione ufficiale #21, e misurarne la distribuzione al playtest zero
 - [x] Un nodo scritto come esempio con ramificazione reale — fatto nel Passo 2
       (`decalogo-vaira-severo` in `1836-torino`)
 - [ ] Collegare davvero l'AI alla generazione degli esiti (con il tetto per sessione)
-- [ ] Decisione su codice del libro, chat, chiamata vocale
-- [ ] Interfaccia di gioco (`public/`) — rimandata, si parte dal motore
+- [ ] Decisione su codice del libro e chiamata vocale integrata (la **chat
+      di squadra** è già fatta, commit `9119409`)
+- [x] Interfaccia di gioco (`public/`) — **realizzata** (non più rimandata):
+      `public/index.html` con tavolo a layout a tre zone, pannello comandante
+      e pannello chat (commit `9119409`)
+- [x] Riconoscimento — rientro dell'ospite con conferma di un altro giocatore,
+      rientro del giocatore registrato, presa di comando con veto forte —
+      fatto, commit `1d9b592` (vedi Decisioni confermate #20)
+- [x] Chat di squadra — canale umano effimero, tetto 200 messaggi / 500
+      caratteri (troncatura lato server), pannello nella UI — fatto, commit
+      `9119409`
 - [ ] Home del libro su bersaglierisgv.org (checklist già nel README del progetto)
 - [ ] Costruire davvero `/admin/genera-codici` e collegare `lib/access-codes.js`
       a `index.js` — il README diceva "fatto" ma la rotta non esiste nel
