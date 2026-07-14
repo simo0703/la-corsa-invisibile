@@ -4,14 +4,16 @@ Aggiornato al: 14 luglio 2026, sera. **In produzione fino a `6623701`**:
 trilogia WebSocket, Difetti #6/#7/#3/#8 e scroll automatico ai pannelli sono
 pushati su `main` e verificati dal vivo. Il tavolo condiviso è live e reattivo.
 **In locale, NON ancora pushati** (deploy automatico sul push a `main`, attende
-autorizzazione), DUE commit da pushare insieme: (1) **rinomina delle etichette
+autorizzazione), TRE commit da pushare insieme: (1) **rinomina delle etichette
 delle risorse di squadra** (cadenza→Slancio, spiritoDiCorpo→Coesione,
 passoAvanti→Ardimento; SOLO le etichette mostrate); (2) **riscrittura dei focus
 dei ruoli + testo di milano-barricata** (i due testi che la rinomina aveva
-lasciato incoerenti). Batteria di test corrente:
+lasciato incoerenti); (3) **select del ruolo**: option corta e non troncabile
+("{ruolo} — parte con 3 in {competenza}") + riquadro sotto col `focus` completo
+del ruolo selezionato. Batteria di test corrente:
 **30 file `test-*.mjs`, 932 asserzioni, 0 FAIL** — verificata due volte il
 14/07/2026 (29 file = 867; `test-vista-esito.mjs` 65).
-**PUNTO DI RIPRESA IMMEDIATO**: i due commit sopra sono fatti e verificati dal
+**PUNTO DI RIPRESA IMMEDIATO**: i tre commit sopra sono fatti e verificati dal
 vivo, **in attesa di autorizzazione al push**.
 Interventi della sessione serale del 13 luglio: **Riconoscimento** — rientro
 in partita e presa di comando (`1d9b592`), **anti-ripetizione del Cronista**
@@ -1027,6 +1029,36 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**14/07/2026 — Select del ruolo: informazione corta nell'option + descrizione sotto (commit locale separato)**
+File toccato: `public/index.html` (solo schermo-join, nessuna meccanica).
+Corregge il troncamento dei nuovi `focus` (tre frasi) nell'`<option>` del
+select ruolo, segnalato nella consegna precedente. **In locale, non pushato.**
+
+- **Option corta e non troncabile**: `"{ruolo} — parte con 3 in {competenza}"`
+  (es. "Esploratore — parte con 3 in Cadenza"). Nome della competenza da
+  `CONFIG.competenze[...].nome` e valore di partenza da
+  `CONFIG.creazionePersonaggio.valorePrincipale`: tutto dai dati, nulla a mano.
+  **Nome corto del ruolo derivato dai dati**: "Custode / Soccorritore" non ci
+  stava (426px misurati su ~285 utili a viewport 375); si usa `nomeConArticolo`
+  senza l'articolo iniziale ("Il Custode" → "Custode"), stesso campo già usato
+  dal Cronista — i ruoli futuri lo ereditano.
+- **Riquadro `#descrizione-ruolo`** sotto il select: il testo `focus` COMPLETO
+  del ruolo selezionato (le carte), aggiornato al `change`
+  (`aggiornaDescrizioneRuolo`, `textContent`). Stile "nota" già in uso (filo
+  brass a sinistra, testo piccolo smorzato), `:empty { display:none }`.
+- **Ritocco responsive**: sotto i 420px il solo `#select-ruolo` scende a
+  0.9rem — misurato che a 375px l'opzione più lunga ("Custode — parte con 3 in
+  Spirito di Corpo", 316px a 1.05rem) supererebbe lo spazio utile; a 0.9rem la
+  peggiore è 278px su 285 utili. Sopra i 420px taglia standard.
+- `focus` in game-config resta com'è (serve al riquadro).
+- **Verificato dal vivo** a mobile (375) e desktop (750): tutte e 4 le opzioni
+  si leggono per intero anche a select chiuso (misura canvas con font reale),
+  il riquadro cambia al cambio ruolo (Custode/Incursore provati), nessun
+  overflow orizzontale, zero errori console. Batteria: **30 file, 932 OK,
+  0 FAIL** (due volte, invariata: solo client).
+
+---
 
 **14/07/2026 — Testi dei ruoli e di milano-barricata (segue la rinomina, commit locale separato)**
 File toccato: `src/game-config.js` (solo contenuto). Chiude i due testi lasciati

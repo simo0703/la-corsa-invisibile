@@ -176,6 +176,30 @@
   input[type=text]::placeholder, input[type=number]::placeholder, textarea::placeholder { color: var(--text-faint); }
   textarea { resize: vertical; min-height: 80px; font-size: 0.95rem; }
 
+  /* Descrizione del ruolo selezionato, sotto il select (schermo-join): il
+     testo `focus` completo delle carte. Stile "nota" già usato altrove
+     (filo brass a sinistra, testo piccolo e smorzato), leggibile su telefono:
+     va a capo da solo, nessuna larghezza fissa. */
+  .descrizione-ruolo {
+    margin-top: 10px;
+    padding: 10px 14px;
+    background: var(--bg-panel);
+    border-left: 3px solid var(--brass);
+    border-radius: 0 4px 4px 0;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--text-muted);
+  }
+  .descrizione-ruolo:empty { display: none; }
+  /* Su schermi stretti l'opzione più lunga del select ruolo ("Custode — parte
+     con 3 in Spirito di Corpo", ~316px a 1.05rem) supererebbe lo spazio utile
+     (~285px a viewport 375): font leggermente ridotto SOLO per questo select e
+     SOLO sotto i 420px, così l'opzione si legge per intero anche da chiusa.
+     Sopra quella soglia lo spazio basta e resta la taglia standard. */
+  @media (max-width: 420px) {
+    #select-ruolo { font-size: 0.9rem; }
+  }
+
   button.principale {
     font-family: var(--font-display);
     font-weight: 600;
@@ -1026,6 +1050,11 @@
     <div class="campo">
       <label for="select-ruolo">Ruolo</label>
       <select id="select-ruolo"></select>
+      <!-- Descrizione COMPLETA (il testo `focus` delle carte) del ruolo
+           selezionato: l'option del select porta solo l'informazione corta e
+           non troncabile (competenza principale), il testo lungo vive qui e
+           si aggiorna al change (vedi aggiornaDescrizioneRuolo). -->
+      <div class="descrizione-ruolo" id="descrizione-ruolo"></div>
     </div>
     <button class="principale" id="btn-join">Unisciti alla squadra</button>
     <div class="errore avviso-identita" id="avviso-identita-esistente"></div>
@@ -1359,9 +1388,33 @@ async function chiamaAPIAutenticata(path, corpoBase, mostraErrore, contesto = nu
 async function caricaConfig() {
   CONFIG = await chiamaAPI("/api/config");
   const select = document.getElementById("select-ruolo");
-  select.innerHTML = CONFIG.ruoli.map(r =>
-    `<option value="${r.id}">${r.nome} — ${r.focus}</option>`
-  ).join("");
+  // Nell'option solo l'informazione utile al momento della scelta, corta e non
+  // troncabile: la competenza principale con cui il ruolo parte. Nome della
+  // competenza e valore di partenza letti dai DATI (CONFIG.competenze,
+  // CONFIG.creazionePersonaggio), mai scritti a mano. Il testo `focus`
+  // completo (tre frasi, le carte dei ruoli) vive nel riquadro sotto.
+  const valorePrincipale = CONFIG.creazionePersonaggio.valorePrincipale;
+  select.innerHTML = CONFIG.ruoli.map(r => {
+    const competenza = CONFIG.competenze[r.competenzaPrincipale];
+    const nomeCompetenza = competenza ? competenza.nome : r.competenzaPrincipale;
+    // Nome corto per l'option: "Custode / Soccorritore" non ci sta nel select
+    // chiuso su telefono. Derivato dai DATI, non scritto a mano: nomeConArticolo
+    // senza l'articolo iniziale ("Il Custode" -> "Custode") -- stesso campo già
+    // usato dal Cronista, quindi ogni ruolo futuro lo eredita.
+    const nomeCorto = r.nomeConArticolo ? r.nomeConArticolo.replace(/^(?:Il |La |Lo |L')/, "") : r.nome;
+    return `<option value="${r.id}">${nomeCorto} — parte con ${valorePrincipale} in ${nomeCompetenza}</option>`;
+  }).join("");
+  select.addEventListener("change", aggiornaDescrizioneRuolo);
+  aggiornaDescrizioneRuolo(); // il riquadro parte già allineato al ruolo selezionato
+}
+
+// Riquadro sotto il select (schermo-join): il testo `focus` completo del ruolo
+// attualmente selezionato. Config fidata, ma textContent basta (solo testo).
+function aggiornaDescrizioneRuolo() {
+  const box = document.getElementById("descrizione-ruolo");
+  if (!box || !CONFIG) return;
+  const ruolo = CONFIG.ruoli.find(r => r.id === document.getElementById("select-ruolo").value);
+  box.textContent = ruolo ? ruolo.focus : "";
 }
 
 // Vetrina dei romanzi (zona libri). I dati vengono da CONFIG.libri
