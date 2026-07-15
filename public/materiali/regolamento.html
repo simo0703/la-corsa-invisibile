@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Regolamento — La Corsa Invisibile</title>
+<style>
+  :root {
+    --cremisi: #9e2b25;
+    --cremisi-chiaro: #c8493f;
+    --fondo: #17140f;
+    --fondo-2: #201c16;
+    --testo: #ded5c6;
+    --testo-forte: #f4efe5;
+    --seppia: #8f8577;
+    --riga: #332d25;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+  body {
+    margin: 0;
+    background: var(--fondo);
+    color: var(--testo);
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 17px;
+    line-height: 1.65;
+  }
+
+  .impianto {
+    max-width: 1080px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 236px 1fr;
+    gap: 44px;
+    padding: 0 20px 80px;
+  }
+
+  /* ---- testata ---- */
+  .testata {
+    grid-column: 1 / -1;
+    padding: 40px 0 22px;
+    border-bottom: 2px solid var(--cremisi);
+    margin-bottom: 34px;
+  }
+  .testata h1 {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: clamp(24px, 4.6vw, 36px);
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin: 0 0 4px;
+    color: var(--testo-forte);
+  }
+  .testata h1 em { color: var(--cremisi-chiaro); font-style: normal; }
+  .testata p {
+    margin: 0;
+    color: var(--seppia);
+    font-style: italic;
+    font-size: 15px;
+  }
+
+  /* ---- indice ---- */
+  nav {
+    position: sticky;
+    top: 24px;
+    align-self: start;
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 13px;
+  }
+  nav p {
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--seppia);
+    margin: 0 0 10px;
+  }
+  nav ol { list-style: none; margin: 0; padding: 0; counter-reset: voce; }
+  nav li { margin-bottom: 2px; counter-increment: voce; }
+  nav a {
+    display: block;
+    padding: 4px 8px 4px 0;
+    color: var(--testo);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    padding-left: 10px;
+    transition: border-color .15s, color .15s;
+  }
+  nav a::before {
+    content: counter(voce, decimal-leading-zero);
+    color: var(--seppia);
+    margin-right: 8px;
+    font-size: 11px;
+  }
+  nav a:hover, nav a:focus-visible {
+    border-left-color: var(--cremisi);
+    color: var(--testo-forte);
+  }
+
+  /* ---- sezioni ---- */
+  section { margin-bottom: 40px; scroll-margin-top: 20px; }
+
+  h2 {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--cremisi-chiaro);
+    margin: 0 0 14px;
+    padding-bottom: 7px;
+    border-bottom: 1px solid var(--riga);
+  }
+
+  h3 {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--testo-forte);
+    margin: 22px 0 6px;
+  }
+
+  p { margin: 0 0 12px; }
+  strong { color: var(--testo-forte); }
+
+  ul, ol.regole { margin: 0 0 14px; padding-left: 20px; }
+  li { margin-bottom: 6px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0 16px;
+    font-size: 15px;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--riga);
+    vertical-align: top;
+  }
+  th {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--seppia);
+    border-bottom: 1px solid #4a4137;
+  }
+  td.chiave { color: var(--testo-forte); font-weight: bold; white-space: nowrap; }
+  td.num { text-align: center; font-family: "Helvetica Neue", Arial, sans-serif; font-weight: bold; color: var(--testo-forte); white-space: nowrap; }
+
+  .rilievo {
+    background: var(--fondo-2);
+    border-left: 3px solid var(--cremisi);
+    padding: 14px 18px;
+    margin: 0 0 16px;
+  }
+  .rilievo p:last-child { margin-bottom: 0; }
+  .rilievo .titolo {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--cremisi-chiaro);
+    margin-bottom: 6px;
+  }
+
+  .chiusa {
+    grid-column: 1 / -1;
+    margin-top: 20px;
+    padding-top: 22px;
+    border-top: 2px solid var(--cremisi);
+    text-align: center;
+  }
+  .motto {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 15px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--cremisi-chiaro);
+  }
+
+  @media (max-width: 800px) {
+    .impianto { grid-template-columns: 1fr; gap: 0; }
+    nav { position: static; margin-bottom: 34px; padding-bottom: 20px; border-bottom: 1px solid var(--riga); }
+  }
+</style>
+</head>
+<body>
+
+<div class="impianto">
+
+  <div class="testata">
+    <h1>Regolamento — La Corsa <em>Invisibile</em></h1>
+    <p>Tutte le regole del gioco. Si tiene aperto e si consulta: non serve leggerlo tutto.</p>
+  </div>
+
+  <nav aria-label="Indice del regolamento">
+    <p>Indice</p>
+    <ol>
+      <li><a href="#tavolo">Il tavolo</a></li>
+      <li><a href="#personaggio">Il personaggio</a></li>
+      <li><a href="#momento">Il momento</a></li>
+      <li><a href="#parole">Rispondere con parole tue</a></li>
+      <li><a href="#dado">Il dado</a></li>
+      <li><a href="#tensione">La Tensione</a></li>
+      <li><a href="#squadra">Le voci della squadra</a></li>
+      <li><a href="#comandante">Il comandante</a></li>
+      <li><a href="#riconoscimento">Il Riconoscimento</a></li>
+      <li><a href="#arruolamento">L'arruolamento</a></li>
+      <li><a href="#epoche">Le cinque epoche</a></li>
+      <li><a href="#nonfa">Quello che il gioco non fa</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section id="tavolo">
+      <h2>1 — Il tavolo</h2>
+      <p>La Corsa Invisibile si gioca dentro il sito. Ognuno usa il proprio schermo — telefono, tablet o computer — ma <strong>il tavolo è uno solo</strong>: quello che succede lo vedete tutti insieme, nello stesso momento.</p>
+
+      <h3>Aprire una stanza</h3>
+      <p>Uno di voi preme «Crea una stanza». Riceve un link. Chi apre la stanza diventa il <strong>comandante</strong>. Tutti gli altri aprono quel link, scrivono il proprio nome, scelgono un ruolo e si siedono.</p>
+
+      <h3>Quante persone</h3>
+      <p>Il tavolo ha <strong>otto posti</strong>. Oltre gli otto, il gioco dice che la stanza è piena.</p>
+      <p>Non c'è un minimo: si può anche giocare da soli. Ma il gioco è fatto di discussione, e alcune procedure di recupero (il Riconoscimento, punto 9) hanno bisogno di almeno un secondo giocatore che confermi.</p>
+      <p>Più persone possono avere <strong>lo stesso ruolo</strong>. Non è un errore.</p>
+
+      <h3>In presenza o a distanza</h3>
+      <p>In presenza basta la voce. A distanza serve una videochiamata: la chat dentro il gioco va bene per un appunto, non per giocare. Le regole sono identiche nei due casi.</p>
+    </section>
+
+    <section id="personaggio">
+      <h2>2 — Il personaggio</h2>
+
+      <h3>Le competenze</h3>
+      <p>Ogni personaggio ha cinque competenze. Sono i numeri che si sommano al dado quando fai qualcosa di difficile.</p>
+      <table>
+        <tr><td class="chiave">Cadenza</td><td>Velocità di reazione e di movimento.</td></tr>
+        <tr><td class="chiave">Precisione</td><td>Controllo tecnico, mira, esecuzione esatta.</td></tr>
+        <tr><td class="chiave">Spirito di Corpo</td><td>Cura, coesione, capacità di reggere il gruppo.</td></tr>
+        <tr><td class="chiave">Passo Avanti</td><td>La decisione di andare avanti anche con la paura addosso.</td></tr>
+        <tr><td class="chiave">Ancoraggio</td><td>Stabilità personale, resistenza al cedimento.</td></tr>
+      </table>
+
+      <h3>Il ruolo</h3>
+      <p>Il ruolo fa <strong>una sola cosa</strong>: stabilisce quale competenza parte da <strong>3</strong> invece che da <strong>2</strong>.</p>
+      <table>
+        <tr><th>Ruolo</th><th>Parte con 3 in</th><th>Chi è</th></tr>
+        <tr><td class="chiave">Esploratore</td><td>Cadenza</td><td>Va avanti per primo. Vede prima degli altri.</td></tr>
+        <tr><td class="chiave">Fanfara</td><td>Passo Avanti</td><td>Dà il passo. Dove passa lui, gli altri trovano il coraggio di muoversi.</td></tr>
+        <tr><td class="chiave">Custode</td><td>Spirito di Corpo</td><td>Tiene su chi cede. Guarda i feriti, i civili, chi resta indietro.</td></tr>
+        <tr><td class="chiave">Incursore</td><td>Precisione</td><td>Apre la strada dove è chiusa. Osa più di quanto potrebbe.</td></tr>
+      </table>
+      <p>Ancoraggio non è la competenza principale di nessuno: per tutti parte da 2.</p>
+      <p>Il massimo che una competenza può raggiungere è <strong>5</strong>.</p>
+
+      <div class="rilievo">
+        <div class="titolo">Da sapere</div>
+        <p>I ruoli <strong>non hanno poteri speciali</strong>. Il Custode non ha una "cura" da attivare, la Fanfara non ha un "suono" da suonare. Quello che il tuo ruolo è, lo fai emergere da come parli e da cosa scegli — non da un bottone.</p>
+      </div>
+    </section>
+
+    <section id="momento">
+      <h2>3 — Il momento</h2>
+      <p>Un'epoca (nel gioco: un <strong>nodo</strong>) è fatta di una manciata di <strong>momenti</strong>, uno dopo l'altro. Ogni momento vi mette davanti a una scena e vi fa una domanda.</p>
+      <p>Sotto la scena trovate le <strong>risposte</strong>: da una a tre, già scritte. Discutetele. Poi il gioco applica quella che scegliete e passa al momento dopo.</p>
+      <p>Alcuni momenti non chiedono una scelta: c'è una sola risposta e serve solo a proseguire. Sono i respiri del racconto.</p>
+      <p>Alcune risposte <strong>portano altrove</strong>: la storia si biforca e il seguito cambia a seconda di come è andata. Non ve lo dice: lo scoprite.</p>
+
+      <h3>Come finisce un nodo</h3>
+      <p>Quando i momenti sono finiti, il gioco guarda <strong>le tre voci della squadra</strong> (punto 7) e vi dice come è andata. Non c'è "vinto" o "perso": c'è quello che siete diventati.</p>
+    </section>
+
+    <section id="parole">
+      <h2>4 — Rispondere con parole tue</h2>
+      <p>Sotto le risposte già scritte, su molti momenti, c'è un campo dove puoi <strong>scrivere cosa fai</strong>, come lo diresti a voce. Non sostituisce i bottoni: è un'altra strada.</p>
+      <p>Quello che scrivi viene letto dal gioco, che prova a capire a quale delle risposte possibili assomiglia. Da lì, tre esiti.</p>
+
+      <table>
+        <tr><th>Cosa succede</th><th>Quando</th></tr>
+        <tr><td class="chiave">Va avanti da solo</td><td>Il gioco ha capito senza dubbi: applica la risposta corrispondente, come se avessi cliccato il bottone.</td></tr>
+        <tr><td class="chiave">Decide il comandante</td><td>La frase è ambigua — potrebbe voler dire due cose. Il gioco si ferma e passa la palla al comandante, che sceglie il senso giusto o ti fa riscrivere.</td></tr>
+        <tr><td class="chiave">Non ha capito</td><td>Nessuna corrispondenza. Riscrivi in modo più chiaro, o clicca una risposta.</td></tr>
+      </table>
+
+      <p>Quando il comandante <strong>ti fa riscrivere</strong>, tutto il tavolo lo vede e la tua frase ti torna nel campo, pronta da correggere. Non hai perso niente.</p>
+
+      <div class="rilievo">
+        <div class="titolo">Dove non c'è</div>
+        <p>Sui momenti che servono solo a proseguire, il campo <strong>non compare</strong>. Non è un guasto: lì non c'è niente da interpretare.</p>
+      </div>
+    </section>
+
+    <section id="dado">
+      <h2>5 — Il dado</h2>
+      <p>Alcune risposte richiedono un tiro. Il gioco lo fa per voi.</p>
+      <p class="rilievo"><strong>Il punteggio della competenza richiesta + un dado a sei facce.</strong></p>
+      <table>
+        <tr><th>Totale</th><th>Esito</th><th>Cosa vuol dire</th></tr>
+        <tr><td class="num">8 o più</td><td class="chiave">Pieno</td><td>Riesce come volevate.</td></tr>
+        <tr><td class="num">da 5 a 7</td><td class="chiave">Parziale</td><td>Riesce, ma vi costa qualcosa.</td></tr>
+        <tr><td class="num">4 o meno</td><td class="chiave">Fallimento</td><td>Non riesce.</td></tr>
+      </table>
+
+      <h3>Il colpo secco</h3>
+      <p>Se il dado mostra <strong>1</strong>, l'esito è <strong>sempre fallimento</strong>. Qualunque sia il totale, qualunque sia il tuo punteggio, qualunque bonus tu abbia. Capita a tutti, prima o poi.</p>
+
+      <h3>Chi tira</h3>
+      <p>Tira chi ha scelto la risposta, con la propria competenza. Il comandante <strong>vede</strong> l'esito ma non può cambiarlo. Il dado è il dado.</p>
+    </section>
+
+    <section id="tensione">
+      <h2>6 — La Tensione</h2>
+      <p>La Tensione è il logoramento della squadra. È un solo numero, uguale per tutti, sempre visibile in alto.</p>
+      <p><strong>Parte da zero.</strong> Sale quando le cose vanno storte: quanto sale dipende dalla risposta scelta e da come è andato il tiro — un pieno costa poco, un fallimento costa di più.</p>
+      <p>Quando la Tensione arriva a <strong>5</strong>, qualcosa si rompe nel piano: il gioco vi mette davanti a una <strong>complicazione</strong> che non avevate previsto. Subito dopo, la Tensione <strong>torna a zero</strong> e si riparte.</p>
+      <p>Tensione alta è male. Il comandante può correggerla a mano, se al tavolo succede qualcosa che il gioco non poteva sapere.</p>
+    </section>
+
+    <section id="squadra">
+      <h2>7 — Le voci della squadra</h2>
+      <p>Accanto alla Tensione ci sono <strong>tre numeri della squadra</strong>: Cadenza, Spirito di Corpo, Passo Avanti.</p>
+
+      <div class="rilievo">
+        <div class="titolo">Attenzione</div>
+        <p>Hanno gli stessi nomi di tre competenze personali, <strong>ma non sono la stessa cosa</strong>. Le competenze sono <em>tue</em> e servono per i tiri. Queste sono della <em>squadra</em>: dicono cosa state diventando insieme.</p>
+      </div>
+
+      <p>Partono tutte da <strong>zero</strong> e salgono o scendono a seconda delle risposte che date. Non si usano mai per tirare il dado.</p>
+      <p>Servono a una cosa sola, ed è la più importante: <strong>alla fine del nodo sono loro a decidere come finisce la storia</strong>. Il gioco guarda quei tre numeri e sceglie il finale che vi siete meritati. Non i vostri tiri: quello che avete costruito.</p>
+    </section>
+
+    <section id="comandante">
+      <h2>8 — Il comandante</h2>
+      <p>Il comandante è <strong>chi ha aperto la stanza</strong>. Non è un capo e non è un narratore: è chi tiene il filo. È un giocatore come gli altri, con un personaggio come gli altri.</p>
+
+      <h3>Cosa può fare, e solo lui</h3>
+      <ul>
+        <li><strong>Scegliere il nodo</strong> in cui giocare, e cambiarlo alla fine.</li>
+        <li><strong>Sciogliere i dubbi</strong> quando qualcuno scrive con parole sue e il gioco non è sicuro: sceglie il senso giusto tra quelli possibili, oppure fa riscrivere.</li>
+        <li><strong>Correggere la Tensione</strong> e le voci della squadra a mano, se serve.</li>
+        <li><strong>Tenere delle note</strong> private, che restano nel suo schermo e non le vede nessuno.</li>
+      </ul>
+
+      <h3>Cosa non può fare</h3>
+      <p>Non sceglie le risposte al posto degli altri, e <strong>non può cambiare l'esito di un tiro</strong>.</p>
+
+      <h3>Passare il comando</h3>
+      <p>Il comandante può proporre il comando a un altro giocatore. Il comando passa <strong>solo se l'altro accetta</strong>: fino ad allora resta dov'è. Chi ha proposto può ripensarci e ritirare la proposta.</p>
+
+      <h3>Se il comandante sparisce</h3>
+      <p>Capita: cade la linea, qualcuno deve andare. Sotto le risposte c'è una scritta discreta, <strong>«Il comandante non risponde»</strong>. Chi la clicca chiede il comando; basta che <strong>un altro giocatore confermi</strong> e il comando passa. Se il vecchio comandante è ancora lì e non è d'accordo, può opporsi.</p>
+    </section>
+
+    <section id="riconoscimento">
+      <h2>9 — Il Riconoscimento</h2>
+      <p>Serve a rimettere al tavolo chi ne è uscito senza volerlo: connessione caduta, telefono spento, scheda chiusa per sbaglio.</p>
+      <p>Riapri il link della stanza. Il gioco ti chiede: <strong>«Sei già seduto a questo tavolo?»</strong> e ti mostra chi c'è. Da lì cambia a seconda di chi sei.</p>
+
+      <h3>Se sei arruolato (hai un profilo)</h3>
+      <p>Il gioco ti riconosce da solo, subito, senza chiedere niente a nessuno. È il vantaggio pratico dell'arruolamento.</p>
+
+      <h3>Se sei un ospite</h3>
+      <p>Scegli il tuo nome dalla lista. A quel punto <strong>un altro giocatore al tavolo deve confermare che sei tu</strong> — nessuno può rimettersi in gioco da solo. Se qualcuno sta ancora usando quel nome, può opporsi.</p>
+
+      <h3>Intanto il tavolo va avanti</h3>
+      <p>Il gioco non ti aspetta. Quando rientri, ti ritrovi al momento in cui sono arrivati gli altri.</p>
+    </section>
+
+    <section id="arruolamento">
+      <h2>10 — L'arruolamento</h2>
+      <p>Alla fine di un nodo il gioco vi propone di <strong>arruolarvi</strong>: un profilo con nome e password. È <strong>facoltativo</strong>: senza, si gioca lo stesso.</p>
+      <p>Serve a <strong>conservare</strong> quello che avete fatto, da una partita all'altra e da una stanza all'altra.</p>
+
+      <h3>Esperienza e gradi</h3>
+      <p>Ogni nodo che completate vale <strong>100 punti esperienza</strong> — una volta sola per nodo: rigiocare lo stesso non ne dà altri. Ogni <strong>200 punti</strong> salite di un grado.</p>
+      <table>
+        <tr><th>Grado</th><th>Punti</th><th>Grado</th><th>Punti</th></tr>
+        <tr><td class="chiave">Bersagliere</td><td class="num">0</td><td class="chiave">Sergente Maggiore</td><td class="num">1000</td></tr>
+        <tr><td class="chiave">Bersagliere Scelto</td><td class="num">200</td><td class="chiave">Maresciallo</td><td class="num">1200</td></tr>
+        <tr><td class="chiave">Caporale</td><td class="num">400</td><td class="chiave">Sottotenente</td><td class="num">1400</td></tr>
+        <tr><td class="chiave">Caporal Maggiore</td><td class="num">600</td><td class="chiave">Tenente</td><td class="num">1600</td></tr>
+        <tr><td class="chiave">Sergente</td><td class="num">800</td><td class="chiave">Capitano</td><td class="num">1800</td></tr>
+      </table>
+
+      <h3>Cosa dà il grado</h3>
+      <p>A <strong>un grado sì e uno no</strong> — al secondo, al quarto, al sesto, all'ottavo, al decimo — guadagnate <strong>+1 in una competenza a vostra scelta</strong>. Cinque bonus in tutto, lungo tutta la carriera. Si assegnano dalla schermata del profilo, mai durante una partita, e valgono in tutte le partite successive.</p>
+      <p>Per il resto il grado è un riconoscimento: il tuo nome se lo porta davanti.</p>
+    </section>
+
+    <section id="epoche">
+      <h2>11 — Le cinque epoche</h2>
+      <p>Cinque momenti della storia dei Bersaglieri. Si giocano in qualsiasi ordine; il comandante sceglie.</p>
+      <table>
+        <tr><th>Nodo</th><th>Dove e quando</th><th>Che gioco è</th></tr>
+        <tr><td class="chiave">La Scuola del Decalogo</td><td>Torino, 1836</td><td>Addestramento, investigativo. È il più adatto alla prima volta.</td></tr>
+        <tr><td class="chiave">L'Identità</td><td>Milano, 1848</td><td>Combattimento urbano, guerriglia.</td></tr>
+        <tr><td class="chiave">La Resistenza</td><td>Carso e Piave, 1915-1918</td><td>Sopravvivenza, logoramento, pressione psicologica.</td></tr>
+        <tr><td class="chiave">L'Emergenza</td><td>Firenze 1966 · Friuli 1976 · L'Aquila 2009</td><td>Soccorso. Nessun nemico da combattere: solo persone da salvare.</td></tr>
+        <tr><td class="chiave">La Stabilità</td><td>Libano, Balcani, Iraq, Afghanistan</td><td>Peacekeeping. Tattico, moderno, ambiguo.</td></tr>
+      </table>
+    </section>
+
+    <section id="nonfa">
+      <h2>12 — Quello che il gioco non fa</h2>
+      <p>Detto chiaro, così nessuno resta deluso.</p>
+      <ul>
+        <li><strong>Non c'è un narratore umano.</strong> Le scene le scrive il gioco. Il comandante scioglie i dubbi, non racconta.</li>
+        <li><strong>Non ci sono poteri di ruolo.</strong> Il ruolo cambia un numero, non ti dà una mossa speciale.</li>
+        <li><strong>Non si distribuiscono punti</strong> alla creazione del personaggio: 3 nella principale, 2 nelle altre, e si parte.</li>
+        <li><strong>Non si vince.</strong> Si arriva in fondo in un certo modo, e quel modo ve lo dice il gioco.</li>
+      </ul>
+      <p>Il resto — chi siete, perché lo fate, cosa vi dite mentre decidete — non è nel regolamento. È vostro.</p>
+    </section>
+
+  </main>
+
+  <div class="chiusa">
+    <p class="motto">Correte prima</p>
+  </div>
+
+</div>
+
+</body>
+</html>

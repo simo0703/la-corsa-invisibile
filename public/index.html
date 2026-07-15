@@ -356,7 +356,10 @@
     font-size: 0.78rem;
   }
   .barra-stanza .codice-stanza { color: var(--text-muted); }
-  .barra-stanza button.copia {
+  /* Selettore su .copia (non button.copia): la stessa forma discreta serve sia
+     ai <button> (Copia link, Esci) sia al link <a> "Regole", che apre il
+     regolamento in una scheda nuova. text-decoration:none per l'<a>. */
+  .barra-stanza .copia {
     background: none;
     border: 1px solid var(--line);
     color: var(--brass);
@@ -365,14 +368,15 @@
     padding: 5px 10px;
     border-radius: 3px;
     cursor: pointer;
+    text-decoration: none;
   }
-  .barra-stanza button.copia:hover { border-color: var(--brass); }
-  .barra-stanza .azioni-stanza { display: flex; gap: 8px; align-items: center; }
+  .barra-stanza .copia:hover { border-color: var(--brass); }
+  .barra-stanza .azioni-stanza { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   /* "Esci dalla stanza": stessa forma discreta del bottone Copia, ma il colore
      brass smorzato del testo e il crimson al hover segnalano che è un'uscita.
      La conferma (window.confirm) protegge dai click accidentali. */
-  .barra-stanza button.copia.esci { color: var(--text-faint); }
-  .barra-stanza button.copia.esci:hover { border-color: var(--crimson); color: var(--crimson-bright); }
+  .barra-stanza .copia.esci { color: var(--text-faint); }
+  .barra-stanza .copia.esci:hover { border-color: var(--crimson); color: var(--crimson-bright); }
 
   .risorse {
     display: grid;
@@ -998,6 +1002,22 @@
     padding: 40px 0;
     letter-spacing: 0.05em;
   }
+
+  /* Link ai manuali sulla pagina d'ingresso (sotto "Crea una stanza"):
+     discreti, in riga, vanno a capo su schermo stretto. Aprono in scheda nuova. */
+  .link-materiali {
+    margin-top: 18px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    font-size: 0.8rem;
+  }
+  .link-materiali a {
+    color: var(--text-faint);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+  }
+  .link-materiali a:hover { color: var(--brass); border-bottom-color: var(--brass); }
 </style>
 <!-- Logica PURA condivisa del tavolo condiviso (Passo 3), esposta come
      window.VistaEsito per lo script principale qui sotto. Modulo statico in
@@ -1030,6 +1050,13 @@
     </p>
     <button class="principale" id="btn-crea-stanza">Crea una stanza</button>
     <div class="errore" id="errore-codice"></div>
+    <!-- Manuali del gioco (serviti come statici da public/materiali/): link
+         discreti, aprono in scheda nuova. -->
+    <div class="link-materiali">
+      <a href="/materiali/guida.pdf" target="_blank" rel="noopener">Guida rapida (PDF)</a>
+      <a href="/materiali/carte" target="_blank" rel="noopener">Le carte dei ruoli</a>
+      <a href="/materiali/regolamento" target="_blank" rel="noopener">Regolamento</a>
+    </div>
     <a class="link-arruolamento" href="/arruolati.html">Arruolati — hai già un profilo?</a>
   </section>
 
@@ -1104,6 +1131,9 @@
           <span class="codice-stanza" id="testo-codice-stanza">stanza —</span>
           <div class="azioni-stanza">
             <button class="copia" id="btn-copia-link">Copia link stanza</button>
+            <!-- Regole: apre il regolamento in una scheda NUOVA (target _blank),
+                 così nessuno perde la partita in corso. -->
+            <a class="copia regole" href="/materiali/regolamento" target="_blank" rel="noopener">Regole</a>
             <button class="copia esci" id="btn-esci-stanza">Esci dalla stanza</button>
           </div>
         </div>

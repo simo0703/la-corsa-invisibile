@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Le carte dei ruoli — La Corsa Invisibile</title>
+<style>
+  :root {
+    --cremisi: #9e2b25;
+    --carta: #f4efe5;
+    --inchiostro: #1c1a17;
+    --seppia: #6b6259;
+    --riga: #ddd6cc;
+    --fondo: #17140f;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 32px 16px 64px;
+    background: var(--fondo);
+    background-image:
+      radial-gradient(ellipse at 50% 0%, rgba(158,43,37,0.18), transparent 60%);
+    font-family: Georgia, "Times New Roman", serif;
+    color: var(--carta);
+    min-height: 100vh;
+  }
+
+  header {
+    max-width: 980px;
+    margin: 0 auto 28px;
+    text-align: center;
+  }
+
+  h1 {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: clamp(22px, 5vw, 34px);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin: 0 0 6px;
+    font-weight: 800;
+  }
+  h1 em { color: var(--cremisi); font-style: normal; }
+
+  header p {
+    margin: 0;
+    color: #a89e92;
+    font-size: 14px;
+    font-style: italic;
+  }
+
+  .griglia {
+    max-width: 980px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 22px;
+  }
+
+  .carta {
+    background: var(--carta);
+    color: var(--inchiostro);
+    border-radius: 3px;
+    overflow: hidden;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.45);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .fascia {
+    background: var(--cremisi);
+    color: #f7f2e9;
+    padding: 7px 16px;
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .corpo { padding: 18px 18px 16px; display: flex; flex-direction: column; flex: 1; }
+
+  .nome-ruolo {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 26px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    margin: 0 0 2px;
+    line-height: 1;
+  }
+
+  .forte {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--cremisi);
+    margin: 0 0 14px;
+  }
+
+  .chi-sei {
+    font-size: 14px;
+    line-height: 1.5;
+    margin: 0 0 16px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--riga);
+  }
+
+  .etichetta {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #8a8078;
+    margin: 0 0 8px;
+  }
+
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  td { padding: 3px 0; font-size: 14px; }
+  td.pip { text-align: right; letter-spacing: 2px; white-space: nowrap; }
+  td.n {
+    text-align: right;
+    width: 24px;
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-weight: 700;
+  }
+  tr.principale td { color: var(--cremisi); font-weight: 700; }
+  .pieno { color: var(--cremisi); }
+  .vuoto { color: #cec6ba; }
+  tr.altra .pieno { color: #57524b; }
+
+  .promemoria {
+    margin-top: auto;
+    background: #ebe4d7;
+    border-left: 3px solid var(--cremisi);
+    padding: 12px 14px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .promemoria p { margin: 0 0 8px; }
+  .promemoria p:last-child { margin: 0; }
+  .promemoria b.tit {
+    display: block;
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--cremisi);
+    margin-bottom: 2px;
+  }
+
+  footer {
+    max-width: 980px;
+    margin: 34px auto 0;
+    text-align: center;
+    color: #8a8078;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  footer strong { color: #c9bfb0; }
+
+  @media print {
+    body { background: #fff; padding: 0; }
+    header h1, header p, footer { color: #1c1a17; }
+    .carta { box-shadow: none; border: 1px solid #b9b0a4; break-inside: avoid; }
+    .griglia { grid-template-columns: 1fr 1fr; gap: 8mm; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Le carte dei <em>ruoli</em></h1>
+  <p>La Corsa Invisibile — tieni aperta la tua mentre giochi</p>
+</header>
+
+<div class="griglia">
+
+  <div class="carta">
+    <div class="fascia"><span>La Corsa Invisibile</span><span>Carta del ruolo</span></div>
+    <div class="corpo">
+      <p class="nome-ruolo">Esploratore</p>
+      <p class="forte">Parte con 3 in Cadenza</p>
+      <p class="chi-sei">Vai avanti per primo. Quando la squadra non sa cosa c'è dietro la curva, ci arrivi tu. Non è coraggio: è che qualcuno deve vedere prima.</p>
+      <p class="etichetta">Le tue competenze</p>
+      <table>
+        <tr class="principale"><td>Cadenza</td><td class="pip"><span class="pieno">●●●</span><span class="vuoto">○○</span></td><td class="n">3</td></tr>
+        <tr class="altra"><td>Precisione</td><td class="pip"><span class="pieno">●●</span><span class="vuoto">○○○</span></td><td class="n">2</td></tr>
+        <tr class="altra"><td>Spirito di Corpo</td><td class="pip"><span class="pieno">●●</span><span class="vuoto">○○○</span></td><td class="n">2</td></tr>
+        <tr class="altra"><td>Passo Avanti</td><td class="pip"><span class="pieno">●●</span><span class="vuoto">○○○</span></td><td class="n">2</td></tr>
+        <tr class="altra"><td>Ancoraggio</td><td class="pip"><span class="pieno">●●</span><span class="vuoto">○○○</span></td><td class="n">2</td></tr>
+      </table>
+      <div class="promemoria">
+        <p><b class="tit">Il dado</b>La tua competenza + 1 dado a sei facce.<br><b>8 o più</b> pieno · <b>5–7</b> parziale · <b>4 o meno</b> fallimento.<br>Se esce <b>1</b>, è sempre fallimento.</p>
+        <p><b class="tit">La Tensione</b>Parte da 0 e sale quando le cose vanno storte. A <b>5</b> arriva una complicazione, poi torna a 0.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="carta">
+    <div class="fascia"><span>La Corsa Invisibile</span><span>Carta del ruolo</span></div>
+    <div class="corpo">
+      <p class="nome-ruolo">Fanfara</p>
+      <p class="forte">Parte con 3 in Passo Avanti</p>
+      <p class="chi-sei">Dai il passo. Non con la tromba: col fatto che ti muovi. Quando parti tu, gli altri scoprono di poter partire.</p>
+      <p class="etichetta">Le tue competenze</p>
+      <table>
+        <tr class="altra"><td>Cadenza</td><td class="pip"><span class="pieno">●●</span><span class="vuoto">○○○</span></td><td class="n">2</td></tr>
+        <tr class="altra"><td>Precisione</td><td class="pip"><span class="pieno">●●</span><span class="vuoto">○○○</span></td><td class="n">2</td></tr>
+        <tr class="altra"><td>Spirito di Corpo</td><td class="pip"><span class="pieno">●●</span><span class="vuoto">○○○</span></td><td class="n">2</td></tr>
+        <tr class="principale"><td>Passo Avanti</td><td class="pip"><span class="pieno">●●●</span><span class="vuoto">○○</span></td><td class="n">3</td></tr>
+        <tr class="altra"><td>Ancoraggio</td><td class="pip"><span class="pieno">●●</span><span class="vuoto">○○○</span></td><td class="n">2</td></tr>
+      </table>
+      <div class="promemoria">
+        <p><b class="tit">Il dado</b>La tua competenza + 1 dado a sei facce.<br><b>8 o più</b> pieno · <b>5–7</b> parziale · <b>4 o meno</b> fallimento.<br>Se esce <b>1</b>, è sempre fallimento.</p>
+        <p><b class="tit">La Tensione</b>Parte da 0 e sale quando le cose vanno storte. A <b>5</b> arriva una complicazione, poi torna a 0.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="carta">
+    <div class="fascia"><span>La Corsa Invisibile</span><span>Carta del ruolo</span></div>
+    <div class="corpo">
+      <p class="nome-ruolo">Custode</p>
+      <p class="forte">Parte con 3 in Spirito di Corpo</p>
+      <p class="chi-sei">Tieni su chi cede. Guardi i feriti, i civili, quello che è rimasto indietro. Se la squadra arriva intera, è perché c'eri tu.</p>
+      <p class="etichetta">Le tue competenze</p>
+      <table>
+        <tr class="altra"><td>Cadenza</td><td class="pip"><span class="pieno">●●</span><span class="vuoto">○○○</span></td><td class="n">2</td></tr>
+        <tr class="altra"><td>Precisione</td><td class="pip"><span class="pieno">●●</span><span class="vuoto">○○○</span></td><td class="n">2</td></tr>
+        <tr class="principale"><td>Spirito di Corpo</td><td class="pip"><span class="pieno">●●●</span><span class="vuoto">○○</span></td><td class="n">3</td></tr>
+        <tr class="altra"><td>Passo Avanti</td><td class="pip"><span class="pieno">●●</span><span class="vuoto">○○○</span></td><td class="n">2</td></tr>
+        <tr class="altra"><td>Ancoraggio</td><td class="pip"><span class="pieno">●●</span><span class="vuoto">○○○</span></td><td class="n">2</td></tr>
+      </table>
+      <div class="promemoria">
+        <p><b class="tit">Il dado</b>La tua competenza + 1 dado a sei facce.<br><b>8 o più</b> pieno · <b>5–7</b> parziale · <b>4 o meno</b> fallimento.<br>Se esce <b>1</b>, è sempre fallimento.</p>
+        <p><b class="tit">La Tensione</b>Parte da 0 e sale quando le cose vanno storte. A <b>5</b> arriva una complicazione, poi torna a 0.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="carta">
+    <div class="fascia"><span>La Corsa Invisibile</span><span>Carta del ruolo</span></div>
+    <div class="corpo">
+      <p class="nome-ruolo">Incursore</p>
+      <p class="forte">Parte con 3 in Precisione</p>
+      <p class="chi-sei">Apri la strada dove è chiusa. Fai la cosa che nessuno vuole fare, e la fai bene alla prima: una seconda volta non c'è.</p>
+      <p class="etichetta">Le tue competenze</p>
+      <table>
+        <tr class="altra"><td>Cadenza</td><td class="pip"><span class="pieno">●●</span><span class="vuoto">○○○</span></td><td class="n">2</td></tr>
+        <tr class="principale"><td>Precisione</td><td class="pip"><span class="pieno">●●●</span><span class="vuoto">○○</span></td><td class="n">3</td></tr>
+        <tr class="altra"><td>Spirito di Corpo</td><td class="pip"><span class="pieno">●●</span><span class="vuoto">○○○</span></td><td class="n">2</td></tr>
+        <tr class="altra"><td>Passo Avanti</td><td class="pip"><span class="pieno">●●</span><span class="vuoto">○○○</span></td><td class="n">2</td></tr>
+        <tr class="altra"><td>Ancoraggio</td><td class="pip"><span class="pieno">●●</span><span class="vuoto">○○○</span></td><td class="n">2</td></tr>
+      </table>
+      <div class="promemoria">
+        <p><b class="tit">Il dado</b>La tua competenza + 1 dado a sei facce.<br><b>8 o più</b> pieno · <b>5–7</b> parziale · <b>4 o meno</b> fallimento.<br>Se esce <b>1</b>, è sempre fallimento.</p>
+        <p><b class="tit">La Tensione</b>Parte da 0 e sale quando le cose vanno storte. A <b>5</b> arriva una complicazione, poi torna a 0.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>Potete essere <strong>in due con lo stesso ruolo</strong>: nessun problema.<br>
+  Il tavolo regge <strong>fino a 8 giocatori</strong>.</p>
+</footer>
+
+</body>
+</html>

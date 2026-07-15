@@ -1,20 +1,21 @@
 # La Corsa Invisibile — Log delle decisioni
 
-Aggiornato al: 14 luglio 2026, sera. **In produzione fino a `6623701`**:
-trilogia WebSocket, Difetti #6/#7/#3/#8 e scroll automatico ai pannelli sono
-pushati su `main` e verificati dal vivo. Il tavolo condiviso è live e reattivo.
-**In locale, NON ancora pushati** (deploy automatico sul push a `main`, attende
-autorizzazione), TRE commit da pushare insieme: (1) **rinomina delle etichette
-delle risorse di squadra** (cadenza→Slancio, spiritoDiCorpo→Coesione,
-passoAvanti→Ardimento; SOLO le etichette mostrate); (2) **riscrittura dei focus
-dei ruoli + testo di milano-barricata** (i due testi che la rinomina aveva
-lasciato incoerenti); (3) **select del ruolo**: option corta e non troncabile
-("{ruolo} — parte con 3 in {competenza}") + riquadro sotto col `focus` completo
-del ruolo selezionato. Batteria di test corrente:
+Aggiornato al: 15 luglio 2026. **In produzione fino a `0cbac58`**: trilogia
+WebSocket, Difetti #6/#7/#3/#8, scroll automatico ai pannelli, rinomina risorse
+(Slancio/Coesione/Ardimento), focus dei ruoli + testo milano-barricata, e select
+ruolo (option corta + riquadro descrizione) — tutti pushati e verificati dal vivo.
+**In locale, NON ancora pushato** (deploy automatico sul push a `main`, attende
+autorizzazione): un commit per la **pubblicazione dei manuali** (guida rapida,
+carte dei ruoli, regolamento serviti da `public/materiali/` e linkati dal gioco).
+Batteria di test corrente:
 **30 file `test-*.mjs`, 932 asserzioni, 0 FAIL** — verificata due volte il
-14/07/2026 (29 file = 867; `test-vista-esito.mjs` 65).
-**PUNTO DI RIPRESA IMMEDIATO**: i tre commit sopra sono fatti e verificati dal
-vivo, **in attesa di autorizzazione al push**.
+15/07/2026 (29 file = 867; `test-vista-esito.mjs` 65).
+**PUNTO DI RIPRESA IMMEDIATO**: manuali fatti e verificati dal vivo, **in attesa
+di autorizzazione al push**. Vedi la voce "Pubblicazione dei manuali".
+**Nota aperta segnalata**: due manuali (regolamento sez. 7, guida rapida)
+nominano ancora le voci di squadra come "Cadenza/Spirito di Corpo/Passo Avanti"
+invece di Slancio/Coesione/Ardimento — l'autore decide se aggiornarli (i PDF
+vanno rigenerati dalla sorgente).
 Interventi della sessione serale del 13 luglio: **Riconoscimento** — rientro
 in partita e presa di comando (`1d9b592`), **anti-ripetizione del Cronista**
 (`23c402e`), **decisione di design su `bonusContesto`** + commenti allineati
@@ -1029,6 +1030,45 @@ oggi contiene un `index.html` minimo).
 ---
 
 ## Changelog tecnico
+
+**15/07/2026 — Pubblicazione dei manuali (guida rapida, carte, regolamento) (FATTO, commit locale)**
+File: 4 file in `public/materiali/` (rinominati), `public/index.html` (link).
+Server/endpoint/socket/autenticazione **non toccati**. **In locale, non pushato.**
+
+- **Serviti come statici** (assets di `public/`), senza alcuna rotta né
+  esclusione nel Worker: verificato dal vivo che i 4 indirizzi rispondono 200
+  coi content-type giusti e NON sono intercettati da API/fallback. La regola
+  `[[rules]] type=Text globs=["**/*.md"]` di `wrangler.toml` tocca solo i moduli
+  `.md` importati in `src/`, non gli asset .html/.pdf.
+- **Indirizzi leggibili SENZA logica al Worker, solo rinomina file** (i vecchi
+  nomi lunghi/binari sono stati rinominati):
+  - `/materiali/guida.pdf` → `guida.pdf`
+  - `/materiali/carte.pdf` → `carte.pdf`
+  - `/materiali/regolamento` → `regolamento.html`
+  - `/materiali/carte` → `carte.html`
+  Gli estensionless funzionano grazie all'html_handling di default degli assets
+  Cloudflare (toglie `.html`); `/materiali/regolamento.html` reindirizza al
+  canonico senza estensione. (Rimossi i vecchi `guida-rapida-...pdf`,
+  `regolamento-la-corsa-invisibile.pdf`, `schede-...pdf`.)
+- **Link dal gioco** (`public/index.html`): (a) pagina d'ingresso, sotto "Crea
+  una stanza", tre link discreti `.link-materiali` — "Guida rapida (PDF)",
+  "Le carte dei ruoli", "Regolamento"; (b) nella stanza, nella barra-stanza, un
+  link "Regole" (`<a target="_blank">` verso `/materiali/regolamento`, scheda
+  nuova per non perdere la partita). Il selettore CSS `.barra-stanza button.copia`
+  è diventato `.copia` per coprire anche l'`<a>`; `.azioni-stanza` ora ha
+  `flex-wrap` (i tre pulsanti vanno a capo su telefono senza overflow). Tutti i
+  link aprono in scheda nuova (`target=_blank rel=noopener`).
+- **Verificato dal vivo** (`wrangler dev`, mobile e desktop): i 4 indirizzi si
+  aprono (regolamento/carte come pagine, PDF come file), i link d'ingresso e
+  "Regole" hanno href/target giusti, nessun overflow orizzontale a 375px.
+  Batteria: **30 file, 932 OK, 0 FAIL** (due volte, invariata). **NOTA (fuori
+  scope, segnalata all'autore, NON corretta)**: regolamento (sez. 7) e guida
+  rapida nominano ancora le voci di squadra "Cadenza/Spirito di Corpo/Passo
+  Avanti" invece di Slancio/Coesione/Ardimento; le carte (HTML+PDF) sono a posto.
+  Un difetto pre-esistente di layout del breakout desktop di `#schermo-gioco`
+  causa overflow orizzontale a viewport larghi — non introdotto qui, non toccato.
+
+---
 
 **14/07/2026 — Select del ruolo: informazione corta nell'option + descrizione sotto (commit locale separato)**
 File toccato: `public/index.html` (solo schermo-join, nessuna meccanica).
