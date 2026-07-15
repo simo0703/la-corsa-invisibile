@@ -79,7 +79,7 @@ export const GAME_CONFIG = {
   competenze: {
     cadenza: { nome: "Cadenza", descrizione: "Velocità di reazione e movimento." },
     precisione: { nome: "Precisione", descrizione: "Controllo tecnico, mira, esecuzione esatta." },
-    spiritoDiCorpo: { nome: "Spirito di Corpo", descrizione: "Cura, coesione, capacità di reggere il gruppo." },
+    spiritoDiCorpo: { nome: "Spirito di Corpo", descrizione: "Cura, affiatamento, capacità di reggere il gruppo." },
     passoAvanti: { nome: "Passo Avanti", descrizione: "Decisione conscia di superare la paura." },
     ancoraggio: { nome: "Ancoraggio", descrizione: "Stabilità personale, resistenza al cedimento." },
   },
