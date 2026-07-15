@@ -1039,6 +1039,52 @@ oggi contiene un `index.html` minimo).
 
 ## Changelog tecnico
 
+**15/07/2026 — Manuali allineati alla rinomina Slancio/Coesione/Ardimento (FATTO, commit locale `fd354c4`)**
+File: `public/materiali/regolamento.html`, `public/materiali/guida.pdf`,
+`src/game-config.js` (sola stringa descrittiva). Server/endpoint/socket/
+autenticazione **non toccati**. **In locale, non pushato.** Chiude la nota
+aperta dalla voce "Pubblicazione dei manuali" qui sotto.
+
+- **Regolamento, sez. 7 "Le voci della squadra"**: le tre voci ora si chiamano
+  **Slancio, Coesione, Ardimento** (prima "Cadenza, Spirito di Corpo, Passo
+  Avanti"). Sostituite solo le tre etichette, il resto della frase è invariato.
+- **Riquadro "Attenzione" della sez. 7 ELIMINATO** (`<div class="rilievo">`
+  completo). Esisteva solo per avvisare che le voci di squadra avevano gli
+  stessi nomi di tre competenze personali: dopo la rinomina i nomi sono
+  diversi, quindi spiegava una confusione non più possibile — e anzi la
+  reintroduceva, nominando le competenze proprio dove non c'entrano.
+  L'informazione utile ("non si usano mai per tirare il dado") era già nel
+  paragrafo successivo, che resta.
+- **`guida.pdf` rigenerata dall'autore** dalla sua sorgente. **I PDF NON sono
+  generati dagli `.html` dei manuali**: sono due produzioni separate, quindi un
+  cambio al regolamento HTML non si propaga da solo alla guida. Hash
+  `dc453bdb…` → `ea238a5a…`, 56.272 → 55.729 byte, impaginazione invariata.
+  Contenuto verificato estraendone il testo: "LE TRE VOCI DELLA SQUADRA" dice
+  ora "Slancio, Coesione, Ardimento" e la frase sull'omonimia è sparita
+  (sostituita da "Non sono le vostre competenze personali: sono ciò che la
+  squadra sta diventando"); le tabelle di pag. 1 conservano le competenze
+  personali. **Da ricordare**: un PDF davvero riesportato non è mai identico al
+  byte (ci finiscono data e ora di creazione), quindi l'hash contro HEAD è la
+  prova che sul disco c'è la versione nuova — due tentativi di copia sono andati
+  a vuoto proprio così, con hash invariato e git che non vedeva nulla.
+- **"coesione" → "affiatamento"** nella descrizione della **competenza
+  personale** Spirito di Corpo ("Cura, affiatamento, capacità di reggere il
+  gruppo"), allineata nei DUE posti dove la frase era identica:
+  `src/game-config.js` (`competenze.spiritoDiCorpo.descrizione`, servita al
+  client da `/api/config`) e `regolamento.html` (riga ~245). Motivo: "Coesione"
+  è ora l'etichetta della risorsa di squadra `spiritoDiCorpo`, e la parola
+  dentro la descrizione di una competenza personale ricreava l'omonimia appena
+  tolta. **Cambiata solo la stringa descrittiva**: id `spiritoDiCorpo` e ogni
+  altra chiave invariati.
+- **Sez. 2 e tabella dei ruoli del regolamento intoccate di proposito**: lì
+  "Cadenza / Spirito di Corpo / Passo Avanti" sono i nomi delle **competenze
+  personali**, che la rinomina non ha mai toccato (vedi la voce "Rinomina
+  etichette risorse di squadra") — sono corretti e vanno lasciati così.
+- Batteria: **30 file, 932 OK, 0 FAIL** (due volte, invariata): nessun test
+  asseriva quelle stringhe.
+
+---
+
 **15/07/2026 — Pubblicazione dei manuali (guida rapida, carte, regolamento) (FATTO, commit locale)**
 File: 4 file in `public/materiali/` (rinominati), `public/index.html` (link).
 Server/endpoint/socket/autenticazione **non toccati**. **In locale, non pushato.**
