@@ -2,8 +2,21 @@ name = "la-corsa-invisibile"
 main = "src/index.js"
 compatibility_date = "2026-07-01"
 
-# Custom domain da collegare in dashboard Cloudflare: corsa.roomzero.online
-# (routes/custom domain si configurano dalla dashboard o con `wrangler deploy --routes`)
+# Dominio corto del gioco: `custom_domain = true` fa creare a Cloudflare il
+# record DNS e il certificato per corsa.roomzero.online (zona roomzero.online,
+# stesso account del Worker). Il codice non nomina mai un dominio — link della
+# stanza, WebSocket e materiali si costruiscono dall'indirizzo della pagina —
+# quindi qui non serve altro.
+#
+# `workers_dev = true` è esplicito DI PROPOSITO: dichiarando una rotta senza
+# indicarlo, il sottodominio la-corsa-invisibile.roomzero.workers.dev può venire
+# disattivato. Va tenuto attivo perché i link delle stanze già distribuiti lo
+# usano, e perché Sim A (test/playtest-zero/sim-a-funzionale.mjs) ci gioca
+# contro in produzione con l'indirizzo scritto a mano.
+workers_dev = true
+routes = [
+  { pattern = "corsa.roomzero.online", custom_domain = true }
+]
 
 # Contenuto narrativo del Cronista (src/lib/narratore-corsa-invisibile.md e
 # simili): i Worker non hanno accesso al filesystem a runtime, quindi questi
