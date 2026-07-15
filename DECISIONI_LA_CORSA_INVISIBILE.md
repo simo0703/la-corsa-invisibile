@@ -4,18 +4,26 @@ Aggiornato al: 15 luglio 2026. **In produzione fino a `0cbac58`**: trilogia
 WebSocket, Difetti #6/#7/#3/#8, scroll automatico ai pannelli, rinomina risorse
 (Slancio/Coesione/Ardimento), focus dei ruoli + testo milano-barricata, e select
 ruolo (option corta + riquadro descrizione) — tutti pushati e verificati dal vivo.
-**In locale, NON ancora pushato** (deploy automatico sul push a `main`, attende
-autorizzazione): un commit per la **pubblicazione dei manuali** (guida rapida,
-carte dei ruoli, regolamento serviti da `public/materiali/` e linkati dal gioco).
+**In locale, NON ancora pushati** (deploy automatico sul push a `main`, attende
+autorizzazione): la **pubblicazione dei manuali** (guida rapida, carte dei
+ruoli, regolamento serviti da `public/materiali/` e linkati dal gioco) e il loro
+**allineamento alla rinomina** Slancio/Coesione/Ardimento (vedi la nota chiusa
+qui sotto).
 Batteria di test corrente:
 **30 file `test-*.mjs`, 932 asserzioni, 0 FAIL** — verificata due volte il
 15/07/2026 (29 file = 867; `test-vista-esito.mjs` 65).
 **PUNTO DI RIPRESA IMMEDIATO**: manuali fatti e verificati dal vivo, **in attesa
 di autorizzazione al push**. Vedi la voce "Pubblicazione dei manuali".
-**Nota aperta segnalata**: due manuali (regolamento sez. 7, guida rapida)
-nominano ancora le voci di squadra come "Cadenza/Spirito di Corpo/Passo Avanti"
-invece di Slancio/Coesione/Ardimento — l'autore decide se aggiornarli (i PDF
-vanno rigenerati dalla sorgente).
+**Nota CHIUSA il 15/07/2026** (commit `fd354c4`, in locale): due manuali
+(regolamento sez. 7, guida rapida) nominavano ancora le voci di squadra come
+"Cadenza/Spirito di Corpo/Passo Avanti" invece di Slancio/Coesione/Ardimento.
+Regolamento corretto a mano (sez. 7 riscritta, riquadro "Attenzione"
+sull'omonimia eliminato perché spiegava una confusione non più possibile);
+guida rapida rigenerata dall'autore dalla sua sorgente; descrizione della
+competenza personale Spirito di Corpo da "Cura, coesione, ..." a "Cura,
+affiatamento, ..." in `game-config.js` E nel regolamento, perché "Coesione" è
+ora un'etichetta di squadra. Sez. 2 e tabella dei ruoli intoccate: lì
+Cadenza/Spirito di Corpo/Passo Avanti sono le competenze personali, corrette.
 Interventi della sessione serale del 13 luglio: **Riconoscimento** — rientro
 in partita e presa di comando (`1d9b592`), **anti-ripetizione del Cronista**
 (`23c402e`), **decisione di design su `bonusContesto`** + commenti allineati
@@ -1062,9 +1070,12 @@ Server/endpoint/socket/autenticazione **non toccati**. **In locale, non pushato.
   aprono (regolamento/carte come pagine, PDF come file), i link d'ingresso e
   "Regole" hanno href/target giusti, nessun overflow orizzontale a 375px.
   Batteria: **30 file, 932 OK, 0 FAIL** (due volte, invariata). **NOTA (fuori
-  scope, segnalata all'autore, NON corretta)**: regolamento (sez. 7) e guida
-  rapida nominano ancora le voci di squadra "Cadenza/Spirito di Corpo/Passo
-  Avanti" invece di Slancio/Coesione/Ardimento; le carte (HTML+PDF) sono a posto.
+  scope qui, segnalata all'autore, NON corretta in questo commit)**: regolamento
+  (sez. 7) e guida rapida nominavano ancora le voci di squadra "Cadenza/Spirito
+  di Corpo/Passo Avanti" invece di Slancio/Coesione/Ardimento; le carte
+  (HTML+PDF) erano già a posto. — **CHIUSA il 15/07/2026** dal commit `fd354c4`
+  (regolamento corretto, guida rapida rigenerata dall'autore, descrizione di
+  Spirito di Corpo da "coesione" ad "affiatamento" anche in `game-config.js`).
   Un difetto pre-esistente di layout del breakout desktop di `#schermo-gioco`
   causa overflow orizzontale a viewport larghi — non introdotto qui, non toccato.
 
